@@ -1,4 +1,5 @@
 (library
  (name finam)
  (public_name trading.finam)
- (libraries core cohttp cohttp-eio eio eio.unix yojson uri tls tls-eio))
+ (libraries core cohttp cohttp-eio eio eio.unix yojson uri
+            tls tls-eio x509 mirage-crypto-rng-eio))

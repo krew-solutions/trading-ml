@@ -6,7 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import {
   Api, Candle, IndicatorSpec, StrategySpec, BacktestResult,
-  TIMEFRAMES, type Timeframe,
+  TIMEFRAMES, type StreamEvent, type Timeframe,
 } from './api.service';
 import { ChartComponent } from './chart.component';
 import {
@@ -65,6 +65,11 @@ let nextSlotId = 1;
                 <option [value]="s.name">{{s.name}}</option>
               }
             </select>
+          </label>
+          <label class="live">
+            <input type="checkbox" [ngModel]="liveEnabled()"
+                   (ngModelChange)="liveEnabled.set($event)">
+            Live
           </label>
           <button (click)="runBacktest()">Run backtest</button>
         </div>
@@ -185,6 +190,7 @@ export class AppComponent {
   readonly symbol = signal('SBER');
   readonly timeframe = signal<Timeframe>('H1');
   readonly n = signal(500);
+  readonly liveEnabled = signal(false);
   readonly timeframes = TIMEFRAMES;
   readonly strategyName = signal('');
   readonly strategies = signal<StrategySpec[]>([]);
@@ -248,6 +254,20 @@ export class AppComponent {
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(r => this.candles.set(r.candles));
     });
+
+    // Live stream: one subscription at a time, re-opened when symbol or
+    // timeframe changes. [effect] gives us automatic teardown of the
+    // previous EventSource on each re-run.
+    effect((onCleanup) => {
+      if (!this.liveEnabled()) return;
+      const s = this.symbol();
+      const tf = this.timeframe();
+      const sub = this.api.stream(s, tf).subscribe({
+        next: (ev) => this.applyStreamEvent(ev),
+        error: (e) => console.warn('[stream]', e),
+      });
+      onCleanup(() => sub.unsubscribe());
+    });
   }
 
   asLineWidth(n: number): LineWidth {
@@ -283,6 +303,40 @@ export class AppComponent {
       s.id === id
         ? { ...s, params: { ...s.params, [key]: value } }
         : s));
+  }
+
+  /** Merge an incoming SSE event into the candles signal.
+   *  - `seed`       — replace the whole array (initial snapshot);
+   *  - `bar_update` — patch the trailing bar when its ts matches;
+   *  - `bar_closed` — append a new bar (and drop the oldest to keep [n]). */
+  applyStreamEvent(ev: StreamEvent): void {
+    switch (ev.kind) {
+      case 'seed':
+        if (ev.candles.length) this.candles.set(ev.candles);
+        break;
+      case 'bar_update':
+        this.candles.update(cs => {
+          if (!cs.length) return [ev.candle];
+          const last = cs[cs.length - 1];
+          return last.ts === ev.candle.ts
+            ? [...cs.slice(0, -1), ev.candle]
+            : [...cs, ev.candle];
+        });
+        break;
+      case 'bar_closed':
+        this.candles.update(cs => {
+          if (!cs.length) return [ev.candle];
+          const last = cs[cs.length - 1];
+          if (last.ts === ev.candle.ts) {
+            return [...cs.slice(0, -1), ev.candle];
+          }
+          const appended = [...cs, ev.candle];
+          return appended.length > this.n()
+            ? appended.slice(appended.length - this.n())
+            : appended;
+        });
+        break;
+    }
   }
 
   runBacktest(): void {

@@ -214,6 +214,49 @@ function json(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
+/** SSE stream. Seeds with the current deterministic candles, then every
+ *  `interval` seconds mutates the last bar's close/high/low with a small
+ *  random walk and pushes a `bar_update`. Useful only for eyeballing
+ *  real-time behaviour in the UI without running OCaml. */
+function serveSse(req, res, url) {
+  const symbol = url.searchParams.get('symbol') || 'SBER';
+  const timeframe = url.searchParams.get('timeframe') || 'H1';
+  const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
+  const interval = Math.min(30_000, Math.max(2_000, tfSeconds * 1000 / 12));
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    ...CORS,
+  });
+
+  const send = (kind, payload) => {
+    res.write(`data: ${JSON.stringify({ kind, ...payload })}\n\n`);
+  };
+
+  let candles = generateCandles({ symbol, n: 500, timeframe });
+  send('seed', { candles });
+
+  const rngState = mulberry32(hash(`sse:${symbol}:${timeframe}`));
+  const timer = setInterval(() => {
+    const last = candles[candles.length - 1];
+    const drift = (rngState() - 0.5) * 0.6;
+    const close = Math.max(1, round(last.close + drift));
+    const high = Math.max(last.high, close);
+    const low = Math.min(last.low, close);
+    const updated = {
+      ...last, high: round(high), low: round(low), close,
+      volume: last.volume + Math.floor(rngState() * 200),
+    };
+    candles = [...candles.slice(0, -1), updated];
+    send('bar_update', { candle: updated });
+  }, interval);
+
+  req.on('close', () => clearInterval(timer));
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -256,6 +299,9 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       return json(res, runBacktest(body));
     }
+    if (req.method === 'GET' && path === '/api/stream') {
+      return serveSse(req, res, url);
+    }
     if (req.method === 'GET' && (path === '/' || path === '/health')) {
       res.writeHead(200, { 'Content-Type': 'text/plain', ...CORS });
       res.end('mock ok');
@@ -272,6 +318,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`mock-server: listening on http://127.0.0.1:${PORT}`);
   console.log('  GET  /api/indicators');
   console.log('  GET  /api/strategies');
-  console.log('  GET  /api/candles?symbol=SBER&n=500');
+  console.log('  GET  /api/candles?symbol=SBER&n=500&timeframe=H1');
+  console.log('  GET  /api/stream?symbol=SBER&timeframe=H1   (SSE)');
   console.log('  POST /api/backtest   { symbol, strategy, params, n }');
 });

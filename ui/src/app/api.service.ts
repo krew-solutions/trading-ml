@@ -57,4 +57,31 @@ export class Api {
   }): Observable<BacktestResult> {
     return this.http.post<BacktestResult>('/api/backtest', body);
   }
+
+  /** Opens a Server-Sent Events connection. Returns an Observable that
+   *  emits parsed stream events and ties into the given [AbortSignal] for
+   *  cleanup (closing the EventSource when the consumer unsubscribes). */
+  stream(symbol: string, timeframe: Timeframe): Observable<StreamEvent> {
+    const q = new URLSearchParams({ symbol, timeframe });
+    return new Observable<StreamEvent>(subscriber => {
+      const es = new EventSource(`/api/stream?${q}`);
+      es.onmessage = (ev) => {
+        try { subscriber.next(JSON.parse(ev.data)); }
+        catch (e) { subscriber.error(e); }
+      };
+      es.onerror = () => {
+        // EventSource auto-reconnects on transient errors; we only
+        // propagate when the browser itself marks the connection closed.
+        if (es.readyState === EventSource.CLOSED) {
+          subscriber.error(new Error('SSE stream closed'));
+        }
+      };
+      return () => es.close();
+    });
+  }
 }
+
+export type StreamEvent =
+  | { kind: 'seed';        candles: Candle[] }
+  | { kind: 'bar_update';  candle: Candle }
+  | { kind: 'bar_closed';  candle: Candle };

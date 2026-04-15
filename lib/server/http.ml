@@ -1,8 +1,10 @@
 (** Minimal HTTP server using cohttp-eio. Exposes:
-      GET  /api/indicators              — catalog
-      GET  /api/strategies              — catalog
-      GET  /api/candles?symbol=...&n=N  — demo candles
-      POST /api/backtest                — JSON body {symbol, strategy, params, n}
+      GET  /api/indicators
+      GET  /api/strategies
+      GET  /api/candles?symbol=...&n=N&timeframe=...
+      GET  /api/stream?symbol=...&timeframe=...        (Server-Sent Events)
+      POST /api/backtest                JSON body
+
     CORS is opened for localhost Angular dev server. *)
 
 open Core
@@ -34,14 +36,63 @@ let get_query_int uri k d =
   | Some s -> (try int_of_string s with _ -> d)
   | None -> d
 
-(* Demo candles store: regenerate per request on a deterministic seed. *)
-let demo_candles ~symbol ~n ~timeframe =
-  ignore symbol;
+let parse_timeframe s =
+  try Timeframe.of_string s with _ -> Timeframe.H1
+
+(** Source for candle data. *)
+type source =
+  | Synthetic
+  | Live of Finam.Rest.t
+
+let synthetic_candles ~n ~timeframe =
   Synthetic.generate ~n ~start_ts:1_704_067_200L
     ~tf_seconds:(Timeframe.to_seconds timeframe) ~start_price:100.0
 
-let parse_timeframe s =
-  try Timeframe.of_string s with _ -> Timeframe.H1
+(** Deterministic wobble on the trailing bar so the synthetic stream
+    produces visible updates at every poll tick. The bar identity (ts)
+    doesn't change, only its close drifts and high/low extend. *)
+let wobble_last ~rng candles =
+  match List.rev candles with
+  | [] -> []
+  | last :: rest_rev ->
+    let f = Decimal.to_float last.Candle.close in
+    let drift = (rng () *. 2.0 -. 1.0) *. 0.3 in
+    let close = Float.max 1.0 (f +. drift) in
+    let high = Float.max (Decimal.to_float last.high) close in
+    let low = Float.min (Decimal.to_float last.low) close in
+    let updated = Candle.make
+      ~ts:last.ts
+      ~open_:last.open_
+      ~high:(Decimal.of_float high)
+      ~low:(Decimal.of_float low)
+      ~close:(Decimal.of_float close)
+      ~volume:(Decimal.add last.volume (Decimal.of_int 100))
+    in
+    List.rev (updated :: rest_rev)
+
+(** Global RNG per-process for synthetic wobble. *)
+let wobble_rng =
+  let state = Random.State.make_self_init () in
+  fun () -> Random.State.float state 1.0
+
+let live_or_synthetic source ~symbol ~n ~timeframe =
+  match source with
+  | Synthetic -> synthetic_candles ~n ~timeframe
+  | Live client ->
+    try Finam.Rest.bars client ~symbol ~timeframe
+    with e ->
+      Printf.eprintf "[finam] bars(%s) failed: %s — using synthetic\n%!"
+        (Symbol.to_string symbol) (Printexc.to_string e);
+      synthetic_candles ~n ~timeframe
+
+(** Source for the streaming endpoint — in synthetic mode we wobble the
+    last bar so the chart visibly ticks; in live mode we just re-fetch. *)
+let stream_fetch source ~symbol ~n ~timeframe =
+  match source with
+  | Synthetic ->
+    synthetic_candles ~n ~timeframe
+    |> wobble_last ~rng:wobble_rng
+  | Live _ -> live_or_synthetic source ~symbol ~n ~timeframe
 
 let strategy_params_of_json j =
   match j with
@@ -55,7 +106,7 @@ let strategy_params_of_json j =
       | _ -> None) fields
   | _ -> []
 
-let run_backtest body_str =
+let run_backtest source body_str =
   let j = Yojson.Safe.from_string body_str in
   let open Yojson.Safe.Util in
   let symbol = Symbol.of_string (member "symbol" j |> to_string) in
@@ -70,41 +121,107 @@ let run_backtest body_str =
   | None -> `Assoc [ "error", `String "unknown strategy" ]
   | Some spec ->
     let strat = spec.build params in
-    let candles = demo_candles ~symbol ~n ~timeframe in
+    let candles = live_or_synthetic source ~symbol ~n ~timeframe in
     let cfg = Engine.Backtest.default_config () in
     let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~symbol ~candles in
     Api.backtest_result_json r
 
-let handler _socket request body =
+(** Initial payload describing the current cached candles, sent to the
+    client right after the HTTP headers so the UI can render without a
+    separate /api/candles roundtrip. *)
+let seed_chunk seed =
+  let j : Yojson.Safe.t = `Assoc [
+    "kind", `String "seed";
+    "candles", `List (List.map Candle_json.yojson_of_t seed);
+  ] in
+  "data: " ^ Yojson.Safe.to_string j ^ "\n\n"
+
+(** SSE handler returned in [`Expert] mode. Writes pre-formatted chunks
+    directly to the buffered output with an explicit flush after each
+    one — cohttp-eio's default [Response] path batches the body into a
+    single response, which would never push live events. *)
+let sse_expert (registry : Stream.t) ~symbol ~timeframe =
+  let client, seed = Stream.subscribe registry ~symbol ~timeframe in
+  let headers = Cohttp.Header.of_list [
+    "Content-Type", "text/event-stream";
+    "Cache-Control", "no-cache";
+    "Connection", "close";
+    "X-Accel-Buffering", "no";
+    "Access-Control-Allow-Origin", "*";
+  ] in
+  let response =
+    Cohttp.Response.make ~status:`OK ~headers
+      ~encoding:(Cohttp.Transfer.Unknown) ()
+  in
+  response, fun _ic (oc : Eio.Buf_write.t) ->
+    (* cohttp auto-sets Transfer-Encoding: chunked when the response has no
+       Content-Length, so we must frame every event in chunked encoding:
+         <hex-size>\r\n<data>\r\n   then a terminal 0\r\n\r\n on close. *)
+    let push_chunk data =
+      let size = String.length data in
+      Eio.Buf_write.string oc (Printf.sprintf "%x\r\n" size);
+      Eio.Buf_write.string oc data;
+      Eio.Buf_write.string oc "\r\n";
+      Eio.Buf_write.flush oc
+    in
+    (try
+       push_chunk (seed_chunk seed);
+       while true do
+         let chunk = Eio.Stream.take client.queue in
+         push_chunk chunk
+       done
+     with _ -> ());
+    (try
+       Eio.Buf_write.string oc "0\r\n\r\n";
+       Eio.Buf_write.flush oc
+     with _ -> ());
+    Stream.unsubscribe registry ~symbol ~timeframe client
+
+let handler source registry _conn request body =
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
   let meth = Cohttp.Request.meth request in
+  let respond r = `Response r in
   try
     match meth, path with
-    | `OPTIONS, _ -> string_response ""
-    | `GET, "/api/indicators" -> json_response (Api.indicators_catalog ())
-    | `GET, "/api/strategies" -> json_response (Api.strategies_catalog ())
+    | `OPTIONS, _ -> respond (string_response "")
+    | `GET, "/api/indicators" ->
+      respond (json_response (Api.indicators_catalog ()))
+    | `GET, "/api/strategies" ->
+      respond (json_response (Api.strategies_catalog ()))
     | `GET, "/api/candles" ->
       let symbol = Symbol.of_string (get_query uri "symbol") in
       let n = get_query_int uri "n" 500 in
       let timeframe = parse_timeframe (get_query uri "timeframe") in
-      json_response
-        (Api.candles_json (demo_candles ~symbol ~n ~timeframe))
+      respond (json_response
+        (Api.candles_json (live_or_synthetic source ~symbol ~n ~timeframe)))
+    | `GET, "/api/stream" ->
+      let symbol = Symbol.of_string (get_query uri "symbol") in
+      let timeframe = parse_timeframe (get_query uri "timeframe") in
+      `Expert (sse_expert registry ~symbol ~timeframe)
     | `POST, "/api/backtest" ->
       let body = Eio.Flow.read_all body in
-      json_response (run_backtest body)
-    | `GET, "/" | `GET, "/health" -> string_response "ok"
-    | _ -> string_response ~status:`Not_found "not found"
+      respond (json_response (run_backtest source body))
+    | `GET, "/" | `GET, "/health" ->
+      let mode = match source with Synthetic -> "synthetic" | Live _ -> "live" in
+      respond (string_response ("ok (" ^ mode ^ ")"))
+    | _ -> respond (string_response ~status:`Not_found "not found")
   with e ->
-    json_response ~status:`Internal_server_error
-      (`Assoc ["error", `String (Printexc.to_string e)])
+    respond (json_response ~status:`Internal_server_error
+      (`Assoc ["error", `String (Printexc.to_string e)]))
 
-let run ~env ~port =
+let run ~env ~port ~source =
   Eio.Switch.run @@ fun sw ->
+  let fetch ~symbol ~n ~timeframe =
+    stream_fetch source ~symbol ~n ~timeframe in
+  let registry = Stream.create ~env ~sw ~fetch in
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw
       (Eio.Stdenv.net env)
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
   in
-  let server = Cohttp_eio.Server.make ~callback:handler () in
+  let server =
+    Cohttp_eio.Server.make_response_action
+      ~callback:(handler source registry) ()
+  in
   Cohttp_eio.Server.run socket server ~on_error:raise

@@ -1,16 +1,27 @@
 (** CLI entry point.
     Subcommands:
-      trading serve [--port 8080]        — start HTTP API server
-      trading list                        — print indicators and strategies
-      trading backtest <strategy> [--n N] — run one backtest and print summary *)
+      trading serve [--port 8080] [--live]
+                    [--token TOKEN] [--account ACCOUNT_ID]
+        start HTTP API server.
+        --live  switches from synthetic data to real Finam REST.
+                token / account_id come from the flags or from the
+                FINAM_TOKEN / FINAM_ACCOUNT_ID environment variables.
+
+      trading list
+        show registered indicators and strategies.
+
+      trading backtest <strategy> [--n N] [--symbol SBER]
+        run a backtest on synthetic data and print summary. *)
 
 open Core
 
 let usage () =
   prerr_endline {|trading <command> [options]
 
-  serve [--port 8080]
-      start HTTP API server (bound to localhost)
+  serve [--port 8080] [--live] [--token TOKEN] [--account ACCOUNT_ID]
+      start HTTP API server (bound to localhost).
+      Default mode is synthetic. Pass --live to use the real Finam REST.
+      Token / account may also come from FINAM_TOKEN / FINAM_ACCOUNT_ID.
 
   list
       show registered indicators and strategies
@@ -61,16 +72,53 @@ let cmd_backtest args =
       (Decimal.to_string r.final.realized_pnl)
       (Decimal.to_string r.final.cash)
 
+let arg_value name args =
+  let rec find = function
+    | k :: v :: _ when k = name -> Some v
+    | _ :: rest -> find rest
+    | [] -> None
+  in find args
+
+let arg_flag name args = List.mem name args
+
 let cmd_serve args =
   let port =
-    let rec find = function
-      | "--port" :: v :: _ -> int_of_string v
-      | _ :: rest -> find rest
-      | [] -> 8080
-    in find args in
+    match arg_value "--port" args with
+    | Some v -> int_of_string v
+    | None -> 8080
+  in
+  let live = arg_flag "--live" args in
+  let token =
+    match arg_value "--token" args with
+    | Some v -> Some v
+    | None -> Sys.getenv_opt "FINAM_TOKEN"
+  in
+  let account =
+    match arg_value "--account" args with
+    | Some v -> Some v
+    | None -> Sys.getenv_opt "FINAM_ACCOUNT_ID"
+  in
   Eio_main.run @@ fun env ->
-  Printf.printf "trading: listening on http://127.0.0.1:%d\n%!" port;
-  Server.Http.run ~env ~port
+  let source =
+    if not live then Server.Http.Synthetic
+    else
+      match token with
+      | None ->
+        Printf.eprintf
+          "warning: --live requested but no token (use --token or \
+           FINAM_TOKEN). Falling back to synthetic.\n%!";
+        Server.Http.Synthetic
+      | Some access_token ->
+        let cfg = Finam.Config.make ?account_id:account ~access_token () in
+        let transport = Finam.Eio_transport.make ~env in
+        let client = Finam.Rest.make ~transport ~cfg in
+        Printf.printf "trading: live Finam mode (account=%s)\n%!"
+          (Option.value account ~default:"<none>");
+        Server.Http.Live client
+  in
+  Printf.printf "trading: listening on http://127.0.0.1:%d (%s)\n%!"
+    port (match source with Synthetic -> "synthetic" | Live _ -> "live");
+  Server.Http.run ~env ~port ~source
 
 let () =
   match Array.to_list Sys.argv with

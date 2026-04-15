@@ -144,6 +144,49 @@ describe('AppComponent', () => {
     expect(fixture.componentInstance.candles().length).toBe(30);
   });
 
+  describe('applyStreamEvent', () => {
+    const sampleCandle = (ts: number, close: number): Candle => ({
+      ts, open: close, high: close + 1, low: close - 1, close, volume: 1,
+    });
+
+    it('replaces the whole array on seed', () => {
+      const cmp = fixture.componentInstance;
+      const seed = [sampleCandle(1, 100), sampleCandle(2, 101)];
+      cmp.applyStreamEvent({ kind: 'seed', candles: seed });
+      expect(cmp.candles()).toEqual(seed);
+    });
+
+    it('patches trailing bar on bar_update when ts matches', () => {
+      const cmp = fixture.componentInstance;
+      cmp.candles.set([sampleCandle(1, 100), sampleCandle(2, 101)]);
+      const patched = sampleCandle(2, 105);
+      cmp.applyStreamEvent({ kind: 'bar_update', candle: patched });
+      expect(cmp.candles().at(-1)?.close).toBe(105);
+      expect(cmp.candles().length).toBe(2);
+    });
+
+    it('appends on bar_closed with a newer ts', () => {
+      const cmp = fixture.componentInstance;
+      cmp.candles.set([sampleCandle(1, 100)]);
+      cmp.applyStreamEvent({
+        kind: 'bar_closed', candle: sampleCandle(2, 101),
+      });
+      expect(cmp.candles().map(c => c.ts)).toEqual([1, 2]);
+    });
+
+    it('trims to [n] when appending past the window', () => {
+      const cmp = fixture.componentInstance;
+      cmp.n.set(3);
+      cmp.candles.set([
+        sampleCandle(1, 10), sampleCandle(2, 11), sampleCandle(3, 12),
+      ]);
+      cmp.applyStreamEvent({
+        kind: 'bar_closed', candle: sampleCandle(4, 13),
+      });
+      expect(cmp.candles().map(c => c.ts)).toEqual([2, 3, 4]);
+    });
+  });
+
   it('stores the backtest result on success', async () => {
     fixture.componentInstance.runBacktest();
     const req = httpCtrl.expectOne('/api/backtest');

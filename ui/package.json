@@ -5,7 +5,9 @@
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
-    "test": "ng test"
+    "test": "ng test",
+    "mock": "node mock-server.mjs",
+    "dev": "concurrently -n mock,ng -c cyan,magenta \"npm:mock\" \"npm:start\""
   },
   "private": true,
   "dependencies": {
@@ -24,6 +26,7 @@
     "@angular/cli": "^21.0.0",
     "@angular/compiler-cli": "^21.0.0",
     "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
     "jsdom": "^25.0.0",
     "typescript": "~5.9.0",
     "vitest": "^4.0.8"

@@ -111,7 +111,7 @@ let start_poll t (key : key) (sub : sub_state) =
        Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
          sub.last_candles <- initial)
      with e ->
-       Printf.eprintf "[stream] seed %s/%s failed: %s\n%!"
+       Log.warn "stream seed %s/%s failed: %s"
          (Symbol.to_string symbol) (Timeframe.to_string timeframe)
          (Printexc.to_string e));
     while !running do
@@ -130,7 +130,7 @@ let start_poll t (key : key) (sub : sub_state) =
              List.iter (fun c -> Eio.Stream.add c.queue chunk) clients
            ) events
          with e ->
-           Printf.eprintf "[stream] poll %s/%s failed: %s\n%!"
+           Log.warn "stream poll %s/%s failed: %s"
              (Symbol.to_string symbol) (Timeframe.to_string timeframe)
              (Printexc.to_string e))
     done;

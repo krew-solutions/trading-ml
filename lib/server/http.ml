@@ -81,7 +81,7 @@ let live_or_synthetic source ~symbol ~n ~timeframe =
   | Live client ->
     try Finam.Rest.bars client ~symbol ~timeframe
     with e ->
-      Printf.eprintf "[finam] bars(%s) failed: %s — using synthetic\n%!"
+      Log.warn "finam bars(%s) failed: %s — falling back to synthetic"
         (Symbol.to_string symbol) (Printexc.to_string e);
       synthetic_candles ~n ~timeframe
 
@@ -142,6 +142,9 @@ let seed_chunk seed =
     single response, which would never push live events. *)
 let sse_expert (registry : Stream.t) ~symbol ~timeframe =
   let client, seed = Stream.subscribe registry ~symbol ~timeframe in
+  Log.info "SSE open  %s/%s seed=%d bars"
+    (Symbol.to_string symbol) (Timeframe.to_string timeframe)
+    (List.length seed);
   let headers = Cohttp.Header.of_list [
     "Content-Type", "text/event-stream";
     "Cache-Control", "no-cache";
@@ -175,40 +178,64 @@ let sse_expert (registry : Stream.t) ~symbol ~timeframe =
        Eio.Buf_write.string oc "0\r\n\r\n";
        Eio.Buf_write.flush oc
      with _ -> ());
-    Stream.unsubscribe registry ~symbol ~timeframe client
+    Stream.unsubscribe registry ~symbol ~timeframe client;
+    Log.info "SSE close %s/%s"
+      (Symbol.to_string symbol) (Timeframe.to_string timeframe)
 
-let handler source registry _conn request body =
+(** Pure routing: given method+path, return (status, action). Kept
+    separate from request logging so [handler] can log uniformly. *)
+let route source registry request body : int * Cohttp_eio.Server.response_action =
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
   let meth = Cohttp.Request.meth request in
-  let respond r = `Response r in
+  let ok r = 200, `Response r in
   try
     match meth, path with
-    | `OPTIONS, _ -> respond (string_response "")
+    | `OPTIONS, _ -> 204, `Response (string_response "")
     | `GET, "/api/indicators" ->
-      respond (json_response (Api.indicators_catalog ()))
+      ok (json_response (Api.indicators_catalog ()))
     | `GET, "/api/strategies" ->
-      respond (json_response (Api.strategies_catalog ()))
+      ok (json_response (Api.strategies_catalog ()))
     | `GET, "/api/candles" ->
       let symbol = Symbol.of_string (get_query uri "symbol") in
       let n = get_query_int uri "n" 500 in
       let timeframe = parse_timeframe (get_query uri "timeframe") in
-      respond (json_response
+      ok (json_response
         (Api.candles_json (live_or_synthetic source ~symbol ~n ~timeframe)))
     | `GET, "/api/stream" ->
       let symbol = Symbol.of_string (get_query uri "symbol") in
       let timeframe = parse_timeframe (get_query uri "timeframe") in
-      `Expert (sse_expert registry ~symbol ~timeframe)
+      200, `Expert (sse_expert registry ~symbol ~timeframe)
     | `POST, "/api/backtest" ->
       let body = Eio.Flow.read_all body in
-      respond (json_response (run_backtest source body))
+      ok (json_response (run_backtest source body))
     | `GET, "/" | `GET, "/health" ->
       let mode = match source with Synthetic -> "synthetic" | Live _ -> "live" in
-      respond (string_response ("ok (" ^ mode ^ ")"))
-    | _ -> respond (string_response ~status:`Not_found "not found")
+      ok (string_response ("ok (" ^ mode ^ ")"))
+    | _ -> 404, `Response (string_response ~status:`Not_found "not found")
   with e ->
-    respond (json_response ~status:`Internal_server_error
+    500, `Response (json_response ~status:`Internal_server_error
       (`Assoc ["error", `String (Printexc.to_string e)]))
+
+let handler source registry _conn request body =
+  let t0 = Unix.gettimeofday () in
+  let uri = Cohttp.Request.uri request in
+  let meth_str =
+    Cohttp.Code.string_of_method (Cohttp.Request.meth request) in
+  let line =
+    let q = Uri.query uri in
+    if q = [] then Uri.path uri
+    else Uri.path uri ^ "?" ^ Uri.encoded_of_query q
+  in
+  let status, action = route source registry request body in
+  let dt_ms = (Unix.gettimeofday () -. t0) *. 1000. in
+  (match action with
+   | `Expert _ ->
+     (* SSE is logged separately at open/close; skip here. *)
+     ()
+   | `Response _ ->
+     Log.info "%s %s → %d (%.1fms)" meth_str line status dt_ms);
+  action
 
 let run ~env ~port ~source =
   Eio.Switch.run @@ fun sw ->

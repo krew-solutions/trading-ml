@@ -107,19 +107,19 @@ let cmd_serve args =
     else
       match secret with
       | None ->
-        Printf.eprintf
-          "warning: --live requested but no secret (use --secret or \
-           FINAM_SECRET). Falling back to synthetic.\n%!";
+        Server.Log.warn
+          "--live requested but no secret (use --secret or FINAM_SECRET). \
+           Falling back to synthetic.";
         Server.Http.Synthetic
       | Some secret ->
         let cfg = Finam.Config.make ?account_id:account ~secret () in
         let transport = Finam.Eio_transport.make ~env in
         let client = Finam.Rest.make ~transport ~cfg in
-        Printf.printf "trading: live Finam mode (account=%s)\n%!"
+        Server.Log.info "live Finam mode (account=%s)"
           (Option.value account ~default:"<none>");
         Server.Http.Live client
   in
-  Printf.printf "trading: listening on http://127.0.0.1:%d (%s)\n%!"
+  Server.Log.info "listening on http://127.0.0.1:%d (%s)"
     port (match source with Synthetic -> "synthetic" | Live _ -> "live");
   Server.Http.run ~env ~port ~source
 

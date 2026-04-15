@@ -14,6 +14,15 @@ export interface IndicatorSpec {
 
 export interface StrategySpec extends IndicatorSpec {}
 
+export type Timeframe =
+  | 'M1' | 'M5' | 'M15' | 'M30'
+  | 'H1' | 'H4'
+  | 'D1' | 'W1' | 'MN1';
+
+export const TIMEFRAMES: Timeframe[] = [
+  'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1',
+];
+
 export interface BacktestResult {
   num_trades: number;
   total_return: number;
@@ -35,12 +44,15 @@ export class Api {
   strategies(): Observable<StrategySpec[]> {
     return this.http.get<StrategySpec[]>('/api/strategies');
   }
-  candles(symbol: string, n: number): Observable<{ candles: Candle[] }> {
-    return this.http.get<{ candles: Candle[] }>(
-      `/api/candles?symbol=${symbol}&n=${n}`);
+  candles(symbol: string, n: number, timeframe: Timeframe = 'H1')
+    : Observable<{ candles: Candle[] }> {
+    const q = new URLSearchParams({
+      symbol, n: String(n), timeframe,
+    });
+    return this.http.get<{ candles: Candle[] }>(`/api/candles?${q}`);
   }
   backtest(body: {
-    symbol: string; strategy: string;
+    symbol: string; strategy: string; timeframe?: Timeframe;
     params: Record<string, number | boolean>; n: number;
   }): Observable<BacktestResult> {
     return this.http.post<BacktestResult>('/api/backtest', body);

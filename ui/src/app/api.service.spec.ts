@@ -20,11 +20,19 @@ describe('Api', () => {
 
   afterEach(() => httpCtrl.verify());
 
-  it('GETs /api/candles with symbol and n', () => {
+  it('GETs /api/candles with symbol, n and default H1 timeframe', () => {
     api.candles('SBER', 100).subscribe();
-    const req = httpCtrl.expectOne('/api/candles?symbol=SBER&n=100');
+    const req = httpCtrl.expectOne(
+      '/api/candles?symbol=SBER&n=100&timeframe=H1');
     expect(req.request.method).toBe('GET');
     req.flush({ candles: [] });
+  });
+
+  it('GETs /api/candles with an explicit timeframe', () => {
+    api.candles('GAZP', 50, 'M15').subscribe();
+    httpCtrl
+      .expectOne('/api/candles?symbol=GAZP&n=50&timeframe=M15')
+      .flush({ candles: [] });
   });
 
   it('GETs /api/strategies', () => {

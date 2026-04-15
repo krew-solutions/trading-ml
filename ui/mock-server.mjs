@@ -111,8 +111,19 @@ function hash(str) {
   return h >>> 0;
 }
 
-function generateCandles({ symbol = 'SBER', n = 500, tfSeconds = 3600 } = {}) {
-  const rng = mulberry32(hash(`${symbol}:${n}`));
+/** Seconds-per-bar for each supported timeframe. Mirrors
+ *  `Timeframe.to_seconds` in `lib/core/timeframe.ml`. */
+const TIMEFRAME_SECONDS = {
+  M1: 60, M5: 300, M15: 900, M30: 1800,
+  H1: 3600, H4: 14400,
+  D1: 86400, W1: 604800, MN1: 2592000,
+};
+
+function generateCandles({
+  symbol = 'SBER', n = 500, timeframe = 'H1',
+} = {}) {
+  const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
+  const rng = mulberry32(hash(`${symbol}:${timeframe}:${n}`));
   const startTs = 1_704_067_200;   // 2024-01-01 UTC
   let price = 100 + rng() * 50;
   const out = [];
@@ -141,9 +152,9 @@ const round = (x) => Math.round(x * 100) / 100;
 // Plausible backtest result — just enough for the UI to render the panel
 // ─────────────────────────────────────────────────────────────────────────
 
-function runBacktest({ symbol, strategy, n = 500 }) {
-  const candles = generateCandles({ symbol, n });
-  const rng = mulberry32(hash(`bt:${symbol}:${strategy}:${n}`));
+function runBacktest({ symbol, strategy, n = 500, timeframe = 'H1' }) {
+  const candles = generateCandles({ symbol, n, timeframe });
+  const rng = mulberry32(hash(`bt:${symbol}:${strategy}:${timeframe}:${n}`));
   const numTrades = 3 + Math.floor(rng() * 15);
   const totalReturn = (rng() * 0.3) - 0.05;   // -5% … +25%
   const maxDrawdown = rng() * 0.2;            //  0% … 20%
@@ -237,7 +248,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/api/candles') {
       const symbol = url.searchParams.get('symbol') || 'SBER';
       const n = Number(url.searchParams.get('n') ?? 500);
-      return json(res, { candles: generateCandles({ symbol, n }) });
+      const timeframe = url.searchParams.get('timeframe') || 'H1';
+      return json(res, { candles:
+        generateCandles({ symbol, n, timeframe }) });
     }
     if (req.method === 'POST' && path === '/api/backtest') {
       const body = await readBody(req);

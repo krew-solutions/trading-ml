@@ -66,7 +66,7 @@ describe('AppComponent', () => {
     fixture.detectChanges();
     httpCtrl.expectOne('/api/strategies').flush(strategies);
     httpCtrl.expectOne('/api/indicators').flush(indicatorsCatalog);
-    httpCtrl.expectOne('/api/candles?symbol=SBER&n=500').flush({
+    httpCtrl.expectOne('/api/candles?symbol=SBER&n=500&timeframe=H1').flush({
       candles: candlesFor(60),
     });
     await fixture.whenStable();
@@ -124,10 +124,20 @@ describe('AppComponent', () => {
     expect(cmp.overlays().length).toBe(1);
   });
 
+  it('reloads candles when the timeframe changes', async () => {
+    fixture.componentInstance.timeframe.set('M15');
+    await fixture.whenStable();
+    httpCtrl.expectOne('/api/candles?symbol=SBER&n=500&timeframe=M15').flush({
+      candles: candlesFor(40),
+    });
+    await fixture.whenStable();
+    expect(fixture.componentInstance.candles().length).toBe(40);
+  });
+
   it('reloads candles when the symbol changes', async () => {
     fixture.componentInstance.symbol.set('GAZP');
     await fixture.whenStable();
-    httpCtrl.expectOne('/api/candles?symbol=GAZP&n=500').flush({
+    httpCtrl.expectOne('/api/candles?symbol=GAZP&n=500&timeframe=H1').flush({
       candles: candlesFor(30),
     });
     await fixture.whenStable();

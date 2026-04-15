@@ -6,6 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import {
   Api, Candle, IndicatorSpec, StrategySpec, BacktestResult,
+  TIMEFRAMES, type Timeframe,
 } from './api.service';
 import { ChartComponent } from './chart.component';
 import {
@@ -44,6 +45,14 @@ let nextSlotId = 1;
         <div class="controls">
           <label>Symbol
             <input [ngModel]="symbol()" (ngModelChange)="symbol.set($event)">
+          </label>
+          <label>Timeframe
+            <select [ngModel]="timeframe()"
+                    (ngModelChange)="timeframe.set($event)">
+              @for (tf of timeframes; track tf) {
+                <option [value]="tf">{{tf}}</option>
+              }
+            </select>
           </label>
           <label>Bars
             <input type="number" [ngModel]="n()"
@@ -174,7 +183,9 @@ export class AppComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly symbol = signal('SBER');
+  readonly timeframe = signal<Timeframe>('H1');
   readonly n = signal(500);
+  readonly timeframes = TIMEFRAMES;
   readonly strategyName = signal('');
   readonly strategies = signal<StrategySpec[]>([]);
   readonly catalog = signal<IndicatorSpec[]>([]);
@@ -228,11 +239,12 @@ export class AppComponent {
         }
       });
 
-    // Reload candles whenever symbol or n change.
+    // Reload candles whenever symbol, timeframe or n change.
     effect(() => {
       const s = this.symbol();
+      const tf = this.timeframe();
       const count = this.n();
-      this.api.candles(s, count)
+      this.api.candles(s, count, tf)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(r => this.candles.set(r.candles));
     });
@@ -277,6 +289,7 @@ export class AppComponent {
     this.api.backtest({
       symbol: this.symbol(),
       strategy: this.strategyName(),
+      timeframe: this.timeframe(),
       params: {},
       n: this.n(),
     })

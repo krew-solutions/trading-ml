@@ -35,10 +35,13 @@ let get_query_int uri k d =
   | None -> d
 
 (* Demo candles store: regenerate per request on a deterministic seed. *)
-let demo_candles ~symbol ~n =
+let demo_candles ~symbol ~n ~timeframe =
   ignore symbol;
   Synthetic.generate ~n ~start_ts:1_704_067_200L
-    ~tf_seconds:3600 ~start_price:100.0
+    ~tf_seconds:(Timeframe.to_seconds timeframe) ~start_price:100.0
+
+let parse_timeframe s =
+  try Timeframe.of_string s with _ -> Timeframe.H1
 
 let strategy_params_of_json j =
   match j with
@@ -59,11 +62,15 @@ let run_backtest body_str =
   let strat_name = member "strategy" j |> to_string in
   let params = strategy_params_of_json (member "params" j) in
   let n = match member "n" j with `Int n -> n | _ -> 500 in
+  let timeframe = match member "timeframe" j with
+    | `String s -> parse_timeframe s
+    | _ -> Timeframe.H1
+  in
   match Strategies.Registry.find strat_name with
   | None -> `Assoc [ "error", `String "unknown strategy" ]
   | Some spec ->
     let strat = spec.build params in
-    let candles = demo_candles ~symbol ~n in
+    let candles = demo_candles ~symbol ~n ~timeframe in
     let cfg = Engine.Backtest.default_config () in
     let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~symbol ~candles in
     Api.backtest_result_json r
@@ -80,7 +87,9 @@ let handler _socket request body =
     | `GET, "/api/candles" ->
       let symbol = Symbol.of_string (get_query uri "symbol") in
       let n = get_query_int uri "n" 500 in
-      json_response (Api.candles_json (demo_candles ~symbol ~n))
+      let timeframe = parse_timeframe (get_query uri "timeframe") in
+      json_response
+        (Api.candles_json (demo_candles ~symbol ~n ~timeframe))
     | `POST, "/api/backtest" ->
       let body = Eio.Flow.read_all body in
       json_response (run_backtest body)

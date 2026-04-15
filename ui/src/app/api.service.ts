@@ -23,6 +23,22 @@ export const TIMEFRAMES: Timeframe[] = [
   'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1',
 ];
 
+/** Market Identifier Code (ISO 10383). Finam's new API expects symbols
+ *  in [TICKER@MIC] form. Short static list for now — if Finam exposes a
+ *  directory endpoint (e.g. /v1/exchanges), we can fetch dynamically. */
+/** Static fallback — used before /api/exchanges responds, or when the
+ *  endpoint isn't reachable. Finam returns MIC codes as plain strings
+ *  so we keep the type [string] in the runtime wire shape and the
+ *  curated literal type for the fallback set. */
+export type Mic = string;
+
+export const MICS_FALLBACK: Mic[] = ['MISX', 'XSPB'];
+
+export interface Exchange {
+  mic: string;
+  name: string;
+}
+
 export interface BacktestResult {
   num_trades: number;
   total_return: number;
@@ -43,6 +59,9 @@ export class Api {
   }
   strategies(): Observable<StrategySpec[]> {
     return this.http.get<StrategySpec[]>('/api/strategies');
+  }
+  exchanges(): Observable<{ exchanges: Exchange[] }> {
+    return this.http.get<{ exchanges: Exchange[] }>('/api/exchanges');
   }
   candles(symbol: string, n: number, timeframe: Timeframe = 'H1')
     : Observable<{ candles: Candle[] }> {

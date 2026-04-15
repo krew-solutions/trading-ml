@@ -14,9 +14,11 @@ type t = {
   secret : string;
   transport : Transport.t;
   base : Uri.t;
-  mutex : Mutex.t;           (* stdlib mutex: works both inside and
-                                outside an Eio fiber; crit-section is a
-                                tiny pointer swap and token parse *)
+  mutex : Mutex.t;           (* guards [state] ONLY — never held across
+                                the HTTP refresh call, otherwise an Eio
+                                fiber yielding inside refresh could
+                                deadlock another fiber trying to read
+                                the cache on the same OS thread *)
   mutable state : jwt option;
 }
 
@@ -33,8 +35,6 @@ let decode_exp (token : string) : float option =
     let parts = String.split_on_char '.' token in
     match parts with
     | _ :: payload_b64 :: _ ->
-      (* JWT uses base64url without padding. Base64 lib accepts padded
-         input, so restore padding and swap URL alphabet. *)
       let normalise s =
         let s =
           String.map (function '-' -> '+' | '_' -> '/' | c -> c) s
@@ -53,8 +53,13 @@ let decode_exp (token : string) : float option =
 
 let now () = Unix.gettimeofday ()
 
-(** Refresh the JWT from upstream. Must be called under [t.mutex]. *)
-let refresh t : jwt =
+(** Safety margin: refresh 30 seconds before the stated expiry to
+    avoid races with in-flight requests. *)
+let margin = 30.0
+
+(** Pure HTTP refresh — does NOT touch [t.state] or the mutex. Returns
+    the fresh JWT; the caller publishes it under the lock. *)
+let http_refresh t : jwt =
   let path = Uri.path t.base ^ "/v1/sessions" in
   let url = Uri.with_path t.base path in
   let body = `Assoc [ "secret", `String t.secret ] in
@@ -78,33 +83,37 @@ let refresh t : jwt =
     match member "token" j with
     | `String s -> s
     | _ ->
-      (* Some API flavours return {"jwt": "..."} — accept that too. *)
       match member "jwt" j with
       | `String s -> s
       | _ -> failwith ("Finam Auth: no token field in " ^ resp.body)
   in
   let expires_at = match decode_exp token with
     | Some exp -> exp
-    | None -> now () +. 600.0   (* conservative 10-minute TTL *)
+    | None -> now () +. 600.0
   in
-  let jwt = { token; expires_at } in
-  t.state <- Some jwt;
-  jwt
+  { token; expires_at }
 
-(** Safety margin: refresh 30 seconds before the stated expiry to
-    avoid races with in-flight requests. *)
-let margin = 30.0
-
-let current (t : t) : string =
+let with_lock t f =
   Mutex.lock t.mutex;
-  Fun.protect ~finally:(fun () -> Mutex.unlock t.mutex) (fun () ->
-    let need_refresh =
+  Fun.protect ~finally:(fun () -> Mutex.unlock t.mutex) f
+
+(** Returns a live JWT.
+    Fast path: inspect cache under a tiny critical section.
+    Slow path: drop the lock, do the network call, re-acquire briefly
+    to publish the result. Concurrent callers whose cache is stale may
+    all race through the slow path — the last [state] write wins and
+    every caller ends up with a valid token; cheaper than queueing
+    behind a lock that spans the network round-trip. *)
+let current (t : t) : string =
+  let cached =
+    with_lock t (fun () ->
       match t.state with
-      | None -> true
-      | Some jwt -> jwt.expires_at -. now () < margin
-    in
-    let jwt =
-      if need_refresh then refresh t
-      else Option.get t.state
-    in
-    jwt.token)
+      | Some jwt when jwt.expires_at -. now () >= margin -> Some jwt
+      | _ -> None)
+  in
+  match cached with
+  | Some jwt -> jwt.token
+  | None ->
+    let fresh = http_refresh t in
+    with_lock t (fun () -> t.state <- Some fresh);
+    fresh.token

@@ -288,6 +288,12 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/api/strategies') {
       return json(res, strategiesCatalog);
     }
+    if (req.method === 'GET' && path === '/api/exchanges') {
+      return json(res, { exchanges: [
+        { mic: 'MISX', name: 'MOEX' },
+        { mic: 'XSPB', name: 'SPB Exchange' },
+      ]});
+    }
     if (req.method === 'GET' && path === '/api/candles') {
       const symbol = url.searchParams.get('symbol') || 'SBER';
       const n = Number(url.searchParams.get('n') ?? 500);

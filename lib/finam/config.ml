@@ -12,14 +12,21 @@ type t = {
   ws_url : Uri.t;
   secret : string;
   account_id : string option;
+  (** Default Market Identifier Code (ISO 10383) appended to bare tickers.
+      Finam's new API requires symbols in [TICKER@MIC] form, e.g.
+      [SBER@MISX] for MOEX. Users that type just [SBER] get [MISX] by
+      default; override here for other venues (e.g. [XNGS] for NASDAQ). *)
+  default_mic : string option;
 }
 
-(* [trade-api.finam.ru] (с дефисом) возвращает 301 → [tradeapi.finam.ru].
-   WebSocket-хост — пока гипотеза, подтвердится при активации WS. *)
+(* Authoritative host from the v2.14 REST docs is [api.finam.ru].
+   [trade-api.finam.ru] and [tradeapi.finam.ru] are older / renamed hosts.
+   WebSocket URL stays a best-guess until we verify it with a live key. *)
 let make
-    ?(rest_base = Uri.of_string "https://tradeapi.finam.ru")
-    ?(ws_url = Uri.of_string "wss://tradeapi.finam.ru/")
+    ?(rest_base = Uri.of_string "https://api.finam.ru")
+    ?(ws_url = Uri.of_string "wss://api.finam.ru/")
     ?account_id
+    ?(default_mic = Some "MISX")
     ~secret
     () =
-  { rest_base; ws_url; secret; account_id }
+  { rest_base; ws_url; secret; account_id; default_mic }

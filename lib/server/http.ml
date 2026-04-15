@@ -79,7 +79,7 @@ let live_or_synthetic source ~symbol ~n ~timeframe =
   match source with
   | Synthetic -> synthetic_candles ~n ~timeframe
   | Live client ->
-    try Finam.Rest.bars client ~symbol ~timeframe
+    try Finam.Rest.bars client ~n ~symbol ~timeframe
     with e ->
       Log.warn "finam bars(%s) failed: %s — falling back to synthetic"
         (Symbol.to_string symbol) (Printexc.to_string e);
@@ -196,6 +196,23 @@ let route source registry request body : int * Cohttp_eio.Server.response_action
       ok (json_response (Api.indicators_catalog ()))
     | `GET, "/api/strategies" ->
       ok (json_response (Api.strategies_catalog ()))
+    | `GET, "/api/exchanges" ->
+      let j = match source with
+        | Synthetic ->
+          (* Static list mirroring the UI's built-in MICS[]; keeps mock
+             and live behaviour identical from the front-end's view. *)
+          `Assoc [ "exchanges", `List [
+            `Assoc [ "mic", `String "MISX"; "name", `String "MOEX" ];
+            `Assoc [ "mic", `String "XSPB"; "name", `String "SPB Exchange" ];
+          ]]
+        | Live client ->
+          (try Finam.Rest.exchanges client
+           with e ->
+             Log.warn "finam /v1/exchanges failed: %s"
+               (Printexc.to_string e);
+             `Assoc [ "exchanges", `List [] ])
+      in
+      ok (json_response j)
     | `GET, "/api/candles" ->
       let symbol = Symbol.of_string (get_query uri "symbol") in
       let n = get_query_int uri "n" 500 in

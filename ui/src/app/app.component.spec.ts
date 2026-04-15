@@ -66,7 +66,11 @@ describe('AppComponent', () => {
     fixture.detectChanges();
     httpCtrl.expectOne('/api/strategies').flush(strategies);
     httpCtrl.expectOne('/api/indicators').flush(indicatorsCatalog);
-    httpCtrl.expectOne('/api/candles?symbol=SBER&n=500&timeframe=H1').flush({
+    httpCtrl.expectOne('/api/exchanges').flush({ exchanges: [
+      { mic: 'MISX', name: 'MOEX' },
+      { mic: 'XSPB', name: 'SPB Exchange' },
+    ]});
+    httpCtrl.expectOne('/api/candles?symbol=SBER%40MISX&n=500&timeframe=H1').flush({
       candles: candlesFor(60),
     });
     await fixture.whenStable();
@@ -127,21 +131,31 @@ describe('AppComponent', () => {
   it('reloads candles when the timeframe changes', async () => {
     fixture.componentInstance.timeframe.set('M15');
     await fixture.whenStable();
-    httpCtrl.expectOne('/api/candles?symbol=SBER&n=500&timeframe=M15').flush({
+    httpCtrl.expectOne('/api/candles?symbol=SBER%40MISX&n=500&timeframe=M15').flush({
       candles: candlesFor(40),
     });
     await fixture.whenStable();
     expect(fixture.componentInstance.candles().length).toBe(40);
   });
 
-  it('reloads candles when the symbol changes', async () => {
-    fixture.componentInstance.symbol.set('GAZP');
+  it('reloads candles when the ticker changes', async () => {
+    fixture.componentInstance.ticker.set('GAZP');
     await fixture.whenStable();
-    httpCtrl.expectOne('/api/candles?symbol=GAZP&n=500&timeframe=H1').flush({
+    httpCtrl.expectOne('/api/candles?symbol=GAZP%40MISX&n=500&timeframe=H1').flush({
       candles: candlesFor(30),
     });
     await fixture.whenStable();
     expect(fixture.componentInstance.candles().length).toBe(30);
+  });
+
+  it('reloads candles when the exchange (MIC) changes', async () => {
+    fixture.componentInstance.mic.set('XSPB');
+    await fixture.whenStable();
+    httpCtrl.expectOne('/api/candles?symbol=SBER%40XSPB&n=500&timeframe=H1').flush({
+      candles: candlesFor(20),
+    });
+    await fixture.whenStable();
+    expect(fixture.componentInstance.candles().length).toBe(20);
   });
 
   describe('applyStreamEvent', () => {

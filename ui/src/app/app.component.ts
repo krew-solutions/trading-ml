@@ -6,7 +6,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import {
   Api, Candle, IndicatorSpec, StrategySpec, BacktestResult,
-  TIMEFRAMES, type StreamEvent, type Timeframe,
+  MICS_FALLBACK, TIMEFRAMES,
+  type Exchange, type Mic, type StreamEvent, type Timeframe,
 } from './api.service';
 import { ChartComponent } from './chart.component';
 import {
@@ -44,7 +45,15 @@ let nextSlotId = 1;
         <h1>Finam Trading — OCaml</h1>
         <div class="controls">
           <label>Symbol
-            <input [ngModel]="symbol()" (ngModelChange)="symbol.set($event)">
+            <input [ngModel]="ticker()" (ngModelChange)="ticker.set($event)"
+                   style="width: 90px">
+          </label>
+          <label>Exchange
+            <select [ngModel]="mic()" (ngModelChange)="mic.set($event)">
+              @for (ex of exchanges(); track ex.mic) {
+                <option [value]="ex.mic">{{ex.mic}} — {{ex.name}}</option>
+              }
+            </select>
           </label>
           <label>Timeframe
             <select [ngModel]="timeframe()"
@@ -187,11 +196,19 @@ export class AppComponent {
   private readonly api = inject(Api);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly symbol = signal('SBER');
+  readonly ticker = signal('SBER');
+  readonly mic = signal<Mic>('MISX');
   readonly timeframe = signal<Timeframe>('H1');
   readonly n = signal(500);
   readonly liveEnabled = signal(false);
   readonly timeframes = TIMEFRAMES;
+  /** Populated from [/api/exchanges] on startup; falls back to
+   *  [MICS_FALLBACK] until the response arrives or if it fails. */
+  readonly exchanges = signal<Exchange[]>(
+    MICS_FALLBACK.map(mic => ({ mic, name: mic })));
+
+  /** Fully-qualified symbol sent to the server, e.g. [SBER@MISX]. */
+  readonly symbol = computed(() => `${this.ticker()}@${this.mic()}`);
   readonly strategyName = signal('');
   readonly strategies = signal<StrategySpec[]>([]);
   readonly catalog = signal<IndicatorSpec[]>([]);
@@ -225,6 +242,15 @@ export class AppComponent {
         if (!this.strategyName() && list.length) {
           this.strategyName.set(list[0].name);
         }
+      });
+
+    this.api.exchanges()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: r => {
+          if (r.exchanges?.length) this.exchanges.set(r.exchanges);
+        },
+        error: () => { /* keep the static fallback */ },
       });
 
     this.api.indicators()

@@ -87,26 +87,57 @@ let delete t path =
   in
   ignore (ensure_ok resp)
 
-(** GET /v1/instruments/{symbol}/bars?timeframe=... *)
+(** Finam's new API expects symbols in [TICKER@MIC] form. When the
+    caller passes a bare ticker we append the configured default MIC
+    so RU-focused usage "just works" with e.g. [SBER]. *)
+let qualify_symbol cfg (symbol : Symbol.t) =
+  let s = Symbol.to_string symbol in
+  if String.contains s '@' then s
+  else match cfg.Config.default_mic with
+    | Some mic -> s ^ "@" ^ mic
+    | None -> s
+
+(** Format a unix-epoch timestamp as RFC 3339 / ISO 8601 (UTC, "Z"
+    suffix). Finam's new REST expects the bars endpoint's
+    [interval.start_time] / [end_time] in this shape; plain int
+    seconds are rejected as INVALID_ARGUMENT. *)
+let iso8601_of_ts (ts : int64) : string =
+  let tm = Unix.gmtime (Int64.to_float ts) in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ"
+    (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday
+    tm.tm_hour tm.tm_min tm.tm_sec
+
+(** GET /v1/instruments/{symbol@mic}/bars?timeframe=...&interval.start_time=...&interval.end_time=...
+    All three query params are required. When the caller doesn't pass
+    [from_ts] / [to_ts] we default to a window of [n] timeframe units
+    ending at "now", so [bars ~n:500 ~timeframe:H1] returns the last
+    500 hourly bars. *)
 let bars
-    ?from_ts ?to_ts
+    ?from_ts ?to_ts ?(n = 500)
     (t : t) ~symbol ~timeframe : Candle.t list =
   let path =
-    Printf.sprintf "/v1/instruments/%s/bars" (Symbol.to_string symbol)
+    Printf.sprintf "/v1/instruments/%s/bars" (qualify_symbol t.cfg symbol)
   in
-  let q = ["timeframe", Timeframe.to_finam timeframe] in
-  let q = match from_ts with
-    | Some v -> q @ ["interval.start_time", Int64.to_string v]
-    | None -> q
+  let now_ts = Int64.of_float (Unix.gettimeofday ()) in
+  let tf_secs = Int64.of_int (Timeframe.to_seconds timeframe) in
+  let end_ts = Option.value to_ts ~default:now_ts in
+  let start_ts =
+    Option.value from_ts
+      ~default:(Int64.sub end_ts (Int64.mul (Int64.of_int n) tf_secs))
   in
-  let q = match to_ts with
-    | Some v -> q @ ["interval.end_time", Int64.to_string v]
-    | None -> q
-  in
+  let q = [
+    "timeframe",            Timeframe.to_finam timeframe;
+    "interval.start_time",  iso8601_of_ts start_ts;
+    "interval.end_time",    iso8601_of_ts end_ts;
+  ] in
   Dto.candles_of_json (get_json t path q)
 
 let account t ~account_id =
   get_json t (Printf.sprintf "/v1/accounts/%s" account_id) []
+
+(** GET /v1/exchanges — list of venues with their MIC codes and labels. *)
+let exchanges t : Yojson.Safe.t =
+  get_json t "/v1/exchanges" []
 
 let place_order
     (t : t)

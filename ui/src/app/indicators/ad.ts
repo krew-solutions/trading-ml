@@ -5,7 +5,10 @@
  *  defined as 0 to avoid division by zero (standard convention). */
 
 import type { OHLCV } from './ohlcv';
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import {
+  applyStyle,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export function ad(candles: OHLCV[]): number[] {
   const out = new Array<number>(candles.length);
@@ -23,14 +26,16 @@ export function ad(candles: OHLCV[]): number[] {
 export function adOverlay(
   bars: OverlayBar[],
   _params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const series = ad(bars);
   return {
     name: 'A/D',
     pane: 'ad',
     lines: [{
-      label: 'A/D', color,
+      label: 'A/D',
+      color: style.color,
+      ...applyStyle(style),
       points: series.map((v, i) => ({ ts: bars[i].ts, v })),
     }],
   };

@@ -4,7 +4,9 @@
  *  convention. Renders as a [HistogramSeries] in the 'volume' pane. */
 
 import type { OHLCV } from './ohlcv';
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import type {
+  IndicatorOverlay, OverlayBar, OverlayStyle,
+} from './overlay';
 
 export function volume(candles: OHLCV[]): number[] {
   return candles.map(c => c.volume);
@@ -16,15 +18,16 @@ const DOWN = '#ef5350';
 export function volumeOverlay(
   bars: OverlayBar[],
   _params: Record<string, number>,
-  _color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   return {
     name: 'Volume',
     pane: 'volume',
     lines: [{
       label: 'Volume',
-      color: UP,           // legend swatch — ignored for per-point colors
+      color: UP,             // legend swatch — per-point colors override
       kind: 'histogram',
+      opacity: style.opacity,
       points: bars.map(b => ({
         ts: b.ts,
         v: b.volume,

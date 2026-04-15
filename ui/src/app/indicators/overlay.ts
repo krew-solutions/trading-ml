@@ -33,6 +33,25 @@ export interface OverlayBar extends OHLCV {
 
 export type OverlayKind = 'line' | 'histogram';
 
+export type LineStyle =
+  | 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
+
+export const LINE_STYLES: LineStyle[] = [
+  'solid', 'dotted', 'dashed', 'large-dashed', 'sparse-dotted',
+];
+
+export type LineWidth = 1 | 2 | 3 | 4;
+
+/** Visual parameters for a single indicator slot. Passed to each overlay
+ *  renderer so multi-line indicators (MACD, Stochastic) can propagate
+ *  width/style/opacity to every line while keeping per-line colour logic. */
+export interface OverlayStyle {
+  color: string;              // '#rrggbb'
+  lineWidth?: LineWidth;      // default 1
+  lineStyle?: LineStyle;      // default 'solid'
+  opacity?: number;           // [0, 1], default 1
+}
+
 export interface OverlayPoint {
   ts: number;
   v: number;
@@ -46,7 +65,23 @@ export interface OverlayLine {
   color: string;
   /** Defaults to `'line'` when omitted. */
   kind?: OverlayKind;
+  lineWidth?: LineWidth;
+  lineStyle?: LineStyle;
+  opacity?: number;
   points: OverlayPoint[];
+}
+
+/** Lift stylistic fields out of an [OverlayStyle] into the shape an
+ *  [OverlayLine] expects (everything except `color`, which callers set
+ *  per-line — sometimes via [fade] for secondary series). */
+export function applyStyle(style: OverlayStyle)
+  : Pick<OverlayLine, 'lineWidth' | 'lineStyle' | 'opacity'>
+{
+  return {
+    lineWidth: style.lineWidth,
+    lineStyle: style.lineStyle,
+    opacity:   style.opacity,
+  };
 }
 
 export interface IndicatorOverlay {
@@ -60,7 +95,7 @@ export interface IndicatorOverlay {
 export type OverlayRenderer = (
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ) => IndicatorOverlay;
 
 export const PRICE_PANE = 'price';
@@ -106,4 +141,16 @@ export function fade(hex: string, alpha: number): string {
   const blend = (c: number) => Math.round(c + (255 - c) * (1 - alpha));
   const h = (v: number) => v.toString(16).padStart(2, '0');
   return `#${h(blend(r))}${h(blend(g))}${h(blend(b))}`;
+}
+
+/** Fold opacity into a `#rrggbb` colour by converting to rgba(). Returns
+ *  the input unchanged for opacity ≥ 1 or non-hex colours. */
+export function withOpacity(color: string, opacity: number | undefined): string {
+  if (opacity === undefined || opacity >= 1) return color;
+  if (opacity <= 0) return 'rgba(0,0,0,0)';
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+  return `rgba(${r},${g},${b},${opacity})`;
 }

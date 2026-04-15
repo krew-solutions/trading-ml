@@ -6,12 +6,10 @@ import {
   HttpTestingController, provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
-import { ChartComponent, IndicatorOverlay } from './chart.component';
+import { ChartComponent } from './chart.component';
+import type { IndicatorOverlay } from './indicators';
 import { Candle } from './api.service';
 
-/** Stand-in for ChartComponent — keeps the selector and public inputs, but
- *  renders nothing so lightweight-charts and its canvas needs stay out of
- *  the test environment. */
 @Component({
   selector: 'app-chart',
   standalone: true,
@@ -80,21 +78,50 @@ describe('AppComponent', () => {
     expect(fixture.componentInstance.strategyName()).toBe('SMA_Crossover');
   });
 
-  it('seeds indicator choices from the catalog', () => {
-    const inds = fixture.componentInstance.indicators();
-    expect(inds.map(i => i.spec.name)).toEqual(['SMA', 'EMA', 'BollingerBands']);
-    expect(inds[0].enabled).toBe(true);
-    expect(inds[1].enabled).toBe(true);
-    expect(inds[2].enabled).toBe(false);
+  it('seeds two default slots (SMA & EMA) from the catalog', () => {
+    const slots = fixture.componentInstance.slots();
+    expect(slots.map(s => s.specName)).toEqual(['SMA', 'EMA']);
+    expect(slots[0].params['period']).toBe(20);
+    expect(slots[1].params['period']).toBe(50);
+    expect(slots.every(s => s.visible)).toBe(true);
   });
 
-  it('recomputes overlays reactively when an indicator is toggled', async () => {
+  it('allows adding another slot of the same spec (SMA twice)', async () => {
     const cmp = fixture.componentInstance;
-    const bb = cmp.indicators()[2];
-    expect(cmp.overlays().some(o => o.name === 'BB')).toBe(false);
-    cmp.toggleIndicator(bb, true);
+    cmp.pickedSpecName = 'SMA';
+    cmp.addSlot();
     await fixture.whenStable();
-    expect(cmp.overlays().some(o => o.name === 'BB')).toBe(true);
+    const smas = cmp.slots().filter(s => s.specName === 'SMA');
+    expect(smas.length).toBe(2);
+  });
+
+  it('patches style independently per slot', async () => {
+    const cmp = fixture.componentInstance;
+    const [sma, ema] = cmp.slots();
+    cmp.patchStyle(sma.id, { color: '#ff0000', lineWidth: 3 });
+    cmp.patchStyle(ema.id, { lineStyle: 'dashed', opacity: 0.5 });
+    await fixture.whenStable();
+    const s = cmp.slots();
+    expect(s[0].style.color).toBe('#ff0000');
+    expect(s[0].style.lineWidth).toBe(3);
+    expect(s[1].style.lineStyle).toBe('dashed');
+    expect(s[1].style.opacity).toBe(0.5);
+  });
+
+  it('removes a slot by id', async () => {
+    const cmp = fixture.componentInstance;
+    const [first] = cmp.slots();
+    cmp.removeSlot(first.id);
+    await fixture.whenStable();
+    expect(cmp.slots().some(s => s.id === first.id)).toBe(false);
+  });
+
+  it('recomputes overlays when a slot is hidden', async () => {
+    const cmp = fixture.componentInstance;
+    expect(cmp.overlays().length).toBe(2);
+    cmp.patchSlot(cmp.slots()[0].id, { visible: false });
+    await fixture.whenStable();
+    expect(cmp.overlays().length).toBe(1);
   });
 
   it('reloads candles when the symbol changes', async () => {

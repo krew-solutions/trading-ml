@@ -2,7 +2,10 @@
  *  Returns NaN for positions before the window is full. O(n) time, O(1) extra
  *  state via a running sum. */
 
-import { PRICE_PANE, type IndicatorOverlay, type OverlayBar } from './overlay';
+import {
+  applyStyle, PRICE_PANE,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export function sma(data: number[], period: number): number[] {
   const out = new Array<number>(data.length).fill(NaN);
@@ -19,7 +22,7 @@ export function sma(data: number[], period: number): number[] {
 export function smaOverlay(
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const period = params['period'] || 20;
   const series = sma(bars.map(b => b.close), period);
@@ -28,7 +31,8 @@ export function smaOverlay(
     pane: PRICE_PANE,
     lines: [{
       label: `SMA(${period})`,
-      color,
+      color: style.color,
+      ...applyStyle(style),
       points: series.map((v, i) => ({ ts: bars[i].ts, v })),
     }],
   };

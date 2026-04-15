@@ -16,7 +16,7 @@ describe('volume', () => {
 describe('volumeOverlay', () => {
   it('is a single histogram series on the volume pane', () => {
     const cs = [bar(0, 1, 2, 0, 1, 100)];
-    const o = volumeOverlay(cs, {}, '#ffffff');
+    const o = volumeOverlay(cs, {}, { color: '#ffffff' });
     expect(o.pane).toBe('volume');
     expect(o.lines).toHaveLength(1);
     expect(o.lines[0].kind).toBe('histogram');
@@ -25,14 +25,14 @@ describe('volumeOverlay', () => {
   it('tags bullish bars green and bearish bars red', () => {
     const up   = bar(0, 10, 12, 9, 11, 100);   // close > open
     const down = bar(1, 11, 11, 8,  9, 100);   // close < open
-    const pts = volumeOverlay([up, down], {}, '#000').lines[0].points;
+    const pts = volumeOverlay([up, down], {}, { color: '#000' }).lines[0].points;
     expect(pts[0].color).toBe('#26a69a');
     expect(pts[1].color).toBe('#ef5350');
   });
 
   it('emits one histogram point per bar with matching ts and volume', () => {
     const cs = [bar(100, 1, 2, 0, 1, 7), bar(200, 1, 2, 0, 1, 42)];
-    const pts = volumeOverlay(cs, {}, '#000').lines[0].points;
+    const pts = volumeOverlay(cs, {}, { color: '#000' }).lines[0].points;
     expect(pts.map(p => p.ts)).toEqual([100, 200]);
     expect(pts.map(p => p.v)).toEqual([7, 42]);
   });

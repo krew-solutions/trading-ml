@@ -3,7 +3,10 @@
  *  ATR_t = ((n-1)·ATR_{t-1} + TR_t) / n, seeded by mean of first [period] TRs. */
 
 import type { OHLCV } from './ohlcv';
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import {
+  applyStyle,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export function atr(candles: OHLCV[], period = 14): number[] {
   const n = candles.length;
@@ -37,7 +40,7 @@ export function atr(candles: OHLCV[], period = 14): number[] {
 export function atrOverlay(
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const period = params['period'] || 14;
   const series = atr(bars, period);
@@ -46,7 +49,8 @@ export function atrOverlay(
     pane: 'atr',
     lines: [{
       label: `ATR(${period})`,
-      color,
+      color: style.color,
+      ...applyStyle(style),
       points: series.map((v, i) => ({ ts: bars[i].ts, v })),
     }],
   };

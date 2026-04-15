@@ -4,11 +4,24 @@ import {
 } from '@angular/core';
 import {
   createChart, IChartApi, ISeriesApi, LineData, CandlestickData,
-  HistogramData, CandlestickSeries, LineSeries, HistogramSeries, Time,
+  HistogramData, CandlestickSeries, LineSeries, HistogramSeries,
+  LineStyle as LwLineStyle, Time,
 } from 'lightweight-charts';
 import { Candle } from './api.service';
-import { type IndicatorOverlay, PRICE_PANE } from './indicators';
+import {
+  withOpacity, PRICE_PANE,
+  type IndicatorOverlay, type LineStyle,
+} from './indicators';
 export type { IndicatorOverlay };
+
+/** Map our string identifiers to lightweight-charts' numeric enum. */
+const LINE_STYLE: Record<LineStyle, LwLineStyle> = {
+  'solid':         LwLineStyle.Solid,
+  'dotted':        LwLineStyle.Dotted,
+  'dashed':        LwLineStyle.Dashed,
+  'large-dashed':  LwLineStyle.LargeDashed,
+  'sparse-dotted': LwLineStyle.SparseDotted,
+};
 
 @Component({
   selector: 'app-chart',
@@ -85,11 +98,14 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
       const idx = paneIndex.get(o.pane)!;
       for (const line of o.lines) {
         if (line.kind === 'histogram') {
+          // Histograms honour per-point colour (for red/green volume bars);
+          // line-level opacity is folded into those when points don't set
+          // their own colour.
+          const baseColor = withOpacity(line.color, line.opacity);
           const s = this.chart.addSeries(HistogramSeries, {
-            color: line.color,
+            color: baseColor,
             priceLineVisible: false,
             title: line.label,
-            // Fit the histogram to ~30% of its pane so price action stays dominant.
             priceFormat: { type: 'volume' },
           }, idx);
           const pts: HistogramData[] = line.points
@@ -97,14 +113,15 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
             .map(p => ({
               time: Math.floor(p.ts) as Time,
               value: p.v,
-              color: p.color ?? line.color,
+              color: withOpacity(p.color ?? line.color, line.opacity),
             }));
           s.setData(pts);
           this.overlaySeries.push(s);
         } else {
           const s = this.chart.addSeries(LineSeries, {
-            color: line.color,
-            lineWidth: 1,
+            color: withOpacity(line.color, line.opacity),
+            lineWidth: line.lineWidth ?? 1,
+            lineStyle: LINE_STYLE[line.lineStyle ?? 'solid'],
             priceLineVisible: false,
             title: line.label,
           }, idx);

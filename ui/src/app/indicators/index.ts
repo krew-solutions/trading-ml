@@ -7,8 +7,12 @@
 export type { OHLCV } from './ohlcv';
 export type {
   IndicatorOverlay, OverlayLine, OverlayBar, OverlayRenderer,
+  OverlayStyle, OverlayPoint, LineStyle, LineWidth,
 } from './overlay';
-export { overlayRegistry, emptyOverlay, fade, PRICE_PANE } from './overlay';
+export {
+  overlayRegistry, emptyOverlay, fade, withOpacity, applyStyle,
+  LINE_STYLES, PRICE_PANE,
+} from './overlay';
 
 // Price-only indicators
 export { sma, smaOverlay } from './sma';

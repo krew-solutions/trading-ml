@@ -4,7 +4,10 @@
 
 import { wma } from './wma';
 import type { MACD } from './macd';
-import { fade, type IndicatorOverlay, type OverlayBar } from './overlay';
+import {
+  applyStyle, fade,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export function macdWeighted(
   data: number[],
@@ -41,21 +44,22 @@ export function macdWeighted(
 export function macdWeightedOverlay(
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const fast = params['fast'] || 12;
   const slow = params['slow'] || 26;
   const signal = params['signal'] || 9;
   const series = macdWeighted(bars.map(b => b.close), fast, slow, signal);
+  const base = applyStyle(style);
   return {
     name: 'MACD-W',
     pane: 'macd-w',
     lines: [
-      { label: 'MACD-W', color,
+      { label: 'MACD-W', color: style.color,              ...base,
         points: series.map((x, i) => ({ ts: bars[i].ts, v: x.macd })) },
-      { label: 'Signal', color: fade(color, 0.55),
+      { label: 'Signal', color: fade(style.color, 0.55),  ...base,
         points: series.map((x, i) => ({ ts: bars[i].ts, v: x.signal })) },
-      { label: 'Hist',   color: fade(color, 0.3),
+      { label: 'Hist',   color: fade(style.color, 0.3),   ...base,
         points: series.map((x, i) => ({ ts: bars[i].ts, v: x.hist })) },
     ],
   };

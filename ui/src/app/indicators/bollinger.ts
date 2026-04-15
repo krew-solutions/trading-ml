@@ -2,7 +2,10 @@
  *  σ is the population standard deviation of the window. O(n) via running sums
  *  of x and x². */
 
-import { PRICE_PANE, type IndicatorOverlay, type OverlayBar } from './overlay';
+import {
+  applyStyle, fade, PRICE_PANE,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export interface BBand {
   lower: number;
@@ -35,20 +38,21 @@ export function bollinger(data: number[], period: number, k: number): BBand[] {
 export function bollingerOverlay(
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const period = params['period'] || 20;
   const k = params['k'] || 2;
   const bands = bollinger(bars.map(b => b.close), period, k);
+  const base = applyStyle(style);
   return {
     name: 'BB',
     pane: PRICE_PANE,
     lines: [
-      { label: 'BB upper',  color,
+      { label: 'BB upper',  color: style.color,          ...base,
         points: bands.map((x, i) => ({ ts: bars[i].ts, v: x.upper })) },
-      { label: 'BB middle', color,
+      { label: 'BB middle', color: fade(style.color, 0.7), ...base,
         points: bands.map((x, i) => ({ ts: bars[i].ts, v: x.middle })) },
-      { label: 'BB lower',  color,
+      { label: 'BB lower',  color: style.color,          ...base,
         points: bands.map((x, i) => ({ ts: bars[i].ts, v: x.lower })) },
     ],
   };

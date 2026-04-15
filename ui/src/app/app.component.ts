@@ -9,21 +9,28 @@ import {
 } from './api.service';
 import { ChartComponent } from './chart.component';
 import {
-  emptyOverlay, overlayRegistry,
-  type IndicatorOverlay,
+  emptyOverlay, overlayRegistry, LINE_STYLES,
+  type IndicatorOverlay, type LineStyle, type LineWidth, type OverlayStyle,
 } from './indicators';
 
-interface IndicatorChoice {
-  spec: IndicatorSpec;
-  enabled: boolean;
+/** A configured indicator instance on the chart. Multiple slots may
+ *  reference the same spec (e.g. SMA(20) and SMA(50)). */
+interface IndicatorSlot {
+  id: number;
+  specName: string;
   params: Record<string, number>;
-  color: string;
+  style: OverlayStyle;
+  visible: boolean;
 }
 
 const PALETTE = [
   '#f4c430', '#4fc3f7', '#ba68c8', '#ef5350', '#81c784',
-  '#ff8a65', '#4db6ac', '#7986cb',
+  '#ff8a65', '#4db6ac', '#7986cb', '#ffa726', '#26c6da',
 ];
+
+const LINE_WIDTHS: LineWidth[] = [1, 2, 3, 4];
+
+let nextSlotId = 1;
 
 @Component({
   selector: 'app-root',
@@ -55,24 +62,69 @@ const PALETTE = [
       </header>
 
       <section class="indicators">
-        <h3>Indicators</h3>
-        @for (ind of indicators(); track ind.spec.name) {
-          <div class="ind-row">
-            <label>
-              <input type="checkbox" [ngModel]="ind.enabled"
-                     (ngModelChange)="toggleIndicator(ind, $event)">
-              <span [style.color]="ind.color">■</span>
-              {{ind.spec.name}}
+        <div class="ind-header">
+          <h3>Indicators</h3>
+          <div class="add">
+            <select [(ngModel)]="pickedSpecName">
+              @for (spec of catalog(); track spec.name) {
+                <option [value]="spec.name">{{spec.name}}</option>
+              }
+            </select>
+            <button (click)="addSlot()" [disabled]="!pickedSpecName">
+              + Add
+            </button>
+          </div>
+        </div>
+
+        @for (slot of slots(); track slot.id) {
+          <div class="slot">
+            <label class="visibility">
+              <input type="checkbox" [ngModel]="slot.visible"
+                     (ngModelChange)="patchSlot(slot.id, { visible: $event })">
+              <strong>{{slot.specName}}</strong>
             </label>
-            @for (p of ind.spec.params; track p.name) {
-              <span class="param">
+
+            <input class="color" type="color" [ngModel]="slot.style.color"
+                   (ngModelChange)="patchStyle(slot.id, { color: $event })"
+                   title="line color">
+
+            <select [ngModel]="slot.style.lineStyle ?? 'solid'"
+                    (ngModelChange)="patchStyle(slot.id, { lineStyle: $event })"
+                    title="line style">
+              @for (s of lineStyles; track s) {
+                <option [value]="s">{{s}}</option>
+              }
+            </select>
+
+            <select [ngModel]="slot.style.lineWidth ?? 1"
+                    (ngModelChange)="patchStyle(slot.id, {
+                      lineWidth: asLineWidth(+$event) })"
+                    title="line width">
+              @for (w of lineWidths; track w) {
+                <option [value]="w">{{w}}px</option>
+              }
+            </select>
+
+            <label class="opacity" title="opacity">
+              <input type="range" min="0.1" max="1" step="0.1"
+                     [ngModel]="slot.style.opacity ?? 1"
+                     (ngModelChange)="patchStyle(slot.id, { opacity: +$event })">
+              <span>{{((slot.style.opacity ?? 1) * 100).toFixed(0)}}%</span>
+            </label>
+
+            @for (p of specParams(slot.specName); track p.name) {
+              <span class="param" title="{{p.name}}">
                 {{p.name}}
-                <input type="number" [ngModel]="ind.params[p.name]"
-                       (ngModelChange)="updateParam(ind, p.name, +$event)"
-                       style="width: 60px">
+                <input type="number" [ngModel]="slot.params[p.name]"
+                       (ngModelChange)="patchParam(slot.id, p.name, +$event)">
               </span>
             }
+
+            <button class="remove" (click)="removeSlot(slot.id)"
+                    title="remove indicator">×</button>
           </div>
+        } @empty {
+          <div class="empty">No indicators. Pick one above and click Add.</div>
         }
       </section>
 
@@ -96,8 +148,24 @@ const PALETTE = [
     header { display: flex; justify-content: space-between; align-items: center; }
     .controls { display: flex; gap: 12px; align-items: center; }
     .indicators { margin: 16px 0; }
-    .ind-row { display: flex; gap: 12px; align-items: center; padding: 4px 0; }
-    .param { opacity: 0.8; }
+    .ind-header { display: flex; justify-content: space-between; align-items: center; }
+    .ind-header .add { display: flex; gap: 6px; }
+    .slot {
+      display: flex; gap: 10px; align-items: center;
+      padding: 6px 0; border-top: 1px solid #1a1d24; flex-wrap: wrap;
+    }
+    .slot .visibility { min-width: 140px; display: flex; align-items: center; gap: 6px; }
+    .slot .color { width: 32px; height: 24px; padding: 0; border: 1px solid #2a2e38; background: none; }
+    .slot .opacity { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+    .slot .opacity input[type=range] { width: 80px; }
+    .slot .opacity span { font-size: 12px; opacity: 0.7; min-width: 36px; text-align: right; }
+    .slot .param { display: flex; align-items: center; gap: 4px; opacity: 0.85; flex: 0 0 auto; }
+    .slot .param input { width: 60px; }
+    .slot .remove {
+      margin-left: auto; background: none; border: 1px solid #3a2e38;
+      color: #ef5350; padding: 2px 8px; cursor: pointer;
+    }
+    .empty { opacity: 0.5; padding: 8px 0; }
     .result .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   `],
 })
@@ -109,15 +177,27 @@ export class AppComponent {
   readonly n = signal(500);
   readonly strategyName = signal('');
   readonly strategies = signal<StrategySpec[]>([]);
-  readonly indicators = signal<IndicatorChoice[]>([]);
+  readonly catalog = signal<IndicatorSpec[]>([]);
+  readonly slots = signal<IndicatorSlot[]>([]);
   readonly candles = signal<Candle[]>([]);
   readonly result = signal<BacktestResult | undefined>(undefined);
 
+  /** Ticked value of the "add" dropdown, kept out of signals because it's
+   *  local form state with no derived reactivity. */
+  pickedSpecName = '';
+
+  readonly lineStyles = LINE_STYLES;
+  readonly lineWidths = LINE_WIDTHS;
+
   readonly overlays = computed<IndicatorOverlay[]>(() => {
     const cs = this.candles();
-    return this.indicators()
-      .filter(i => i.enabled)
-      .map(i => this.computeOverlay(i, cs));
+    return this.slots()
+      .filter(s => s.visible)
+      .map(s => {
+        const render = overlayRegistry[s.specName];
+        return render ? render(cs, s.params, s.style)
+                      : emptyOverlay(s.specName);
+      });
   });
 
   constructor() {
@@ -133,16 +213,22 @@ export class AppComponent {
     this.api.indicators()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(list => {
-        this.indicators.set(list.map((spec, i) => ({
-          spec,
-          enabled: i < 2,
-          color: PALETTE[i % PALETTE.length],
-          params: Object.fromEntries(
-            spec.params.map(p => [p.name, Number(p.default) || 0])),
-        })));
+        this.catalog.set(list);
+        if (!this.pickedSpecName && list.length) {
+          this.pickedSpecName = list[0].name;
+        }
+        // Seed two common indicators so the chart isn't empty on first load.
+        if (!this.slots().length) {
+          const sma = list.find(s => s.name === 'SMA');
+          const ema = list.find(s => s.name === 'EMA');
+          const initial: IndicatorSlot[] = [];
+          if (sma) initial.push(this.buildSlot(sma, { period: 20 }));
+          if (ema) initial.push(this.buildSlot(ema, { period: 50 }));
+          this.slots.set(initial);
+        }
       });
 
-    // Candles: reload whenever symbol or n change.
+    // Reload candles whenever symbol or n change.
     effect(() => {
       const s = this.symbol();
       const count = this.n();
@@ -152,14 +238,39 @@ export class AppComponent {
     });
   }
 
-  toggleIndicator(ind: IndicatorChoice, enabled: boolean): void {
-    this.indicators.update(list => list.map(x =>
-      x === ind ? { ...x, enabled } : x));
+  asLineWidth(n: number): LineWidth {
+    return (n >= 1 && n <= 4 ? n : 1) as LineWidth;
   }
 
-  updateParam(ind: IndicatorChoice, key: string, value: number): void {
-    this.indicators.update(list => list.map(x =>
-      x === ind ? { ...x, params: { ...x.params, [key]: value } } : x));
+  specParams(name: string) {
+    return this.catalog().find(s => s.name === name)?.params ?? [];
+  }
+
+  addSlot(): void {
+    const spec = this.catalog().find(s => s.name === this.pickedSpecName);
+    if (!spec) return;
+    this.slots.update(list => [...list, this.buildSlot(spec)]);
+  }
+
+  removeSlot(id: number): void {
+    this.slots.update(list => list.filter(s => s.id !== id));
+  }
+
+  patchSlot(id: number, patch: Partial<IndicatorSlot>): void {
+    this.slots.update(list => list.map(s =>
+      s.id === id ? { ...s, ...patch } : s));
+  }
+
+  patchStyle(id: number, patch: Partial<OverlayStyle>): void {
+    this.slots.update(list => list.map(s =>
+      s.id === id ? { ...s, style: { ...s.style, ...patch } } : s));
+  }
+
+  patchParam(id: number, key: string, value: number): void {
+    this.slots.update(list => list.map(s =>
+      s.id === id
+        ? { ...s, params: { ...s.params, [key]: value } }
+        : s));
   }
 
   runBacktest(): void {
@@ -173,13 +284,26 @@ export class AppComponent {
       .subscribe(r => this.result.set(r));
   }
 
-  /** Dispatches to the per-indicator renderer registered in
-   *  [overlayRegistry]. Indicators without a registered renderer produce
-   *  an empty overlay (they aren't drawn on the price chart). */
-  private computeOverlay(ind: IndicatorChoice, candles: Candle[]): IndicatorOverlay {
-    const render = overlayRegistry[ind.spec.name];
-    return render
-      ? render(candles, ind.params, ind.color)
-      : emptyOverlay(ind.spec.name);
+  private buildSlot(
+    spec: IndicatorSpec,
+    paramOverrides: Record<string, number> = {},
+  ): IndicatorSlot {
+    const index = this.slots().length;
+    return {
+      id: nextSlotId++,
+      specName: spec.name,
+      visible: true,
+      params: {
+        ...Object.fromEntries(
+          spec.params.map(p => [p.name, Number(p.default) || 0])),
+        ...paramOverrides,
+      },
+      style: {
+        color: PALETTE[index % PALETTE.length],
+        lineWidth: 1,
+        lineStyle: 'solid' as LineStyle,
+        opacity: 1,
+      },
+    };
   }
 }

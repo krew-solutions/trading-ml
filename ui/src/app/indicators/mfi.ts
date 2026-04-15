@@ -7,7 +7,10 @@
  *  If the negative sum over the window is zero, MFI is defined as 100. */
 
 import type { OHLCV } from './ohlcv';
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import {
+  applyStyle,
+  type IndicatorOverlay, type OverlayBar, type OverlayStyle,
+} from './overlay';
 
 export function mfi(candles: OHLCV[], period = 14): number[] {
   const n = candles.length;
@@ -41,7 +44,7 @@ export function mfi(candles: OHLCV[], period = 14): number[] {
 export function mfiOverlay(
   bars: OverlayBar[],
   params: Record<string, number>,
-  color: string,
+  style: OverlayStyle,
 ): IndicatorOverlay {
   const period = params['period'] || 14;
   const series = mfi(bars, period);
@@ -50,7 +53,8 @@ export function mfiOverlay(
     pane: 'mfi',
     lines: [{
       label: `MFI(${period})`,
-      color,
+      color: style.color,
+      ...applyStyle(style),
       points: series.map((v, i) => ({ ts: bars[i].ts, v })),
     }],
   };

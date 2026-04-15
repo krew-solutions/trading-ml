@@ -6,6 +6,7 @@
  *  component has enough data are NaN. */
 
 import { ema } from './ema';
+import { fade, type IndicatorOverlay, type OverlayBar } from './overlay';
 
 export interface MACD {
   macd: number;
@@ -47,4 +48,27 @@ export function macd(
       ? NaN
       : macdLine[i] - signalLine[i],
   }));
+}
+
+export function macdOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const fast = params['fast'] || 12;
+  const slow = params['slow'] || 26;
+  const signal = params['signal'] || 9;
+  const series = macd(bars.map(b => b.close), fast, slow, signal);
+  return {
+    name: 'MACD',
+    pane: 'macd',
+    lines: [
+      { label: 'MACD',   color,
+        points: series.map((x, i) => ({ ts: bars[i].ts, v: x.macd })) },
+      { label: 'Signal', color: fade(color, 0.55),
+        points: series.map((x, i) => ({ ts: bars[i].ts, v: x.signal })) },
+      { label: 'Hist',   color: fade(color, 0.3),
+        points: series.map((x, i) => ({ ts: bars[i].ts, v: x.hist })) },
+    ],
+  };
 }

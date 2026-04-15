@@ -5,6 +5,7 @@
  *    otherwise             → OBV_i = OBV_{i-1} */
 
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function obv(candles: OHLCV[]): number[] {
   const n = candles.length;
@@ -18,4 +19,20 @@ export function obv(candles: OHLCV[]): number[] {
     out[i] = out[i - 1] + sign * candles[i].volume;
   }
   return out;
+}
+
+export function obvOverlay(
+  bars: OverlayBar[],
+  _params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const series = obv(bars);
+  return {
+    name: 'OBV',
+    pane: 'obv',
+    lines: [{
+      label: 'OBV', color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

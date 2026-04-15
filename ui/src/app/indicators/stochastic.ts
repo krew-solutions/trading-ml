@@ -6,6 +6,7 @@
 
 import { sma } from './sma';
 import type { OHLCV } from './ohlcv';
+import { fade, type IndicatorOverlay, type OverlayBar } from './overlay';
 
 export interface Stoch { k: number; d: number; }
 
@@ -35,3 +36,24 @@ export function stochastic(
   }
   return candles.map((_, i) => ({ k: kLine[i], d: dLine[i] }));
 }
+
+export function stochasticOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const kPeriod = params['k_period'] || 14;
+  const dPeriod = params['d_period'] || 3;
+  const series = stochastic(bars, kPeriod, dPeriod);
+  return {
+    name: 'Stochastic',
+    pane: 'stoch',
+    lines: [
+      { label: `%K(${kPeriod})`, color,
+        points: series.map((x, i) => ({ ts: bars[i].ts, v: x.k })) },
+      { label: `%D(${dPeriod})`, color: fade(color, 0.5),
+        points: series.map((x, i) => ({ ts: bars[i].ts, v: x.d })) },
+    ],
+  };
+}
+

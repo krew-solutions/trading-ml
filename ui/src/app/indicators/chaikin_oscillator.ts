@@ -5,6 +5,7 @@
 import { ad } from './ad';
 import { ema } from './ema';
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function chaikinOscillator(
   candles: OHLCV[],
@@ -20,4 +21,23 @@ export function chaikinOscillator(
   return line.map((_, i) =>
     Number.isNaN(fastEma[i]) || Number.isNaN(slowEma[i])
       ? NaN : fastEma[i] - slowEma[i]);
+}
+
+export function chaikinOscillatorOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const fast = params['fast'] || 3;
+  const slow = params['slow'] || 10;
+  const series = chaikinOscillator(bars, fast, slow);
+  return {
+    name: 'ChaikinOsc',
+    pane: 'chaikin_osc',
+    lines: [{
+      label: `ChO(${fast},${slow})`,
+      color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

@@ -3,6 +3,7 @@
  *  the window is full. */
 
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function volumeMa(candles: OHLCV[], period: number): number[] {
   const out = new Array<number>(candles.length).fill(NaN);
@@ -14,4 +15,22 @@ export function volumeMa(candles: OHLCV[], period: number): number[] {
     if (i >= period - 1) out[i] = sum / period;
   }
   return out;
+}
+
+export function volumeMaOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const period = params['period'] || 20;
+  const series = volumeMa(bars, period);
+  return {
+    name: 'VolumeMA',
+    pane: 'volume',
+    lines: [{
+      label: `VolumeMA(${period})`,
+      color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

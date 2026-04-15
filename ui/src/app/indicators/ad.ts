@@ -5,6 +5,7 @@
  *  defined as 0 to avoid division by zero (standard convention). */
 
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function ad(candles: OHLCV[]): number[] {
   const out = new Array<number>(candles.length);
@@ -17,4 +18,20 @@ export function ad(candles: OHLCV[]): number[] {
     out[i] = sum;
   }
   return out;
+}
+
+export function adOverlay(
+  bars: OverlayBar[],
+  _params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const series = ad(bars);
+  return {
+    name: 'A/D',
+    pane: 'ad',
+    lines: [{
+      label: 'A/D', color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

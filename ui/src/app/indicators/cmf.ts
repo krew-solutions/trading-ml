@@ -5,6 +5,7 @@
  *  Values range roughly in [-1; 1]; positive = accumulation. */
 
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function cmf(candles: OHLCV[], period = 20): number[] {
   const n = candles.length;
@@ -26,4 +27,22 @@ export function cmf(candles: OHLCV[], period = 20): number[] {
     if (i >= period - 1) out[i] = sVol === 0 ? 0 : sMfv / sVol;
   }
   return out;
+}
+
+export function cmfOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const period = params['period'] || 20;
+  const series = cmf(bars, period);
+  return {
+    name: 'CMF',
+    pane: 'cmf',
+    lines: [{
+      label: `CMF(${period})`,
+      color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

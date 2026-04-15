@@ -1,7 +1,7 @@
 /** Weighted Moving Average: linear weights 1..period, weight sum = n(n+1)/2.
  *  Used standalone and as the smoothing kernel for MACD-Weighted. */
 
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import { PRICE_PANE, type IndicatorOverlay, type OverlayBar } from './overlay';
 
 export function wma(data: number[], period: number): number[] {
   const out = new Array<number>(data.length).fill(NaN);
@@ -24,6 +24,7 @@ export function wmaOverlay(
   const series = wma(bars.map(b => b.close), period);
   return {
     name: 'WMA',
+    pane: PRICE_PANE,
     lines: [{
       label: `WMA(${period})`,
       color,

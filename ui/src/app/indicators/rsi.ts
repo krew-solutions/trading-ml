@@ -4,6 +4,8 @@
  *  then each subsequent bar uses avg = ((n-1)·avg + x) / n.
  *  If avg_loss is zero, RSI is defined as 100. */
 
+import type { IndicatorOverlay, OverlayBar } from './overlay';
+
 export function rsi(data: number[], period: number): number[] {
   const n = data.length;
   const out = new Array<number>(n).fill(NaN);
@@ -32,4 +34,22 @@ export function rsi(data: number[], period: number): number[] {
     }
   }
   return out;
+}
+
+export function rsiOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const period = params['period'] || 14;
+  const series = rsi(bars.map(b => b.close), period);
+  return {
+    name: 'RSI',
+    pane: 'rsi',
+    lines: [{
+      label: `RSI(${period})`,
+      color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

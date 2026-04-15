@@ -7,6 +7,7 @@
  *  contribute zero delta to avoid division by zero. */
 
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function cvd(candles: OHLCV[]): number[] {
   const out = new Array<number>(candles.length);
@@ -21,4 +22,20 @@ export function cvd(candles: OHLCV[]): number[] {
     out[i] = sum;
   }
   return out;
+}
+
+export function cvdOverlay(
+  bars: OverlayBar[],
+  _params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const series = cvd(bars);
+  return {
+    name: 'CVD',
+    pane: 'cvd',
+    lines: [{
+      label: 'CVD', color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

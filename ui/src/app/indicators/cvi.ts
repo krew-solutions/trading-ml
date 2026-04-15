@@ -5,6 +5,7 @@
 
 import { ema } from './ema';
 import type { OHLCV } from './ohlcv';
+import type { IndicatorOverlay, OverlayBar } from './overlay';
 
 export function cvi(candles: OHLCV[], period = 10): number[] {
   const n = candles.length;
@@ -19,4 +20,22 @@ export function cvi(candles: OHLCV[], period = 10): number[] {
     }
   }
   return out;
+}
+
+export function cviOverlay(
+  bars: OverlayBar[],
+  params: Record<string, number>,
+  color: string,
+): IndicatorOverlay {
+  const period = params['period'] || 10;
+  const series = cvi(bars, period);
+  return {
+    name: 'CVI',
+    pane: 'cvi',
+    lines: [{
+      label: `CVI(${period})`,
+      color,
+      points: series.map((v, i) => ({ ts: bars[i].ts, v })),
+    }],
+  };
 }

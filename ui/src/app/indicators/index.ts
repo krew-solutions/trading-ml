@@ -8,25 +8,27 @@ export type { OHLCV } from './ohlcv';
 export type {
   IndicatorOverlay, OverlayLine, OverlayBar, OverlayRenderer,
 } from './overlay';
-export { overlayRegistry, emptyOverlay } from './overlay';
+export { overlayRegistry, emptyOverlay, fade, PRICE_PANE } from './overlay';
 
 // Price-only indicators
 export { sma, smaOverlay } from './sma';
 export { ema, emaOverlay } from './ema';
 export { wma, wmaOverlay } from './wma';
-export { rsi } from './rsi';
+export { rsi, rsiOverlay } from './rsi';
 export { bollinger, bollingerOverlay, type BBand } from './bollinger';
-export { macd, type MACD } from './macd';
-export { macdWeighted } from './macd_weighted';
+export { macd, macdOverlay, type MACD } from './macd';
+export { macdWeighted, macdWeightedOverlay } from './macd_weighted';
 
 // OHLCV indicators
-export { atr } from './atr';
-export { obv } from './obv';
-export { ad } from './ad';
-export { chaikinOscillator } from './chaikin_oscillator';
-export { stochastic, type Stoch } from './stochastic';
-export { mfi } from './mfi';
-export { cmf } from './cmf';
-export { cvi } from './cvi';
-export { cvd } from './cvd';
-export { volumeMa } from './volume_ma';
+export { atr, atrOverlay } from './atr';
+export { obv, obvOverlay } from './obv';
+export { ad, adOverlay } from './ad';
+export {
+  chaikinOscillator, chaikinOscillatorOverlay,
+} from './chaikin_oscillator';
+export { stochastic, stochasticOverlay, type Stoch } from './stochastic';
+export { mfi, mfiOverlay } from './mfi';
+export { cmf, cmfOverlay } from './cmf';
+export { cvi, cviOverlay } from './cvi';
+export { cvd, cvdOverlay } from './cvd';
+export { volumeMa, volumeMaOverlay } from './volume_ma';

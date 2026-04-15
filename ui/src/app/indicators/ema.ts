@@ -2,7 +2,7 @@
  *  Seeded with the SMA of the first [period] samples, then recursively
  *  [ema_t = α·x_t + (1 - α)·ema_{t-1}], with α = 2/(period+1). */
 
-import type { IndicatorOverlay, OverlayBar } from './overlay';
+import { PRICE_PANE, type IndicatorOverlay, type OverlayBar } from './overlay';
 
 export function ema(data: number[], period: number): number[] {
   const out = new Array<number>(data.length).fill(NaN);
@@ -28,6 +28,7 @@ export function emaOverlay(
   const series = ema(bars.map(b => b.close), period);
   return {
     name: 'EMA',
+    pane: PRICE_PANE,
     lines: [{
       label: `EMA(${period})`,
       color,

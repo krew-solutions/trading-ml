@@ -1,16 +1,17 @@
 (** Wires [Ws_client] + [Ws] DTOs together: connects to the Finam async
     endpoint, subscribes to a [(symbol, timeframe)] bars stream, and
     invokes a caller-supplied handler for each decoded [Ws.event].
-    Self-contained so the server can spawn one fiber per key without
-    reinventing the transport. *)
+    JWT is pulled fresh from the passed-in [Auth.t] at handshake time;
+    on reconnect the next handshake re-reads and refreshes as needed. *)
 
 open Core
 
 type bridge = {
   client : Ws_client.t;
+  auth : Auth.t;
 }
 
-let connect ~env ~sw ~cfg : bridge =
+let connect ~env ~sw ~cfg ~auth : bridge =
   let authenticator =
     match Eio_transport.load_authenticator () with
     | Ok a -> Some a
@@ -19,13 +20,13 @@ let connect ~env ~sw ~cfg : bridge =
       None
   in
   let extra_headers = [
-    "Authorization", "Bearer " ^ cfg.Config.access_token;
+    "Authorization", "Bearer " ^ Auth.current auth;
   ] in
   let client =
-    Ws_client.connect ~env ~sw ~uri:cfg.ws_url
+    Ws_client.connect ~env ~sw ~uri:cfg.Config.ws_url
       ~extra_headers ?authenticator ()
   in
-  { client }
+  { client; auth }
 
 let subscribe_bars (t : bridge) ~symbol ~timeframe ~id : unit =
   let j = Ws.subscribe_message id
@@ -53,4 +54,4 @@ let run (t : bridge) ~(on_event : Ws.event -> unit) : unit =
 
 let close (t : bridge) = Ws_client.send_close t.client ()
 
-let _ = Symbol.equal   (* silences unused-open in some builds *)
+let _ = Symbol.equal

@@ -1,11 +1,14 @@
 (** CLI entry point.
     Subcommands:
       trading serve [--port 8080] [--live]
-                    [--token TOKEN] [--account ACCOUNT_ID]
+                    [--secret SECRET] [--account ACCOUNT_ID]
         start HTTP API server.
         --live  switches from synthetic data to real Finam REST.
-                token / account_id come from the flags or from the
-                FINAM_TOKEN / FINAM_ACCOUNT_ID environment variables.
+                Auth uses Finam's two-step flow: you pass the long-lived
+                *secret* (from the Finam portal); the client exchanges
+                it for a short-lived JWT and refreshes before expiry.
+                secret / account_id may also come from FINAM_SECRET /
+                FINAM_ACCOUNT_ID environment variables.
 
       trading list
         show registered indicators and strategies.
@@ -18,10 +21,10 @@ open Core
 let usage () =
   prerr_endline {|trading <command> [options]
 
-  serve [--port 8080] [--live] [--token TOKEN] [--account ACCOUNT_ID]
+  serve [--port 8080] [--live] [--secret SECRET] [--account ACCOUNT_ID]
       start HTTP API server (bound to localhost).
       Default mode is synthetic. Pass --live to use the real Finam REST.
-      Token / account may also come from FINAM_TOKEN / FINAM_ACCOUNT_ID.
+      Secret / account may also come from FINAM_SECRET / FINAM_ACCOUNT_ID.
 
   list
       show registered indicators and strategies
@@ -88,10 +91,10 @@ let cmd_serve args =
     | None -> 8080
   in
   let live = arg_flag "--live" args in
-  let token =
-    match arg_value "--token" args with
+  let secret =
+    match arg_value "--secret" args with
     | Some v -> Some v
-    | None -> Sys.getenv_opt "FINAM_TOKEN"
+    | None -> Sys.getenv_opt "FINAM_SECRET"
   in
   let account =
     match arg_value "--account" args with
@@ -102,14 +105,14 @@ let cmd_serve args =
   let source =
     if not live then Server.Http.Synthetic
     else
-      match token with
+      match secret with
       | None ->
         Printf.eprintf
-          "warning: --live requested but no token (use --token or \
-           FINAM_TOKEN). Falling back to synthetic.\n%!";
+          "warning: --live requested but no secret (use --secret or \
+           FINAM_SECRET). Falling back to synthetic.\n%!";
         Server.Http.Synthetic
-      | Some access_token ->
-        let cfg = Finam.Config.make ?account_id:account ~access_token () in
+      | Some secret ->
+        let cfg = Finam.Config.make ?account_id:account ~secret () in
         let transport = Finam.Eio_transport.make ~env in
         let client = Finam.Rest.make ~transport ~cfg in
         Printf.printf "trading: live Finam mode (account=%s)\n%!"

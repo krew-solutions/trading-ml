@@ -1,0 +1,50 @@
+/** MACD (Moving Average Convergence Divergence).
+ *  macd  = EMA(close, fast) - EMA(close, slow)
+ *  signal = EMA(macd, signalPeriod)
+ *  hist  = macd - signal
+ *  Returned arrays share length with the input; positions before each
+ *  component has enough data are NaN. */
+
+import { ema } from './ema';
+
+export interface MACD {
+  macd: number;
+  signal: number;
+  hist: number;
+}
+
+export function macd(
+  data: number[],
+  fast = 12,
+  slow = 26,
+  signalPeriod = 9,
+): MACD[] {
+  if (fast >= slow) {
+    throw new Error(`MACD: fast (${fast}) must be < slow (${slow})`);
+  }
+  const fastEma = ema(data, fast);
+  const slowEma = ema(data, slow);
+  const macdLine = data.map((_, i) => {
+    const f = fastEma[i], s = slowEma[i];
+    return Number.isNaN(f) || Number.isNaN(s) ? NaN : f - s;
+  });
+  // Signal EMA must only start counting once macdLine itself emits.
+  const firstValid = macdLine.findIndex(v => !Number.isNaN(v));
+  const sigInput = firstValid < 0
+    ? []
+    : macdLine.slice(firstValid);
+  const signalRaw = ema(sigInput, signalPeriod);
+  const signalLine = new Array<number>(data.length).fill(NaN);
+  if (firstValid >= 0) {
+    for (let i = 0; i < signalRaw.length; i++) {
+      signalLine[firstValid + i] = signalRaw[i];
+    }
+  }
+  return data.map((_, i) => ({
+    macd: macdLine[i],
+    signal: signalLine[i],
+    hist: Number.isNaN(macdLine[i]) || Number.isNaN(signalLine[i])
+      ? NaN
+      : macdLine[i] - signalLine[i],
+  }));
+}

@@ -96,7 +96,7 @@ let make_eio ~env : t =
     Some connect
   in
   let client = Cohttp_eio.Client.make ~https net in
-  fun (req : request) : response ->
+  let send_once (req : request) : response =
     Eio.Switch.run @@ fun sw ->
     let headers = Cohttp.Header.of_list req.headers in
     let body = Option.map Cohttp_eio.Body.of_string req.body in
@@ -110,3 +110,23 @@ let make_eio ~env : t =
     let status = Cohttp.Code.code_of_status (Cohttp.Response.status resp) in
     let body_str = Eio.Flow.read_all body_in in
     { status; body = body_str }
+  in
+  (* Cohttp's client keeps a pool of TCP+TLS connections for keepalive.
+     Brokers (notably BCS) close idle pooled connections after a few
+     seconds; the next request through that stale entry surfaces
+     either as [End_of_file] (clean FIN) or as [Eio.Io Net
+     Connection_reset] (abortive RST). Retry once on both — a fresh
+     pool entry skips the dead connection.
+
+     Safe for our current call sites: GET/DELETE are idempotent, and
+     the only POSTs we make today are auth token exchanges (also
+     idempotent). Revisit when we start placing orders — then the
+     retry must be gated on a client-order-id for at-most-once. *)
+  let is_stale_keepalive : exn -> bool = function
+    | End_of_file -> true
+    | Eio.Io (Eio.Net.E (Connection_reset _), _) -> true
+    | _ -> false
+  in
+  fun (req : request) : response ->
+    try send_once req
+    with e when is_stale_keepalive e -> send_once req

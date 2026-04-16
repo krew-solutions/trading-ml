@@ -21,9 +21,13 @@ type t = {
       we fall back to this class code. Default [TQBR] is the MOEX
       T+ stocks board, i.e. the retail-trading norm. *)
   default_class_code : string;
-  (** WebSocket endpoint for the last-candle stream (one connection
-      per (classCode, ticker, timeFrame) subscription). *)
-  ws_last_candle_url : Uri.t;
+  (** WebSocket endpoint for the multiplexed market-data stream —
+      one socket serves BARS, QUOTES, ORDER_BOOK subscriptions
+      together, distinguished by a [type] field in the subscribe
+      envelope. Previously BCS shipped a path per subscription kind
+      ({[/last-candle/ws]}, {[/quotes/ws]}, …); the [bcs-trade-go]
+      reference client still reflects the old layout. *)
+  ws_market_data_url : Uri.t;
 }
 
 (* Public auth host is [be.broker.ru] per the BCS docs. [rest_base]
@@ -42,10 +46,10 @@ let make
     ?(client_id = "trade-api-read")
     ?account_id
     ?(default_class_code = "TQBR")
-    ?(ws_last_candle_url = Uri.of_string
+    ?(ws_market_data_url = Uri.of_string
         "wss://ws.broker.ru/trade-api-market-data-connector/api/v1\
-         /last-candle/ws")
+         /market-data/ws")
     ~refresh_token
     () =
   { rest_base; token_endpoint; client_id; refresh_token; account_id;
-    default_class_code; ws_last_candle_url }
+    default_class_code; ws_market_data_url }

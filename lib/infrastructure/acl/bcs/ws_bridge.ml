@@ -61,7 +61,7 @@ let subscribe_bars (t : bridge) ~instrument ~timeframe
     ] in
     let client =
       Websocket.Client.connect
-        ~env:t.env ~sw:t.sw ~uri:t.cfg.Config.ws_last_candle_url
+        ~env:t.env ~sw:t.sw ~uri:t.cfg.Config.ws_market_data_url
         ~extra_headers ?authenticator:t.authenticator ()
     in
     let sub_msg = Ws.subscribe_last_candle_message
@@ -91,6 +91,14 @@ let subscribe_bars (t : bridge) ~instrument ~timeframe
                       stable even if BCS omits [classCode] in some
                       frames. *)
                    on_candle instrument timeframe candle
+                 | Subscribe_ack { subscribe_type; _ } ->
+                   Printf.eprintf
+                     "[bcs ws] %s ack for %s/%s\n%!"
+                     (if subscribe_type = 0 then "subscribe" else "unsubscribe")
+                     (Instrument.to_qualified instrument)
+                     (Timeframe.to_string timeframe)
+                 | Error_ev { code; message } ->
+                   Printf.eprintf "[bcs ws] error %s: %s\n%!" code message
                  | Other _ -> ())
               with e ->
                 Printf.eprintf "[bcs ws] decode failed: %s\n%!"
@@ -111,4 +119,10 @@ let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
         t.conns <- SubMap.remove key t.conns;
         Some c)
   in
-  Option.iter (fun c -> c.cancel ()) conn_opt
+  Option.iter (fun c ->
+    let ticker, class_code = route t instrument in
+    let msg = Ws.unsubscribe_last_candle_message
+      ~class_code ~ticker ~timeframe in
+    (try Websocket.Client.send_text c.client (Yojson.Safe.to_string msg)
+     with _ -> ());
+    c.cancel ()) conn_opt

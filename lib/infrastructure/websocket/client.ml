@@ -175,9 +175,35 @@ let connect
   let handshake = build_handshake ~host ~path ~key ~extra_headers in
   Eio.Flow.copy_string handshake flow;
   let buf = Eio.Buf_read.of_flow flow ~max_size:65536 in
-  let code, headers = read_response_headers buf in
-  if code <> 101 then
-    failwith (Printf.sprintf "ws_client: handshake failed, status %d" code);
+  let code, headers =
+    try read_response_headers buf
+    with End_of_file ->
+      (* Server closed the connection before sending a response line.
+         Expose whatever bytes it did send (possibly none) so callers
+         can distinguish "silent drop" (0 bytes — usually an auth or
+         header-shape check failing at a layer that doesn't bother
+         with HTTP error codes) from "truncated response". *)
+      let partial =
+        try Eio.Buf_read.take_all buf
+        with _ -> ""
+      in
+      failwith (Printf.sprintf
+        "ws_client: server closed handshake without response \
+         (received %d bytes: %S)"
+        (String.length partial) partial)
+  in
+  if code <> 101 then begin
+    (* Drain whatever body the server returned (often a small JSON or
+       text snippet explaining the rejection — invaluable for
+       debugging 4xx/5xx). Bounded to keep a misbehaving server from
+       hanging the handshake error. *)
+    let body =
+      try Eio.Buf_read.take 1024 buf
+      with End_of_file -> Eio.Buf_read.take_all buf
+    in
+    failwith (Printf.sprintf
+      "ws_client: handshake failed, status %d, body: %s" code body)
+  end;
   let expected = Frame.accept_token key in
   (match find_header headers "sec-websocket-accept" with
    | Some v when v = expected -> ()

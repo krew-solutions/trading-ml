@@ -357,9 +357,13 @@ export class AppComponent {
         this.candles.update(cs => {
           if (!cs.length) return [ev.candle];
           const last = cs[cs.length - 1];
-          return last.ts === ev.candle.ts
-            ? [...cs.slice(0, -1), ev.candle]
-            : [...cs, ev.candle];
+          // Same-ts: replace the trailing bar.
+          if (last.ts === ev.candle.ts) return [...cs.slice(0, -1), ev.candle];
+          // Strictly older than what we have: stale snapshot, ignore.
+          // (lightweight-charts asserts ascending order, so appending
+          //  backwards breaks the chart.)
+          if (ev.candle.ts < last.ts) return cs;
+          return [...cs, ev.candle];
         });
         break;
       case 'bar_closed':
@@ -369,6 +373,8 @@ export class AppComponent {
           if (last.ts === ev.candle.ts) {
             return [...cs.slice(0, -1), ev.candle];
           }
+          // Out-of-order defence — see bar_update above.
+          if (ev.candle.ts < last.ts) return cs;
           const appended = [...cs, ev.candle];
           return appended.length > this.n()
             ? appended.slice(appended.length - this.n())

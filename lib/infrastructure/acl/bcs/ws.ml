@@ -1,56 +1,78 @@
-(** WebSocket subscription DTOs for BCS Trade API.
+(** WebSocket subscription DTOs for BCS Trade API — multiplexed
+    [/market-data/ws] endpoint.
 
-    Reference: [bcs-trade-go] client. Unlike Finam's multiplexed
-    connection, BCS opens one WebSocket per [(classCode, ticker,
-    timeFrame)] stream — the whole connection is implicitly tied to
-    the subscription we send as the first message.
+    Reference: saved copy of the official docs page
+    "Последняя-свеча-БКС-Торговое-API.html" (section «Описание протокола»).
 
-    Subscribe message (client → server):
+    Subscribe / unsubscribe envelope (client → server):
     {[
-      { "action":   "subscribe",
-        "classCode": "TQBR",
-        "ticker":    "SBER",
-        "timeFrame": "M1"
-      }
+      { "subscribeType": 0,        (* 0 — subscribe, 1 — unsubscribe *)
+        "dataType":      1,        (* 1 — candles *)
+        "timeFrame":     "M1",     (* M1 M5 M15 M30 H1 H4 D W MN *)
+        "instruments":  [ { "classCode": "TQBR", "ticker": "SBER" } ] }
     ]}
 
-    Event message (server → client) for the last-candle stream:
+    Server responses carry a [responseType] discriminator:
+
     {[
-      { "type":      "<status>",
-        "ticker":    "SBER",
-        "classCode": "TQBR",
-        "timeFrame": "M1",
-        "bar": {
-          "open": 320.5, "high": 321.0, "low": 319.8,
-          "close": 320.7, "volume": 1234,
-          "time":  "2026-04-16T10:00:00Z"
-        }
-      }
+      (* Subscription ack *)
+      { "responseType": "CandleStickSuccess",
+        "subscribeType": 0,
+        "ticker": "SBER", "classCode": "TQBR", "timeFrame": "M1",
+        "dateTime": "2024-11-10T10:30:00.000Z" }
+
+      (* Candle tick (OHLCV flat, no nested "bar" object) *)
+      { "responseType": "CandleStick",
+        "ticker": "SBER", "classCode": "TQBR", "timeFrame": "M1",
+        "open":  244.20, "close": 244.50,
+        "high":  244.70, "low":   243.90,
+        "volume": 3200,
+        "dateTime": "2024-11-10T10:30:00.000Z" }
+
+      (* Error *)
+      { "responseType": "CandleStick",
+        "errors": [ { "message": "...", "code": "INCORRECT_JSON" } ] }
     ]}
 
-    OHLCV fields arrive as JSON numbers here (BCS is not Decimal-safe
-    on the wire), which differs from REST where we tolerate both. *)
+    OHLCV fields arrive as JSON numbers. *)
 
 open Core
 
-(** Build the subscribe envelope for the last-candle stream. *)
-let subscribe_last_candle_message ~class_code ~ticker ~timeframe : Yojson.Safe.t =
+(** Build the subscribe (or unsubscribe) envelope for the candles
+    stream. [subscribe_type] is [0] for SUBSCRIBE and [1] for
+    UNSUBSCRIBE; [data_type] is always [1] for candles. *)
+let candle_message ~subscribe_type ~class_code ~ticker ~timeframe
+    : Yojson.Safe.t =
   `Assoc [
-    "action",    `String "subscribe";
-    "classCode", `String class_code;
-    "ticker",    `String ticker;
-    "timeFrame", `String (Rest.timeframe_wire timeframe);
+    "subscribeType", `Int subscribe_type;
+    "dataType",      `Int 1;  (* 1 = candles *)
+    "timeFrame",     `String (Rest.timeframe_wire timeframe);
+    "instruments",   `List [
+      `Assoc [
+        "classCode", `String class_code;
+        "ticker",    `String ticker;
+      ]
+    ];
   ]
 
-(** Events surfaced to the bridge. We start minimal: a decoded candle
-    tagged by its owning [(instrument, timeframe)], plus a catch-all
-    for lifecycle / error frames we might see in logs. *)
+let subscribe_last_candle_message ~class_code ~ticker ~timeframe =
+  candle_message ~subscribe_type:0 ~class_code ~ticker ~timeframe
+
+let unsubscribe_last_candle_message ~class_code ~ticker ~timeframe =
+  candle_message ~subscribe_type:1 ~class_code ~ticker ~timeframe
+
 type event =
   | Candle_ev of {
       instrument : Instrument.t;
       timeframe : Timeframe.t;
       candle : Candle.t;
     }
+  | Subscribe_ack of {
+      instrument : Instrument.t;
+      timeframe : Timeframe.t;
+      subscribe_type : int;  (** 0 — subscribe, 1 — unsubscribe *)
+    }
+  | Error_ev of { code : string; message : string }
   | Other of Yojson.Safe.t
 
 (** Map BCS's [timeFrame] strings (M1 … MN) back into our enum. Same
@@ -64,49 +86,66 @@ let timeframe_of_string : string -> Timeframe.t option = function
   | "MN" -> Some MN1
   | _ -> None
 
-let candle_of_bar_json (j : Yojson.Safe.t) : Candle.t =
+let num_field k j =
   let open Yojson.Safe.Util in
-  let ts = match member "time" j with
-    | `String s -> Candle_json.parse_iso8601 s
-    | `Int n -> Int64.of_int n
-    | `Intlit s -> Int64.of_string s
-    | _ -> 0L
-  in
-  let dec k =
-    match member k j with
-    | `Float f -> Decimal.of_float f
-    | `Int n -> Decimal.of_int n
-    | `String s -> Decimal.of_string s
-    | `Intlit s -> Decimal.of_string s
-    | _ -> Decimal.zero
-  in
-  Candle.make ~ts
-    ~open_:(dec "open") ~high:(dec "high")
-    ~low:(dec "low") ~close:(dec "close")
-    ~volume:(dec "volume")
+  match member k j with
+  | `Float f -> Decimal.of_float f
+  | `Int n -> Decimal.of_int n
+  | `String s -> Decimal.of_string s
+  | `Intlit s -> Decimal.of_string s
+  | _ -> Decimal.zero
+
+let instrument_from ~ticker ~class_code =
+  Instrument.make
+    ~ticker:(Ticker.of_string ticker)
+    ~venue:(Mic.of_string "MISX")
+    ~board:(Board.of_string class_code)
+    ()
 
 let event_of_json (j : Yojson.Safe.t) : event =
   let open Yojson.Safe.Util in
-  match member "bar" j, member "ticker" j, member "classCode" j with
-  | (`Assoc _ as bar), `String ticker, `String class_code ->
-    (* BCS WS format: the payload carries classCode, ticker, timeFrame
-       and an embedded bar. Recover the MIC from the board — BCS is
-       MOEX-only in our current config, so [MISX] is a safe default;
-       future venues would require a class_code → mic map. *)
-    let instrument = Instrument.make
-      ~ticker:(Ticker.of_string ticker)
-      ~venue:(Mic.of_string "MISX")
-      ~board:(Board.of_string class_code)
-      ()
-    in
-    let timeframe =
-      match member "timeFrame" j with
-      | `String s ->
-        (match timeframe_of_string s with
-         | Some tf -> tf
-         | None -> Timeframe.H1 (* unexpected — pick a safe default *))
-      | _ -> Timeframe.H1
-    in
-    let candle = candle_of_bar_json bar in
-    Candle_ev { instrument; timeframe; candle }
-  | _ -> Other j
+  (* Error payload is flagged by a non-empty [errors] array regardless
+     of [responseType]; surface the first entry as a plain error event
+     so callers can log it without digging into the raw JSON. *)
+  let error_info =
+    match member "errors" j with
+    | `List (e :: _) ->
+      let code = match member "code" e with
+        | `String s -> s | _ -> "" in
+      let message = match member "message" e with
+        | `String s -> s | _ -> "" in
+      Some (code, message)
+    | _ -> None
+  in
+  match error_info with
+  | Some (code, message) -> Error_ev { code; message }
+  | None ->
+    match member "responseType" j, member "ticker" j,
+          member "classCode" j, member "timeFrame" j with
+    | `String "CandleStick", `String ticker, `String class_code,
+      `String tf ->
+      let timeframe =
+        Option.value (timeframe_of_string tf) ~default:Timeframe.H1 in
+      let instrument = instrument_from ~ticker ~class_code in
+      let ts = match member "dateTime" j with
+        | `String s -> Candle_json.parse_iso8601 s
+        | _ -> 0L
+      in
+      let candle = Candle.make ~ts
+        ~open_:(num_field "open" j)
+        ~high:(num_field "high" j)
+        ~low:(num_field "low" j)
+        ~close:(num_field "close" j)
+        ~volume:(num_field "volume" j)
+      in
+      Candle_ev { instrument; timeframe; candle }
+    | `String "CandleStickSuccess", `String ticker, `String class_code,
+      `String tf ->
+      let timeframe =
+        Option.value (timeframe_of_string tf) ~default:Timeframe.H1 in
+      let instrument = instrument_from ~ticker ~class_code in
+      let subscribe_type = match member "subscribeType" j with
+        | `Int n -> n | _ -> 0
+      in
+      Subscribe_ack { instrument; timeframe; subscribe_type }
+    | _ -> Other j

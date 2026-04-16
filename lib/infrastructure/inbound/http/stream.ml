@@ -45,6 +45,9 @@ type sub_state = {
   mutable clients : client list;
   mutable last_candles : Candle.t list;
   mutable cancel : unit -> unit;
+  (** Last stale upstream ts we logged about, to rate-limit the
+      warning when a broker repeatedly pushes the same snapshot. *)
+  mutable last_stale_warned : int64 option;
 }
 
 type fetch =
@@ -170,6 +173,7 @@ let subscribe t ~instrument ~timeframe : client * Candle.t list =
           clients = [client];
           last_candles = [];
           cancel = (fun () -> ());
+          last_stale_warned = None;
         } in
         t.subs <- KMap.add key s t.subs;
         start_poll t key s;
@@ -214,23 +218,58 @@ let push_from_upstream t ~instrument ~timeframe (candle : Candle.t) =
       match KMap.find_opt key t.subs with
       | None -> None
       | Some s ->
-        let event =
-          match last s.last_candles with
-          | Some cl when Int64.equal cl.Candle.ts candle.ts ->
-            Bar_update candle
-          | _ -> Bar_closed candle
-        in
-        (* Update cache: either replace trailing bar or append. *)
-        let cached =
-          match last s.last_candles with
-          | Some cl when Int64.equal cl.Candle.ts candle.ts ->
-            (match List.rev s.last_candles with
-             | _ :: rest -> List.rev (candle :: rest)
-             | [] -> [candle])
-          | _ -> s.last_candles @ [candle]
-        in
-        s.last_candles <- cached;
-        Some (encode_event event, s.clients))
+        (* Monotonicity guard. Upstream brokers occasionally ship a
+           stale snapshot right after subscribe (BCS sends the last
+           closed candle from the previous session when there's no
+           current activity); the chart library [lightweight-charts]
+           hard-asserts ascending time order, so out-of-order bars
+           break the UI. Drop anything strictly older than the tail
+           we already have. Same-ts bars are kept as intra-bar
+           updates. *)
+        match last s.last_candles with
+        | None ->
+          (* Cache not seeded yet — the polling fiber's initial fetch
+             is still in flight. We can't compare against a tail we
+             don't have, and brokers (notably BCS) often push a
+             snapshot the instant a subscription is acked; that
+             snapshot can legitimately be much older than what
+             [/api/candles] already delivered to the client. Drop
+             the WS event and wait for polling to seed the cache
+             before forwarding anything. *)
+          None
+        | Some cl when Int64.compare candle.Candle.ts cl.Candle.ts < 0 ->
+          (* Brokers (notably BCS) keep pushing the same snapshot bar
+             every few seconds between sessions. Log at most once per
+             distinct stale ts so the operator sees the quirk without
+             the log being flooded. *)
+          let should_warn = match s.last_stale_warned with
+            | Some t -> not (Int64.equal t candle.ts)
+            | None -> true
+          in
+          if should_warn then begin
+            s.last_stale_warned <- Some candle.ts;
+            Log.warn "stream: dropping stale upstream bar for %s/%s \
+                      (upstream ts=%Ld < cached tail=%Ld)"
+              (Instrument.to_qualified instrument)
+              (Timeframe.to_string timeframe)
+              candle.ts cl.Candle.ts
+          end;
+          None
+        | last_opt ->
+          let event = match last_opt with
+            | Some cl when Int64.equal cl.Candle.ts candle.ts ->
+              Bar_update candle
+            | _ -> Bar_closed candle
+          in
+          let cached = match last_opt with
+            | Some cl when Int64.equal cl.Candle.ts candle.ts ->
+              (match List.rev s.last_candles with
+               | _ :: rest -> List.rev (candle :: rest)
+               | [] -> [candle])
+            | _ -> s.last_candles @ [candle]
+          in
+          s.last_candles <- cached;
+          Some (encode_event event, s.clients))
   in
   match chunk_opt with
   | None -> ()

@@ -30,11 +30,11 @@ let bands ind =
   | Some (_, [l; m; u]) -> Some (l, m, u)
   | _ -> None
 
-let on_candle st symbol (c : Candle.t) =
+let on_candle st instrument (c : Candle.t) =
   let bb = Indicators.Indicator.update st.bb c in
   let st = { st with bb } in
   match bands bb with
-  | None -> st, Signal.hold ~ts:c.Candle.ts ~symbol
+  | None -> st, Signal.hold ~ts:c.Candle.ts ~instrument
   | Some (lower, middle, upper) ->
     let close = Core.Decimal.to_float c.Candle.close in
     let action, position, reason =
@@ -55,7 +55,7 @@ let on_candle st symbol (c : Candle.t) =
       else Float.min 1.0 (Float.abs (close -. middle) /. (width /. 2.0))
     in
     let sig_ = {
-      Signal.ts = c.Candle.ts; symbol; action; strength;
+      Signal.ts = c.Candle.ts; instrument; action; strength;
       stop_loss = None; take_profit = None; reason;
     } in
     { st with position }, sig_

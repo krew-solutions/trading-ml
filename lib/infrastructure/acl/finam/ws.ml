@@ -6,32 +6,34 @@
 open Core
 
 type subscribe =
-  | Sub_quotes of Symbol.t list
-  | Sub_orderbook of Symbol.t list
-  | Sub_bars of { symbol : Symbol.t; timeframe : Timeframe.t }
+  | Sub_quotes of Instrument.t list
+  | Sub_orderbook of Instrument.t list
+  | Sub_bars of { instrument : Instrument.t; timeframe : Timeframe.t }
   | Sub_account of string
 
 let subscribe_message id = function
-  | Sub_quotes syms ->
+  | Sub_quotes is ->
     `Assoc [
       "action", `String "subscribe";
       "channel", `String "quotes";
       "id", `String id;
-      "symbols", `List (List.map (fun s -> `String (Symbol.to_string s)) syms);
+      "symbols", `List (List.map (fun i ->
+        `String (Rest.qualify_instrument i)) is);
     ]
-  | Sub_orderbook syms ->
+  | Sub_orderbook is ->
     `Assoc [
       "action", `String "subscribe";
       "channel", `String "orderbook";
       "id", `String id;
-      "symbols", `List (List.map (fun s -> `String (Symbol.to_string s)) syms);
+      "symbols", `List (List.map (fun i ->
+        `String (Rest.qualify_instrument i)) is);
     ]
-  | Sub_bars { symbol; timeframe } ->
+  | Sub_bars { instrument; timeframe } ->
     `Assoc [
       "action", `String "subscribe";
       "channel", `String "bars";
       "id", `String id;
-      "symbol", `String (Symbol.to_string symbol);
+      "symbol", `String (Rest.qualify_instrument instrument);
       "timeframe", `String (Rest.timeframe_wire timeframe);
     ]
   | Sub_account account_id ->
@@ -43,8 +45,8 @@ let subscribe_message id = function
     ]
 
 type event =
-  | Quote of { symbol : Symbol.t; bid : Decimal.t; ask : Decimal.t; ts : int64 }
-  | Bar of { symbol : Symbol.t; candle : Candle.t }
+  | Quote of { instrument : Instrument.t; bid : Decimal.t; ask : Decimal.t; ts : int64 }
+  | Bar of { instrument : Instrument.t; candle : Candle.t }
   | Order_update of Yojson.Safe.t
   | Other of Yojson.Safe.t
 
@@ -52,7 +54,8 @@ let event_of_json (j : Yojson.Safe.t) : event =
   let open Yojson.Safe.Util in
   match member "channel" j with
   | `String "quotes" ->
-    let sym = Symbol.of_string (member "symbol" j |> to_string) in
+    let instrument =
+      Instrument.of_qualified (member "symbol" j |> to_string) in
     let bid = Dto.decimal_field "bid" j in
     let ask = Dto.decimal_field "ask" j in
     let ts = match member "timestamp" j with
@@ -60,10 +63,11 @@ let event_of_json (j : Yojson.Safe.t) : event =
       | `Int n -> Int64.of_int n
       | _ -> 0L
     in
-    Quote { symbol = sym; bid; ask; ts }
+    Quote { instrument; bid; ask; ts }
   | `String "bars" ->
-    let sym = Symbol.of_string (member "symbol" j |> to_string) in
+    let instrument =
+      Instrument.of_qualified (member "symbol" j |> to_string) in
     let candle = Dto.candle_of_json (member "bar" j) in
-    Bar { symbol = sym; candle }
+    Bar { instrument; candle }
   | `String "orders" | `String "account" -> Order_update j
   | _ -> Other j

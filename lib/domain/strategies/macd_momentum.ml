@@ -31,11 +31,11 @@ let hist ind =
   | Some (_, [_macd; _signal; h]) -> Some h
   | _ -> None
 
-let on_candle st symbol (c : Candle.t) =
+let on_candle st instrument (c : Candle.t) =
   let macd = Indicators.Indicator.update st.macd c in
   let st = { st with macd } in
   match hist macd with
-  | None -> st, Signal.hold ~ts:c.Candle.ts ~symbol
+  | None -> st, Signal.hold ~ts:c.Candle.ts ~instrument
   | Some h ->
     let action, position, reason =
       match st.last_hist, st.position with
@@ -50,7 +50,7 @@ let on_candle st symbol (c : Candle.t) =
       | _ -> Signal.Hold, st.position, ""
     in
     let sig_ = {
-      Signal.ts = c.Candle.ts; symbol; action;
+      Signal.ts = c.Candle.ts; instrument; action;
       strength = Float.min 1.0 (Float.abs h);
       stop_loss = None; take_profit = None; reason;
     } in

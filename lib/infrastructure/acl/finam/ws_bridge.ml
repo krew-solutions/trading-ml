@@ -1,6 +1,6 @@
 (** Wires [Ws_client] + [Ws] DTOs together: connects to the Finam async
-    endpoint, subscribes to a [(symbol, timeframe)] bars stream, and
-    invokes a caller-supplied handler for each decoded [Ws.event].
+    endpoint, subscribes to an [(instrument, timeframe)] bars stream,
+    and invokes a caller-supplied handler for each decoded [Ws.event].
     JWT is pulled fresh from the passed-in [Auth.t] at handshake time;
     on reconnect the next handshake re-reads and refreshes as needed. *)
 
@@ -28,9 +28,9 @@ let connect ~env ~sw ~cfg ~auth : bridge =
   in
   { client; auth }
 
-let subscribe_bars (t : bridge) ~symbol ~timeframe ~id : unit =
+let subscribe_bars (t : bridge) ~instrument ~timeframe ~id : unit =
   let j = Ws.subscribe_message id
-    (Sub_bars { symbol; timeframe })
+    (Sub_bars { instrument; timeframe })
   in
   Ws_client.send_text t.client (Yojson.Safe.to_string j)
 
@@ -54,4 +54,4 @@ let run (t : bridge) ~(on_event : Ws.event -> unit) : unit =
 
 let close (t : bridge) = Ws_client.send_close t.client ()
 
-let _ = Symbol.equal
+let _ = Instrument.equal

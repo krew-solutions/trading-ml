@@ -6,8 +6,8 @@ type t = Rest.t
 
 let name = "finam"
 
-let bars t ~n ~symbol ~timeframe =
-  Rest.bars t ~n ~symbol ~timeframe
+let bars t ~n ~instrument ~timeframe =
+  Rest.bars t ~n ~instrument ~timeframe
 
 let exchanges t : Broker.exchange list =
   let j = Rest.exchanges t in

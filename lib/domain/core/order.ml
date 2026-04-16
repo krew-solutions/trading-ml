@@ -13,7 +13,7 @@ type status =
 
 type t = {
   id : string;
-  symbol : Symbol.t;
+  instrument : Instrument.t;
   side : Side.t;
   quantity : Decimal.t;
   filled : Decimal.t;

@@ -66,7 +66,11 @@ let test_bars_request_url_and_params () =
   let cfg = make_cfg () in
   let rest = Rest.make ~transport:t ~cfg in
   let _ = Rest.bars rest ~n:100
-    ~symbol:(Symbol.of_string "SBER@TQBR") ~timeframe:H1 in
+    ~instrument:(Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX")
+      ~board:(Board.of_string "TQBR") ())
+    ~timeframe:H1 in
   let req = !captured in
   Alcotest.(check bool) "GET" true (req.meth = `GET);
   let path = Uri.path req.url in
@@ -89,7 +93,11 @@ let test_bars_sorted_chronologically () =
   let cfg = make_cfg () in
   let rest = Rest.make ~transport:t ~cfg in
   let bars = Rest.bars rest ~n:100
-    ~symbol:(Symbol.of_string "SBER@TQBR") ~timeframe:H1 in
+    ~instrument:(Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX")
+      ~board:(Board.of_string "TQBR") ())
+    ~timeframe:H1 in
   let tss = List.map (fun (c : Candle.t) -> c.ts) bars in
   let sorted = List.sort Int64.compare tss in
   Alcotest.(check bool) "ascending by ts" true (tss = sorted);
@@ -100,7 +108,11 @@ let test_bars_decimal_decoded () =
   let cfg = make_cfg () in
   let rest = Rest.make ~transport:t ~cfg in
   let bars = Rest.bars rest ~n:100
-    ~symbol:(Symbol.of_string "SBER@TQBR") ~timeframe:H1 in
+    ~instrument:(Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX")
+      ~board:(Board.of_string "TQBR") ())
+    ~timeframe:H1 in
   let last = List.nth bars (List.length bars - 1) in
   Alcotest.(check (float 1e-6)) "last close = 320.5"
     320.5 (Decimal.to_float last.close);
@@ -118,7 +130,10 @@ let test_bare_ticker_uses_default_class_code () =
   in
   let rest = Rest.make ~transport:t ~cfg in
   let _ = Rest.bars rest ~n:10
-    ~symbol:(Symbol.of_string "AAPL") ~timeframe:H1 in
+    ~instrument:(Instrument.make
+      ~ticker:(Ticker.of_string "AAPL")
+      ~venue:(Mic.of_string "MISX") ())
+    ~timeframe:H1 in
   let req = !captured in
   Alcotest.(check string) "classCode defaults to config"
     "SPBXM" (Option.value (Uri.get_query_param req.url "classCode")
@@ -132,7 +147,11 @@ let test_bars_caps_n_at_max () =
   let cfg = make_cfg () in
   let rest = Rest.make ~transport:t ~cfg in
   let _ = Rest.bars rest ~n:10_000
-    ~symbol:(Symbol.of_string "SBER@TQBR") ~timeframe:M1 in
+    ~instrument:(Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX")
+      ~board:(Board.of_string "TQBR") ())
+    ~timeframe:M1 in
   (* Window = n * tf_seconds; capped to 1440 bars → 1440 minutes. *)
   let start_str = Option.value
     (Uri.get_query_param !captured.url "startDate") ~default:"" in

@@ -76,24 +76,25 @@ let wobble_rng =
   let state = Random.State.make_self_init () in
   fun () -> Random.State.float state 1.0
 
-let live_or_synthetic source ~symbol ~n ~timeframe =
+let live_or_synthetic source ~instrument ~n ~timeframe =
   match source with
   | Synthetic -> synthetic_candles ~n ~timeframe
   | Live client ->
-    try Broker.bars client ~n ~symbol ~timeframe
+    try Broker.bars client ~n ~instrument ~timeframe
     with e ->
       Log.warn "%s bars(%s) failed: %s — falling back to synthetic"
-        (Broker.name client) (Symbol.to_string symbol) (Printexc.to_string e);
+        (Broker.name client) (Instrument.to_qualified instrument)
+        (Printexc.to_string e);
       synthetic_candles ~n ~timeframe
 
 (** Source for the streaming endpoint — in synthetic mode we wobble the
     last bar so the chart visibly ticks; in live mode we just re-fetch. *)
-let stream_fetch source ~symbol ~n ~timeframe =
+let stream_fetch source ~instrument ~n ~timeframe =
   match source with
   | Synthetic ->
     synthetic_candles ~n ~timeframe
     |> wobble_last ~rng:wobble_rng
-  | Live _ -> live_or_synthetic source ~symbol ~n ~timeframe
+  | Live _ -> live_or_synthetic source ~instrument ~n ~timeframe
 
 let strategy_params_of_json j =
   match j with
@@ -110,7 +111,7 @@ let strategy_params_of_json j =
 let run_backtest source body_str =
   let j = Yojson.Safe.from_string body_str in
   let open Yojson.Safe.Util in
-  let symbol = Symbol.of_string (member "symbol" j |> to_string) in
+  let instrument = Instrument.of_qualified (member "symbol" j |> to_string) in
   let strat_name = member "strategy" j |> to_string in
   let params = strategy_params_of_json (member "params" j) in
   let n = match member "n" j with `Int n -> n | _ -> 500 in
@@ -122,9 +123,9 @@ let run_backtest source body_str =
   | None -> `Assoc [ "error", `String "unknown strategy" ]
   | Some spec ->
     let strat = spec.build params in
-    let candles = live_or_synthetic source ~symbol ~n ~timeframe in
+    let candles = live_or_synthetic source ~instrument ~n ~timeframe in
     let cfg = Engine.Backtest.default_config () in
-    let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~symbol ~candles in
+    let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
     Api.backtest_result_json r
 
 (** Initial payload describing the current cached candles, sent to the
@@ -141,10 +142,10 @@ let seed_chunk seed =
     directly to the buffered output with an explicit flush after each
     one — cohttp-eio's default [Response] path batches the body into a
     single response, which would never push live events. *)
-let sse_expert (registry : Stream.t) ~symbol ~timeframe =
-  let client, seed = Stream.subscribe registry ~symbol ~timeframe in
+let sse_expert (registry : Stream.t) ~instrument ~timeframe =
+  let client, seed = Stream.subscribe registry ~instrument ~timeframe in
   Log.info "SSE open  %s/%s seed=%d bars"
-    (Symbol.to_string symbol) (Timeframe.to_string timeframe)
+    (Instrument.to_qualified instrument) (Timeframe.to_string timeframe)
     (List.length seed);
   let headers = Cohttp.Header.of_list [
     "Content-Type", "text/event-stream";
@@ -179,9 +180,9 @@ let sse_expert (registry : Stream.t) ~symbol ~timeframe =
        Eio.Buf_write.string oc "0\r\n\r\n";
        Eio.Buf_write.flush oc
      with _ -> ());
-    Stream.unsubscribe registry ~symbol ~timeframe client;
+    Stream.unsubscribe registry ~instrument ~timeframe client;
     Log.info "SSE close %s/%s"
-      (Symbol.to_string symbol) (Timeframe.to_string timeframe)
+      (Instrument.to_qualified instrument) (Timeframe.to_string timeframe)
 
 (** Pure routing: given method+path, return (status, action). Kept
     separate from request logging so [handler] can log uniformly. *)
@@ -216,15 +217,15 @@ let route source registry request body : int * Cohttp_eio.Server.response_action
       ] in
       ok (json_response j)
     | `GET, "/api/candles" ->
-      let symbol = Symbol.of_string (get_query uri "symbol") in
+      let instrument = Instrument.of_qualified (get_query uri "symbol") in
       let n = get_query_int uri "n" 500 in
       let timeframe = parse_timeframe (get_query uri "timeframe") in
       ok (json_response
-        (Api.candles_json (live_or_synthetic source ~symbol ~n ~timeframe)))
+        (Api.candles_json (live_or_synthetic source ~instrument ~n ~timeframe)))
     | `GET, "/api/stream" ->
-      let symbol = Symbol.of_string (get_query uri "symbol") in
+      let instrument = Instrument.of_qualified (get_query uri "symbol") in
       let timeframe = parse_timeframe (get_query uri "timeframe") in
-      200, `Expert (sse_expert registry ~symbol ~timeframe)
+      200, `Expert (sse_expert registry ~instrument ~timeframe)
     | `POST, "/api/backtest" ->
       let body = Eio.Flow.read_all body in
       ok (json_response (run_backtest source body))
@@ -261,8 +262,8 @@ let handler source registry _conn request body =
 
 let run ~env ~port ~source =
   Eio.Switch.run @@ fun sw ->
-  let fetch ~symbol ~n ~timeframe =
-    stream_fetch source ~symbol ~n ~timeframe in
+  let fetch ~instrument ~n ~timeframe =
+    stream_fetch source ~instrument ~n ~timeframe in
   let registry = Stream.create ~env ~sw ~fetch in
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw

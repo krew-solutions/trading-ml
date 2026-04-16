@@ -75,15 +75,10 @@ let delete t path =
   let resp = send_with_auth_retry t ~meth:`DELETE ~url:u ~body:None in
   ignore (ensure_ok resp)
 
-(** Finam's new API expects symbols in [TICKER@MIC] form. When the
-    caller passes a bare ticker we append the configured default MIC
-    so RU-focused usage "just works" with e.g. [SBER]. *)
-let qualify_symbol cfg (symbol : Symbol.t) =
-  let s = Symbol.to_string symbol in
-  if String.contains s '@' then s
-  else match cfg.Config.default_mic with
-    | Some mic -> s ^ "@" ^ mic
-    | None -> s
+(** Finam's new API expects symbols in [TICKER@MIC] form. *)
+let qualify_instrument (i : Instrument.t) : string =
+  Ticker.to_string (Instrument.ticker i)
+  ^ "@" ^ Mic.to_string (Instrument.venue i)
 
 (** Finam gRPC TimeFrame enum mapping. Kept here, not in [Core.Timeframe],
     so the core type stays broker-agnostic. *)
@@ -111,9 +106,9 @@ let iso8601_of_ts (ts : int64) : string =
     500 hourly bars. *)
 let bars
     ?from_ts ?to_ts ?(n = 500)
-    (t : t) ~symbol ~timeframe : Candle.t list =
+    (t : t) ~instrument ~timeframe : Candle.t list =
   let path =
-    Printf.sprintf "/v1/instruments/%s/bars" (qualify_symbol t.cfg symbol)
+    Printf.sprintf "/v1/instruments/%s/bars" (qualify_instrument instrument)
   in
   let now_ts = Int64.of_float (Unix.gettimeofday ()) in
   let tf_secs = Int64.of_int (Timeframe.to_seconds timeframe) in
@@ -134,9 +129,9 @@ let bars
     (board, ticker, mic, isin). [symbol] is the qualified
     [TICKER@MIC] form; bare tickers get the configured
     [default_mic] appended via {!qualify_symbol}. *)
-let get_asset t ~(symbol : Symbol.t) : Instrument.t =
+let get_asset t ~(instrument : Instrument.t) : Instrument.t =
   let path =
-    Printf.sprintf "/v1/assets/%s" (qualify_symbol t.cfg symbol)
+    Printf.sprintf "/v1/assets/%s" (qualify_instrument instrument)
   in
   Dto.instrument_of_asset_json (get_json t path [])
 
@@ -150,7 +145,7 @@ let exchanges t : Yojson.Safe.t =
 let place_order
     (t : t)
     ~account_id
-    ~(symbol : Symbol.t)
+    ~(instrument : Instrument.t)
     ~(side : Side.t)
     ~(quantity : Decimal.t)
     ~(kind : Order.kind)
@@ -166,7 +161,7 @@ let place_order
       ]
   in
   let payload : Yojson.Safe.t = `Assoc ([
-    "symbol", `String (Symbol.to_string symbol);
+    "symbol", `String (qualify_instrument instrument);
     "side", `String (Side.to_string side);
     "quantity", Decimal_json.yojson_of_t quantity;
     "type", `String (Order.kind_to_string kind);

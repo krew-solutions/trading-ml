@@ -61,21 +61,10 @@ let timeframe_wire : Timeframe.t -> string = function
   | H1 -> "H1" | H4 -> "H4"
   | D1 -> "D" | W1 -> "W" | MN1 -> "MN"
 
-(** BCS identifies instruments by (classCode, ticker). The UI supplies
-    a composite [TICKER@CLASS] string (symmetric to Finam's TICKER@MIC);
-    bare tickers inherit [Config.default_class_code]. *)
-let split_symbol cfg (symbol : Symbol.t) : string * string =
-  let s = Symbol.to_string symbol in
-  match String.index_opt s '@' with
-  | Some i ->
-    String.sub s 0 i,
-    String.sub s (i + 1) (String.length s - i - 1)
-  | None -> s, cfg.Config.default_class_code
-
 (** Resolve an [Instrument.t] to BCS's (ticker, classCode) pair.
     Uses [Instrument.board] when present, otherwise falls back to
-    [Config.default_class_code] — same policy as {!split_symbol} for
-    bare-ticker [Symbol.t] inputs. *)
+    [Config.default_class_code]. The instrument's [venue] (MIC) is
+    intentionally ignored — BCS routes by board, not by venue. *)
 let route_instrument cfg (i : Instrument.t) : string * string =
   let ticker = Ticker.to_string (Instrument.ticker i) in
   let class_code = match Instrument.board i with
@@ -97,8 +86,8 @@ let max_bars_per_request = 1440
     if they need more (paginating isn't supported yet). *)
 let bars
     ?from_ts ?to_ts ?(n = 500)
-    (t : t) ~symbol ~timeframe : Candle.t list =
-  let ticker, class_code = split_symbol t.cfg symbol in
+    (t : t) ~instrument ~timeframe : Candle.t list =
+  let ticker, class_code = route_instrument t.cfg instrument in
   let n = min n max_bars_per_request in
   let now_ts = Int64.of_float (Unix.gettimeofday ()) in
   let tf_secs = Int64.of_int (Timeframe.to_seconds timeframe) in

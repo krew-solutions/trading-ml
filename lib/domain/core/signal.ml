@@ -9,7 +9,7 @@ type action =
 
 type t = {
   ts : int64;
-  symbol : Symbol.t;
+  instrument : Instrument.t;
   action : action;
   strength : float;       (** in [0.0; 1.0], for position sizing *)
   stop_loss : Decimal.t option;
@@ -17,8 +17,8 @@ type t = {
   reason : string;
 }
 
-let hold ~ts ~symbol = {
-  ts; symbol; action = Hold; strength = 0.; stop_loss = None;
+let hold ~ts ~instrument = {
+  ts; instrument; action = Hold; strength = 0.; stop_loss = None;
   take_profit = None; reason = "";
 }
 

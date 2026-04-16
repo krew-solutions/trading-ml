@@ -40,11 +40,11 @@ let scalar ind =
   | Some (_, [v]) -> Some v
   | _ -> None
 
-let on_candle st symbol (c : Candle.t) =
+let on_candle st instrument (c : Candle.t) =
   let rsi = Indicators.Indicator.update st.rsi c in
   let st = { st with rsi } in
   match scalar rsi with
-  | None -> st, Signal.hold ~ts:c.Candle.ts ~symbol
+  | None -> st, Signal.hold ~ts:c.Candle.ts ~instrument
   | Some v ->
     let p = st.params in
     let action, position, reason =
@@ -70,7 +70,7 @@ let on_candle st symbol (c : Candle.t) =
       | _ -> 0.0
     in
     let sig_ = {
-      Signal.ts = c.Candle.ts; symbol; action;
+      Signal.ts = c.Candle.ts; instrument; action;
       strength; stop_loss = None; take_profit = None; reason;
     } in
     { st with position }, sig_

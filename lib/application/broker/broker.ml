@@ -21,13 +21,14 @@ module type S = sig
   val bars :
     t ->
     n:int ->
-    symbol:Symbol.t ->
+    instrument:Instrument.t ->
     timeframe:Timeframe.t ->
     Candle.t list
-  (** Fetch the last [n] bars for [symbol] at [timeframe]. The broker
-      decides how to translate [symbol] (e.g. MIC-qualified ticker for
-      Finam, board-qualified for BCS) and [timeframe] (e.g.
-      "TIME_FRAME_H1" vs "60m") on the wire. *)
+  (** Fetch the last [n] bars for [instrument] at [timeframe]. The
+      adapter routes the request using whatever fields it needs:
+      Finam takes [(ticker, mic)]; BCS takes [(ticker, board)] and
+      ignores [mic]; both honor [board] when present (Finam falls
+      back to its server-side primary-board choice when absent). *)
 
   val exchanges : t -> exchange list
   (** Static or upstream-sourced list of venues supported by this
@@ -41,7 +42,7 @@ let make (type a) (module M : S with type t = a) (x : a) : client =
 
 let name (E ((module M), _)) = M.name
 
-let bars (E ((module M), t)) ~n ~symbol ~timeframe =
-  M.bars t ~n ~symbol ~timeframe
+let bars (E ((module M), t)) ~n ~instrument ~timeframe =
+  M.bars t ~n ~instrument ~timeframe
 
 let exchanges (E ((module M), t)) = M.exchanges t

@@ -17,7 +17,9 @@ let ts_candle ~ts close =
   Candle.make ~ts:(Int64.of_int ts)
     ~open_:p ~high:p ~low:p ~close:p ~volume:(Decimal.of_int 1)
 
-let sym = Symbol.of_string "SBER"
+let inst = Instrument.make
+  ~ticker:(Ticker.of_string "SBER")
+  ~venue:(Mic.of_string "MISX") ()
 
 (** Fold a price series through a strategy, collecting the action at
     every step. Returns the list of actions in the same order as the
@@ -26,7 +28,7 @@ let actions_from_prices (strat : Strategies.Strategy.t) prices =
   let _, acts =
     List.fold_left (fun (s, acc) (i, price) ->
       let c = ts_candle ~ts:i price in
-      let s', sig_ = Strategies.Strategy.on_candle s sym c in
+      let s', sig_ = Strategies.Strategy.on_candle s inst c in
       s', sig_.Signal.action :: acc)
       (strat, []) (List.mapi (fun i p -> i, p) prices)
   in

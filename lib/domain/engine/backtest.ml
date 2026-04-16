@@ -11,7 +11,7 @@ open Core
 
 type fill = {
   ts : int64;
-  symbol : Symbol.t;
+  instrument : Instrument.t;
   side : Side.t;
   quantity : Decimal.t;
   price : Decimal.t;
@@ -47,7 +47,7 @@ let default_config ?(initial_cash = Decimal.of_int 1_000_000) () =
     limits = Risk.default_limits ~equity:initial_cash }
 
 let apply_signal
-    ~config ~portfolio ~symbol ~(next_open : Decimal.t option)
+    ~config ~portfolio ~instrument ~(next_open : Decimal.t option)
     (sig_ : Signal.t) : Portfolio.t * fill option =
   let mark _ = next_open in
   match next_open with
@@ -69,7 +69,7 @@ let apply_signal
       let qty =
         match sig_.action with
         | Exit_long | Exit_short ->
-          (match Portfolio.position portfolio symbol with
+          (match Portfolio.position portfolio instrument with
            | Some p -> Decimal.abs p.quantity
            | None -> Decimal.zero)
         | _ ->
@@ -80,15 +80,15 @@ let apply_signal
       if Decimal.is_zero qty then portfolio, None
       else match
         Risk.check ~portfolio ~limits:config.limits
-          ~symbol ~side ~quantity:qty ~price ~mark
+          ~instrument ~side ~quantity:qty ~price ~mark
       with
       | Reject _ -> portfolio, None
       | Accept q ->
         let fee = Decimal.mul (Decimal.mul q price)
                     (Decimal.of_float config.fee_rate) in
         let p' = Portfolio.fill portfolio
-                   ~symbol ~side ~quantity:q ~price ~fee in
-        p', Some { ts = sig_.ts; symbol; side; quantity = q; price; fee;
+                   ~instrument ~side ~quantity:q ~price ~fee in
+        p', Some { ts = sig_.ts; instrument; side; quantity = q; price; fee;
                    reason = sig_.reason }
 
 let max_drawdown equity_curve =
@@ -106,11 +106,11 @@ let max_drawdown equity_curve =
     ) equity_curve;
     !max_dd
 
-(** [run config strategy symbol candles] — candles must be chronological. *)
+(** [run config strategy instrument candles] — candles must be chronological. *)
 let run
     ~(config : config)
     ~(strategy : Strategies.Strategy.t)
-    ~(symbol : Symbol.t)
+    ~(instrument : Instrument.t)
     ~(candles : Candle.t list) : result =
   let rec loop strat portfolio pending_sig_opt fills eq_curve = function
     | [] ->
@@ -130,7 +130,7 @@ let run
       let portfolio, fill_opt =
         match pending_sig_opt with
         | Some s ->
-          apply_signal ~config ~portfolio ~symbol
+          apply_signal ~config ~portfolio ~instrument
             ~next_open:(Some c.Candle.open_) s
         | None -> portfolio, None
       in
@@ -141,7 +141,7 @@ let run
       let fills = match fill_opt with
         | Some f -> f :: fills | None -> fills in
       (* 3. feed the strategy for the next bar's decision. *)
-      let strat', sig_ = Strategies.Strategy.on_candle strat symbol c in
+      let strat', sig_ = Strategies.Strategy.on_candle strat instrument c in
       let pending =
         if sig_.Signal.action = Signal.Hold then None else Some sig_
       in

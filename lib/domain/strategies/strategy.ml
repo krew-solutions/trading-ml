@@ -15,7 +15,7 @@ module type S = sig
   val init : params -> state
 
   val on_candle :
-    state -> Symbol.t -> Candle.t -> state * Signal.t
+    state -> Instrument.t -> Candle.t -> state * Signal.t
 end
 
 type t =
@@ -30,8 +30,8 @@ let default (type s p)
     (module M : S with type state = s and type params = p) : t =
   E ((module M), M.init M.default_params)
 
-let on_candle (E ((module M), st)) symbol candle =
-  let st', sig_ = M.on_candle st symbol candle in
+let on_candle (E ((module M), st)) instrument candle =
+  let st', sig_ = M.on_candle st instrument candle in
   E ((module M), st'), sig_
 
 let name (E ((module M), _)) = M.name

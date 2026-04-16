@@ -1,4 +1,4 @@
-(** Per-(symbol, timeframe) live candle subscription registry.
+(** Per-(instrument, timeframe) live candle subscription registry.
     Stage 1 of real-time support: server polls the data source at a
     cadence keyed to the timeframe, compares the tail of the candle
     stream against a cache, and fans out update events to all SSE
@@ -30,12 +30,12 @@ type client = {
   queue : string Eio.Stream.t;
 }
 
-type key = Symbol.t * Timeframe.t
+type key = Instrument.t * Timeframe.t
 
 module Key = struct
   type t = key
-  let compare (s1, t1) (s2, t2) =
-    let c = Symbol.compare s1 s2 in
+  let compare (i1, t1) (i2, t2) =
+    let c = Instrument.compare i1 i2 in
     if c <> 0 then c else compare t1 t2
 end
 
@@ -48,7 +48,7 @@ type sub_state = {
 }
 
 type fetch =
-  symbol:Symbol.t -> n:int -> timeframe:Timeframe.t -> Candle.t list
+  instrument:Instrument.t -> n:int -> timeframe:Timeframe.t -> Candle.t list
 
 type t = {
   env : Eio_unix.Stdenv.base;
@@ -100,25 +100,26 @@ let poll_interval_seconds (tf : Timeframe.t) : float =
   Float.max 2.0 (Float.min 30.0 (s /. 12.0))
 
 let start_poll t (key : key) (sub : sub_state) =
-  let symbol, timeframe = key in
+  let instrument, timeframe = key in
   let interval = poll_interval_seconds timeframe in
   let running = ref true in
   sub.cancel <- (fun () -> running := false);
   let clock = Eio.Stdenv.clock t.env in
   Eio.Fiber.fork_daemon ~sw:t.sw (fun () ->
     (try
-       let initial = t.fetch ~symbol ~n:500 ~timeframe in
+       let initial = t.fetch ~instrument ~n:500 ~timeframe in
        Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
          sub.last_candles <- initial)
      with e ->
        Log.warn "stream seed %s/%s failed: %s"
-         (Symbol.to_string symbol) (Timeframe.to_string timeframe)
+         (Instrument.to_qualified instrument)
+         (Timeframe.to_string timeframe)
          (Printexc.to_string e));
     while !running do
       Eio.Time.sleep clock interval;
       if !running then
         (try
-           let fresh = t.fetch ~symbol ~n:500 ~timeframe in
+           let fresh = t.fetch ~instrument ~n:500 ~timeframe in
            let events, clients =
              Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
                let evs = diff_and_emit ~cached:sub.last_candles ~fresh in
@@ -131,13 +132,14 @@ let start_poll t (key : key) (sub : sub_state) =
            ) events
          with e ->
            Log.warn "stream poll %s/%s failed: %s"
-             (Symbol.to_string symbol) (Timeframe.to_string timeframe)
+             (Instrument.to_qualified instrument)
+             (Timeframe.to_string timeframe)
              (Printexc.to_string e))
     done;
     `Stop_daemon)
 
-let subscribe t ~symbol ~timeframe : client * Candle.t list =
-  let key = (symbol, timeframe) in
+let subscribe t ~instrument ~timeframe : client * Candle.t list =
+  let key = (instrument, timeframe) in
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
     let id = t.next_id in
     t.next_id <- t.next_id + 1;
@@ -156,8 +158,8 @@ let subscribe t ~symbol ~timeframe : client * Candle.t list =
       start_poll t key s;
       client, [])
 
-let unsubscribe t ~symbol ~timeframe (client : client) =
-  let key = (symbol, timeframe) in
+let unsubscribe t ~instrument ~timeframe (client : client) =
+  let key = (instrument, timeframe) in
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
     match KMap.find_opt key t.subs with
     | None -> ()
@@ -169,12 +171,12 @@ let unsubscribe t ~symbol ~timeframe (client : client) =
       end)
 
 (** Injection point for alternative upstream sources (WebSocket bridge).
-    Updates the cached candle for [(symbol, timeframe)] so the polling
-    fiber doesn't re-emit a duplicate, then fans the event out to all
-    registered SSE clients of that key. No-op if the key has no
-    subscribers yet. *)
-let push_from_upstream t ~symbol ~timeframe (candle : Candle.t) =
-  let key = (symbol, timeframe) in
+    Updates the cached candle for [(instrument, timeframe)] so the
+    polling fiber doesn't re-emit a duplicate, then fans the event out
+    to all registered SSE clients of that key. No-op if the key has
+    no subscribers yet. *)
+let push_from_upstream t ~instrument ~timeframe (candle : Candle.t) =
+  let key = (instrument, timeframe) in
   let chunk_opt =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
       match KMap.find_opt key t.subs with

@@ -5,7 +5,7 @@
 open Core
 
 type limits = {
-  max_position_notional : Decimal.t;   (** per-symbol cap *)
+  max_position_notional : Decimal.t;   (** per-instrument cap *)
   max_gross_exposure : Decimal.t;      (** sum of |pos|·price *)
   max_leverage : float;                (** gross / equity *)
   min_cash_buffer : Decimal.t;         (** never spend below this *)
@@ -22,8 +22,9 @@ type decision =
   | Accept of Decimal.t           (** possibly-reduced quantity *)
   | Reject of string
 
-(** Size a position from a fraction of equity, clamped by the per-symbol
-    notional cap. Returns a positive quantity in lots (decimal units). *)
+(** Size a position from a fraction of equity, clamped by the
+    per-instrument notional cap. Returns a positive quantity in
+    lots (decimal units). *)
 let size_from_strength
     ~(equity : Decimal.t)
     ~(price : Decimal.t)
@@ -38,11 +39,11 @@ let size_from_strength
 let check
     ~(portfolio : Portfolio.t)
     ~(limits : limits)
-    ~symbol:(_symbol : Symbol.t)
+    ~instrument:(_instrument : Instrument.t)
     ~(side : Side.t)
     ~(quantity : Decimal.t)
     ~(price : Decimal.t)
-    ~(mark : Symbol.t -> Decimal.t option)
+    ~(mark : Instrument.t -> Decimal.t option)
   : decision =
   if Decimal.is_zero quantity then Reject "zero quantity"
   else if Decimal.is_zero price then Reject "zero price"
@@ -57,7 +58,7 @@ let check
     else
       let gross =
         List.fold_left (fun acc (_, (pos : Portfolio.position)) ->
-          let p = match mark pos.symbol with
+          let p = match mark pos.instrument with
             | Some m -> m | None -> pos.avg_price
           in
           Decimal.add acc (Decimal.abs (Decimal.mul pos.quantity p)))

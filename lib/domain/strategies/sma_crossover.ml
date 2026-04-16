@@ -36,7 +36,7 @@ let scalar ind =
   | Some (_, [v]) -> Some v
   | _ -> None
 
-let on_candle st symbol (c : Candle.t) =
+let on_candle st instrument (c : Candle.t) =
   let fast = Indicators.Indicator.update st.fast c in
   let slow = Indicators.Indicator.update st.slow c in
   let st = { st with fast; slow } in
@@ -56,10 +56,10 @@ let on_candle st symbol (c : Candle.t) =
       | _ -> Signal.Hold, st.position, ""
     in
     let sig_ = {
-      Signal.ts = c.Candle.ts; symbol; action;
+      Signal.ts = c.Candle.ts; instrument; action;
       strength = Float.min 1.0 (Float.abs diff /. (Float.abs s +. 1e-9));
       stop_loss = None; take_profit = None; reason;
     } in
     { st with last_diff = Some diff; position }, sig_
   | _ ->
-    st, Signal.hold ~ts:c.Candle.ts ~symbol
+    st, Signal.hold ~ts:c.Candle.ts ~instrument

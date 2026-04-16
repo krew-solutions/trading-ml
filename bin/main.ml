@@ -54,11 +54,11 @@ let cmd_backtest args =
       | _ :: rest -> find rest
       | [] -> 500
     in find args in
-  let symbol =
+  let instrument =
     let rec find = function
-      | "--symbol" :: v :: _ -> Symbol.of_string v
+      | "--symbol" :: v :: _ -> Instrument.of_qualified v
       | _ :: rest -> find rest
-      | [] -> Symbol.of_string "SBER"
+      | [] -> Instrument.of_qualified "SBER@MISX"
     in find args in
   match Strategies.Registry.find strat_name with
   | None ->
@@ -69,7 +69,7 @@ let cmd_backtest args =
     let candles = Server.Synthetic.generate
       ~n ~start_ts:1_704_067_200L ~tf_seconds:3600 ~start_price:100.0 in
     let cfg = Engine.Backtest.default_config () in
-    let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~symbol ~candles in
+    let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
     Printf.printf "Strategy: %s\nBars: %d\nTrades: %d\n\
                    Total return: %.2f%%\nMax drawdown: %.2f%%\n\
                    Realized PnL: %s\nFinal cash: %s\n"

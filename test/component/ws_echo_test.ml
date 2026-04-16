@@ -1,4 +1,4 @@
-(** Integration test for [Finam.Ws_client] against a local in-process
+(** Integration test for [Websocket.Client] against a local in-process
     echo server. Verifies the full pipeline: TCP connect, HTTP Upgrade
     handshake, text frame send, text frame recv, close. *)
 
@@ -30,17 +30,17 @@ let test_echo_roundtrip () =
   (* Client fiber: connect and roundtrip. *)
   let uri = Uri.of_string
     (Printf.sprintf "ws://127.0.0.1:%d/echo" port) in
-  let client = Finam.Ws_client.connect ~env ~sw ~uri () in
-  Finam.Ws_client.send_text client "hello";
-  (match Finam.Ws_client.recv client with
+  let client = Websocket.Client.connect ~env ~sw ~uri () in
+  Websocket.Client.send_text client "hello";
+  (match Websocket.Client.recv client with
    | Text "hello" -> ()
    | Text other -> Alcotest.failf "echoed: %s" other
    | _ -> Alcotest.fail "non-text reply");
-  Finam.Ws_client.send_text client "and again";
-  (match Finam.Ws_client.recv client with
+  Websocket.Client.send_text client "and again";
+  (match Websocket.Client.recv client with
    | Text "and again" -> ()
    | _ -> Alcotest.fail "second echo");
-  Finam.Ws_client.send_close client ()
+  Websocket.Client.send_close client ()
 
 let tests = [
   "echo text roundtrip", `Quick, test_echo_roundtrip;

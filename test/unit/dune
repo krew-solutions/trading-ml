@@ -1,7 +1,7 @@
 (test
  (name unit_runner)
  (libraries core indicators strategies engine
-            http_transport broker finam bcs
+            http_transport broker websocket finam bcs
             eio eio_main str
             alcotest qcheck-core))
 

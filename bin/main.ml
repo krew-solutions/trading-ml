@@ -100,7 +100,7 @@ let broker_env_prefix = function
     concrete adapter type. *)
 type live_broker =
   | Live_finam of { client : Broker.client; rest : Finam.Rest.t }
-  | Live_bcs   of { client : Broker.client }
+  | Live_bcs   of { client : Broker.client; rest : Bcs.Rest.t }
 
 let open_finam ~env ~secret ~account : live_broker =
   let cfg = Finam.Config.make ?account_id:account ~secret () in
@@ -112,10 +112,10 @@ let open_bcs ~env ~secret ~account : live_broker =
   let cfg = Bcs.Config.make ?account_id:account ~refresh_token:secret () in
   let transport = Http_transport.make_eio ~env in
   let rest = Bcs.Rest.make ~transport ~cfg in
-  Live_bcs { client = Bcs.Bcs_broker.as_broker rest }
+  Live_bcs { client = Bcs.Bcs_broker.as_broker rest; rest }
 
 let live_client = function
-  | Live_finam { client; _ } | Live_bcs { client } -> client
+  | Live_finam { client; _ } | Live_bcs { client; _ } -> client
 
 (** Build a {!Server.Http.live_setup} that bridges Finam's WebSocket
     feed into the SSE stream registry. Connection happens up-front on
@@ -171,6 +171,36 @@ let finam_live_setup ~env (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
       bind = (fun r -> registry_ref := Some r);
     }
 
+(** Build a {!Server.Http.live_setup} for BCS. Unlike Finam, BCS
+    opens one socket per subscription, so the bridge defers connect
+    to [on_first] and tears down on [on_last]. The BARS fan-out
+    callback pushes directly into the registry via
+    [Stream.push_from_upstream]. *)
+let bcs_live_setup ~env (rest : Bcs.Rest.t) ~sw : Server.Http.live_setup =
+  let cfg = Bcs.Rest.cfg rest in
+  let auth = Bcs.Rest.auth rest in
+  let bridge = Bcs.Ws_bridge.make ~env ~sw ~cfg ~auth in
+  let registry_ref : Server.Stream.t option ref = ref None in
+  let push instrument timeframe candle =
+    match !registry_ref with
+    | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
+    | None -> ()
+  in
+  Server.Http.{
+    on_first = (fun ~instrument ~timeframe ->
+      try Bcs.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
+            ~on_candle:push
+      with e ->
+        Server.Log.warn "[bcs ws] subscribe failed: %s"
+          (Printexc.to_string e));
+    on_last = (fun ~instrument ~timeframe ->
+      try Bcs.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
+      with e ->
+        Server.Log.warn "[bcs ws] unsubscribe failed: %s"
+          (Printexc.to_string e));
+    bind = (fun r -> registry_ref := Some r);
+  }
+
 let cmd_serve args =
   let port =
     match arg_value "--port" args with
@@ -222,7 +252,7 @@ let cmd_serve args =
           (Broker.name client) (Option.value account ~default:"<none>");
         let setup = match lb with
           | Live_finam { rest; _ } -> Some (finam_live_setup ~env rest)
-          | Live_bcs _ -> None  (* WS for BCS not implemented yet. *)
+          | Live_bcs   { rest; _ } -> Some (bcs_live_setup   ~env rest)
         in
         Server.Http.Live client, setup
   in

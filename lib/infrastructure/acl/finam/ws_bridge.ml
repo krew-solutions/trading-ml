@@ -1,4 +1,4 @@
-(** Wires [Ws_client] + [Ws] DTOs together: connects to the Finam
+(** Wires [Websocket.Client] + [Ws] DTOs together: connects to the Finam
     async endpoint, manages a set of [(instrument, timeframe)] BARS
     subscriptions, and dispatches decoded [Bar] events to a
     caller-supplied handler.
@@ -20,7 +20,7 @@ end
 module SubMap = Map.Make (SubKey)
 
 type bridge = {
-  client : Ws_client.t;
+  client : Websocket.Client.t;
   auth : Auth.t;
   mutex : Eio.Mutex.t;
   (* For inbound BARS events the wire payload only carries [symbol],
@@ -38,7 +38,7 @@ let connect ~env ~sw ~cfg ~auth : bridge =
       None
   in
   let client =
-    Ws_client.connect ~env ~sw ~uri:cfg.Config.ws_url ?authenticator ()
+    Websocket.Client.connect ~env ~sw ~uri:cfg.Config.ws_url ?authenticator ()
   in
   { client; auth; mutex = Eio.Mutex.create (); bar_subs = SubMap.empty }
 
@@ -49,7 +49,7 @@ let subscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   in
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
     t.bar_subs <- SubMap.add (instrument, timeframe) timeframe t.bar_subs);
-  Ws_client.send_text t.client (Yojson.Safe.to_string j)
+  Websocket.Client.send_text t.client (Yojson.Safe.to_string j)
 
 let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   let token = Auth.current t.auth in
@@ -58,7 +58,7 @@ let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   in
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
     t.bar_subs <- SubMap.remove (instrument, timeframe) t.bar_subs);
-  (try Ws_client.send_text t.client (Yojson.Safe.to_string j)
+  (try Websocket.Client.send_text t.client (Yojson.Safe.to_string j)
    with _ -> ())
 
 (** Look up the active timeframe(s) for an inbound [Bars] event whose
@@ -77,7 +77,7 @@ let timeframes_for_instrument (t : bridge) instrument : Timeframe.t list =
     Returns when the underlying socket closes or raises [End_of_file]. *)
 let run (t : bridge) ~(on_event : Ws.event -> unit) : unit =
   let rec loop () =
-    match Ws_client.recv t.client with
+    match Websocket.Client.recv t.client with
     | Text payload ->
       (try
          let j = Yojson.Safe.from_string payload in
@@ -91,4 +91,4 @@ let run (t : bridge) ~(on_event : Ws.event -> unit) : unit =
   try loop ()
   with End_of_file -> ()
 
-let close (t : bridge) = Ws_client.send_close t.client ()
+let close (t : bridge) = Websocket.Client.send_close t.client ()

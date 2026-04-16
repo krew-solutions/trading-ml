@@ -1,5 +1,5 @@
 (test
  (name component_runner)
- (libraries core finam
+ (libraries core finam websocket
             eio eio_main
             alcotest))

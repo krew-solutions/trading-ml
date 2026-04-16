@@ -1,0 +1,5 @@
+(library
+ (name websocket)
+ (public_name trading.websocket)
+ (libraries eio eio.unix uri tls tls-eio
+            base64 digestif digestif.c))

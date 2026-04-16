@@ -121,3 +121,7 @@ let exchanges _t : Yojson.Safe.t =
     `Assoc [ "mic", `String "TQOB";  "name", `String "MOEX — T+ bonds" ];
     `Assoc [ "mic", `String "SPBXM"; "name", `String "SPB — foreign" ];
   ]]
+
+(** Accessors for [Ws_bridge] to share auth state and config. *)
+let auth t = t.auth
+let cfg t = t.cfg

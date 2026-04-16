@@ -69,7 +69,29 @@ Yojson dependencies.
 
     dune exec -- bin/main.exe list
     dune exec -- bin/main.exe backtest SMA_Crossover --n 500
-    dune exec -- bin/main.exe serve --port 8080
+    dune exec -- bin/main.exe serve --port 8080          # synthetic data
+
+### Live mode — picking a broker
+
+`serve --live` connects to a real broker. Choose one with
+`--broker finam|bcs` (default `finam`). Credentials can come from the
+flags `--secret <value>` / `--account <id>` or from per-broker env vars
+that the binary reads as `<BROKER>_SECRET` / `<BROKER>_ACCOUNT_ID`:
+
+    # Finam: long-lived portal secret → short-lived JWT (handled by Auth)
+    export FINAM_SECRET=eyJ…          # from https://tradeapi.finam.ru portal
+    export FINAM_ACCOUNT_ID=1440399   # optional
+    dune exec -- bin/main.exe serve --live --broker finam
+
+    # BCS: OAuth2 refresh_token → short-lived access_token (Keycloak flow)
+    export BCS_SECRET=eyJ…            # "Trade API" token from «БКС Мир инвестиций» → «О счёте» → «Токены API»
+    export BCS_ACCOUNT_ID=00000000    # optional
+    dune exec -- bin/main.exe serve --live --broker bcs
+
+Live mode upgrades the `/api/stream` SSE feed from polling to a real
+WebSocket — the server opens an upstream WS to the selected broker on
+each first SSE subscriber and fans the bars out; polling remains as a
+fallback if the WS connect fails.
 
 ## Run the UI
 
@@ -163,28 +185,68 @@ the pane key via `overlayRegistry`.
 2. Add one line to `lib/strategies/registry.ml`.
 3. Add a catalog entry to `ui/mock-server.mjs`.
 
-## Finam connector
+## Broker adapters
 
-REST client (`lib/finam/rest.ml`) is built around a pluggable
-`Transport.t` — pure and testable with an in-memory fake; wire cohttp-eio
-in production. Set your token and account via:
+Both adapters implement the shared `Broker.S` port (`lib/application/broker/`)
+so the rest of the codebase programs against `Broker.client`. WebSocket
+plumbing (frame codec, TLS handshake, `Client.connect`/`send_text`/`recv`)
+lives in `lib/infrastructure/websocket/` and is reused by both.
 
-    let cfg = Finam.Config.make ~access_token ~account_id () in
+### Finam
+
+Auth: long-lived portal *secret* → short-lived JWT via `/v1/sessions`,
+refreshed transparently by `Finam.Auth`.
+
+Instrument routing: `TICKER@MIC` (e.g. `SBER@MISX`). Board is accepted
+on `Instrument.t` but ignored by Finam — their REST picks the primary
+board server-side and echoes it back in `/v1/assets` responses.
+
+    let cfg = Finam.Config.make ~secret ?account_id () in
     let client = Finam.Rest.make ~transport ~cfg in
     let sber = Instrument.make
       ~ticker:(Ticker.of_string "SBER")
       ~venue:(Mic.of_string "MISX") () in
     let bars = Finam.Rest.bars client ~instrument:sber ~timeframe:Timeframe.H1 in
-    ...
 
-WebSocket (`lib/finam/ws.ml`) defines the async-api subscription protocol
-and event decoder as pure values; glue to `ocaml-websocket`, `h2`, or a
-home-grown Eio frame reader.
+WebSocket (`lib/infrastructure/acl/finam/ws.ml` + `ws_bridge.ml`)
+follows the asyncapi-v1.0.0 envelope — `{action, type, data, token}` —
+with one multiplexed socket covering all subscriptions. JWT refreshes
+on every outbound message via `Auth.current`.
 
-gRPC protos for Finam Trade:
-<https://github.com/FinamWeb/finam-trade-api>
-
-docs:
+Docs:
 - REST: <https://tradeapi.finam.ru/docs/rest>
 - gRPC: <https://tradeapi.finam.ru/docs-new/grpc-new>
 - WebSocket: <https://tradeapi.finam.ru/docs-new/async-api-new/>
+- Protos: <https://github.com/FinamWeb/finam-trade-api>
+
+### BCS
+
+Auth: OAuth2 `refresh_token` → short-lived access_token via Keycloak
+realm `tradeapi` at `be.broker.ru`. The refresh_token is issued in
+«БКС Мир инвестиций» → «О счёте» → «Токены API»; `Bcs.Auth` caches
+the access_token and re-exchanges on expiry.
+
+Instrument routing: `(classCode, ticker)` pair. `Instrument.board`
+maps 1:1 to `classCode` (`TQBR`, `SMAL`, `SPBFUT`, …); when absent,
+the adapter substitutes `Config.default_class_code` (`TQBR` by
+default). `Instrument.venue` is ignored — BCS-via-QUIK is MOEX-only
+in our config.
+
+    let cfg = Bcs.Config.make ~refresh_token ?account_id () in
+    let client = Bcs.Rest.make ~transport ~cfg in
+    let sber = Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX")
+      ~board:(Board.of_string "TQBR") () in
+    let bars = Bcs.Rest.bars client ~instrument:sber ~timeframe:Timeframe.H1 in
+
+WebSocket (`lib/infrastructure/acl/bcs/ws.ml` + `ws_bridge.ml`) uses
+a **per-subscription** socket: each `(classCode, ticker, timeFrame)`
+opens its own WS at `wss://ws.broker.ru/trade-api-market-data-connector/api/v1/last-candle/ws`
+and tears down on unsubscribe. JWT goes into the `Authorization`
+handshake header.
+
+Docs:
+- Portal: <https://trade-api.bcs.ru/>
+- Reference Go client (protocol source of truth):
+  <https://github.com/tigusigalpa/bcs-trade-go>

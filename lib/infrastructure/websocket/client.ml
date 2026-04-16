@@ -20,8 +20,8 @@ let eof_buf_read (buf : Eio.Buf_read.t) (n : int) : string =
   try Eio.Buf_read.take n buf
   with End_of_file -> failwith "ws: connection closed while reading frame"
 
-(** A [Ws_frame.Reader] view onto [Eio.Buf_read.t]. *)
-let reader_of buf : (module Ws_frame.Reader) =
+(** A [Frame.Reader] view onto [Eio.Buf_read.t]. *)
+let reader_of buf : (module Frame.Reader) =
   let module R = struct
     let read_exact n = eof_buf_read buf n
   end in
@@ -31,9 +31,9 @@ let write_raw (t : t) (s : string) : unit =
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
     Eio.Flow.copy_string s t.flow)
 
-let send_frame (t : t) (f : Ws_frame.frame) : unit =
-  let mask = Ws_frame.random_mask () in
-  write_raw t (Ws_frame.encode ~mask_key:mask f)
+let send_frame (t : t) (f : Frame.frame) : unit =
+  let mask = Frame.random_mask () in
+  write_raw t (Frame.encode ~mask_key:mask f)
 
 let send_text (t : t) (s : string) : unit =
   send_frame t { fin = true; opcode = Text; payload = s }
@@ -60,7 +60,7 @@ let send_close (t : t) ?(code = 1000) ?(reason = "") () : unit =
     after a close handshake has completed in both directions. *)
 let rec recv (t : t) : message =
   if t.closed then raise End_of_file;
-  let f = Ws_frame.decode (reader_of t.buf) in
+  let f = Frame.decode (reader_of t.buf) in
   match f.opcode with
   | Text -> Text f.payload
   | Binary -> Binary f.payload
@@ -171,14 +171,14 @@ let connect
     | _ ->
       (raw :> Eio.Flow.two_way_ty Eio.Resource.t)
   in
-  let key = Ws_frame.random_key () in
+  let key = Frame.random_key () in
   let handshake = build_handshake ~host ~path ~key ~extra_headers in
   Eio.Flow.copy_string handshake flow;
   let buf = Eio.Buf_read.of_flow flow ~max_size:65536 in
   let code, headers = read_response_headers buf in
   if code <> 101 then
     failwith (Printf.sprintf "ws_client: handshake failed, status %d" code);
-  let expected = Ws_frame.accept_token key in
+  let expected = Frame.accept_token key in
   (match find_header headers "sec-websocket-accept" with
    | Some v when v = expected -> ()
    | Some v ->

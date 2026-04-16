@@ -21,13 +21,19 @@ type t = {
       we fall back to this class code. Default [TQBR] is the MOEX
       T+ stocks board, i.e. the retail-trading norm. *)
   default_class_code : string;
+  (** WebSocket endpoint for the last-candle stream (one connection
+      per (classCode, ticker, timeFrame) subscription). *)
+  ws_last_candle_url : Uri.t;
 }
 
 (* Public auth host is [be.broker.ru] per the BCS docs. [rest_base]
    for the data endpoints (bars, orders …) is a working hypothesis —
    the docs site lives at [trade-api.bcs.ru/http] but geoblocks
    datacenter IPs, so the real API is almost certainly colocated at
-   [be.broker.ru]. Override via [?rest_base] if it diverges. *)
+   [be.broker.ru]. Override via [?rest_base] if it diverges.
+
+   WebSocket host is [ws.broker.ru] per the [bcs-trade-go] reference
+   implementation. *)
 let make
     ?(rest_base = Uri.of_string "https://be.broker.ru")
     ?(token_endpoint = Uri.of_string
@@ -36,7 +42,10 @@ let make
     ?(client_id = "trade-api-read")
     ?account_id
     ?(default_class_code = "TQBR")
+    ?(ws_last_candle_url = Uri.of_string
+        "wss://ws.broker.ru/trade-api-market-data-connector/api/v1\
+         /last-candle/ws")
     ~refresh_token
     () =
   { rest_base; token_endpoint; client_id; refresh_token; account_id;
-    default_class_code }
+    default_class_code; ws_last_candle_url }

@@ -60,6 +60,55 @@ let yojson_of_t t : Yojson.Safe.t =
     @ opt "isin"  Isin.yojson_of_t  t.isin
     @ opt "board" Board.yojson_of_t t.board)
 
+let to_qualified t =
+  let base = Ticker.to_string t.ticker ^ "@" ^ Mic.to_string t.venue in
+  match t.board with
+  | None -> base
+  | Some b -> base ^ "/" ^ Board.to_string b
+
+(** Split ["KEY=VALUE&..."] into an association list. Local helper for
+    the optional [?isin=] suffix in {!of_qualified}; we don't pull in
+    [Uri] just for this. *)
+let parse_query s =
+  String.split_on_char '&' s
+  |> List.filter_map (fun kv ->
+       match String.index_opt kv '=' with
+       | None -> None
+       | Some i ->
+         Some (String.sub kv 0 i,
+               String.sub kv (i + 1) (String.length kv - i - 1)))
+
+let of_qualified raw =
+  let s = String.trim raw in
+  let body, isin_opt =
+    match String.index_opt s '?' with
+    | None -> s, None
+    | Some i ->
+      let body = String.sub s 0 i in
+      let q = String.sub s (i + 1) (String.length s - i - 1) in
+      let isin = List.assoc_opt "isin" (parse_query q) in
+      body, Option.map Isin.of_string isin
+  in
+  match String.index_opt body '@' with
+  | None ->
+    invalid_arg ("Instrument.of_qualified: missing @MIC in " ^ raw)
+  | Some at ->
+    let ticker = String.sub body 0 at in
+    let rest = String.sub body (at + 1) (String.length body - at - 1) in
+    let mic, board =
+      match String.index_opt rest '/' with
+      | None -> rest, None
+      | Some j ->
+        String.sub rest 0 j,
+        Some (String.sub rest (j + 1) (String.length rest - j - 1))
+    in
+    make
+      ~ticker:(Ticker.of_string ticker)
+      ~venue:(Mic.of_string mic)
+      ?isin:isin_opt
+      ?board:(Option.map Board.of_string board)
+      ()
+
 let t_of_yojson = function
   | `Assoc fields ->
     let find k = try Some (List.assoc k fields) with Not_found -> None in

@@ -65,6 +65,39 @@ let test_json_minimal () =
   Alcotest.(check bool) "minimal round-trip" true
     (Instrument.equal original decoded)
 
+let test_qualified_minimal () =
+  let i = mk "SBER" "MISX" in
+  Alcotest.(check string) "ticker@mic"
+    "SBER@MISX" (Instrument.to_qualified i)
+
+let test_qualified_with_board () =
+  let i = mk ~board:"TQBR" "SBER" "MISX" in
+  Alcotest.(check string) "ticker@mic/board"
+    "SBER@MISX/TQBR" (Instrument.to_qualified i)
+
+let test_of_qualified_minimal () =
+  let i = Instrument.of_qualified "SBER@MISX" in
+  Alcotest.(check bool) "round-trip" true
+    (Instrument.equal i (mk "SBER" "MISX"))
+
+let test_of_qualified_with_board () =
+  let i = Instrument.of_qualified "SBER@MISX/TQBR" in
+  Alcotest.(check (option string)) "board parsed"
+    (Some "TQBR") (Option.map Board.to_string (Instrument.board i));
+  Alcotest.(check string) "venue parsed"
+    "MISX" (Mic.to_string (Instrument.venue i))
+
+let test_of_qualified_with_isin () =
+  let s = "SBER@MISX/TQBR?isin=" ^ sber_isin in
+  let i = Instrument.of_qualified s in
+  Alcotest.(check (option string)) "isin parsed"
+    (Some sber_isin) (Option.map Isin.to_string (Instrument.isin i))
+
+let test_of_qualified_rejects_bare_ticker () =
+  Alcotest.check_raises "no @MIC"
+    (Invalid_argument "Instrument.of_qualified: missing @MIC in SBER")
+    (fun () -> ignore (Instrument.of_qualified "SBER"))
+
 let tests = [
   "make minimal",                     `Quick, test_make_minimal;
   "make enriched",                    `Quick, test_make_enriched;
@@ -74,4 +107,10 @@ let tests = [
   "ISIN vs no-ISIN is not equal",     `Quick, test_not_equal_one_isin_one_not;
   "JSON round-trip enriched",         `Quick, test_json_round_trip;
   "JSON round-trip minimal",          `Quick, test_json_minimal;
+  "to_qualified minimal",             `Quick, test_qualified_minimal;
+  "to_qualified with board",          `Quick, test_qualified_with_board;
+  "of_qualified minimal",             `Quick, test_of_qualified_minimal;
+  "of_qualified with board",          `Quick, test_of_qualified_with_board;
+  "of_qualified with ?isin=",         `Quick, test_of_qualified_with_isin;
+  "of_qualified rejects bare",        `Quick, test_of_qualified_rejects_bare_ticker;
 ]

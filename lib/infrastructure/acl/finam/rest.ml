@@ -129,6 +129,17 @@ let bars
   ] in
   Dto.candles_of_json (get_json t path q)
 
+(** GET /v1/assets/{symbol} — single instrument metadata.
+    Returns an [Instrument.t] populated from the wire [Asset] payload
+    (board, ticker, mic, isin). [symbol] is the qualified
+    [TICKER@MIC] form; bare tickers get the configured
+    [default_mic] appended via {!qualify_symbol}. *)
+let get_asset t ~(symbol : Symbol.t) : Instrument.t =
+  let path =
+    Printf.sprintf "/v1/assets/%s" (qualify_symbol t.cfg symbol)
+  in
+  Dto.instrument_of_asset_json (get_json t path [])
+
 let account t ~account_id =
   get_json t (Printf.sprintf "/v1/accounts/%s" account_id) []
 

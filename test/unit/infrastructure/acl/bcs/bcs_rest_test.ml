@@ -143,10 +143,34 @@ let test_bars_caps_n_at_max () =
   Alcotest.(check bool) "endDate is ISO 8601" true
     (String.length end_str >= 20)
 
+let test_route_instrument_uses_board () =
+  let cfg = make_cfg () in
+  let inst = Instrument.make
+    ~ticker:(Ticker.of_string "SBER")
+    ~venue:(Mic.of_string "MISX")
+    ~board:(Board.of_string "TQBR") () in
+  let ticker, class_code = Rest.route_instrument cfg inst in
+  Alcotest.(check string) "ticker"      "SBER" ticker;
+  Alcotest.(check string) "board used"  "TQBR" class_code
+
+let test_route_instrument_falls_back_to_default () =
+  let cfg = Config.make
+    ~refresh_token:"R"
+    ~default_class_code:"SPBXM"
+    ~rest_base:(Uri.of_string "https://api.test")
+    ~token_endpoint:(Uri.of_string "https://api.test/token") () in
+  let inst = Instrument.make
+    ~ticker:(Ticker.of_string "FXUS")
+    ~venue:(Mic.of_string "MISX") () in
+  let _, class_code = Rest.route_instrument cfg inst in
+  Alcotest.(check string) "no board → default" "SPBXM" class_code
+
 let tests = [
   "request URL & params",             `Quick, test_bars_request_url_and_params;
   "sorts newest-first to chronological", `Quick, test_bars_sorted_chronologically;
   "decodes plain-float decimals",     `Quick, test_bars_decimal_decoded;
   "bare ticker uses default classCode", `Quick, test_bare_ticker_uses_default_class_code;
   "caps n at 1440",                   `Quick, test_bars_caps_n_at_max;
+  "route_instrument uses board",      `Quick, test_route_instrument_uses_board;
+  "route_instrument default fallback",`Quick, test_route_instrument_falls_back_to_default;
 ]

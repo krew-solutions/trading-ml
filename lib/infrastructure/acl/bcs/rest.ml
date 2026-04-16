@@ -72,6 +72,18 @@ let split_symbol cfg (symbol : Symbol.t) : string * string =
     String.sub s (i + 1) (String.length s - i - 1)
   | None -> s, cfg.Config.default_class_code
 
+(** Resolve an [Instrument.t] to BCS's (ticker, classCode) pair.
+    Uses [Instrument.board] when present, otherwise falls back to
+    [Config.default_class_code] — same policy as {!split_symbol} for
+    bare-ticker [Symbol.t] inputs. *)
+let route_instrument cfg (i : Instrument.t) : string * string =
+  let ticker = Ticker.to_string (Instrument.ticker i) in
+  let class_code = match Instrument.board i with
+    | Some b -> Board.to_string b
+    | None -> cfg.Config.default_class_code
+  in
+  ticker, class_code
+
 (** Server-side cap on one response. The docs don't publish it, but the
     live endpoint replies with [CANDLE_LIMIT_EXCEEDED] at 1441+. *)
 let max_bars_per_request = 1440

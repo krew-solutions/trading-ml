@@ -114,6 +114,45 @@ let candle_of_json j : Candle.t =
     ["volume"; "vol"; "v"; "total_volume"; "trading_volume"] in
   Candle.make ~ts ~open_ ~high ~low ~close ~volume
 
+(** Decode Finam's [GetAssetResponse] (proto field set: board, id,
+    ticker, mic, isin, type, name, decimals, min_step, lot_size,
+    quote_currency, asset_details).
+
+    We keep only what {!Instrument} needs: ticker, mic, optional
+    isin, optional board. The rest (decimals, lot_size, …) is
+    instrument *metadata* — out of scope for identity.
+
+    Defensive: ISIN is optional in the wire payload (futures often
+    don't have one), and we silently drop invalid ISINs (length /
+    checksum) instead of failing the whole decode — the instrument is
+    still usable without it. *)
+let instrument_of_asset_json (j : Yojson.Safe.t) : Instrument.t =
+  let open Yojson.Safe.Util in
+  let str_opt k =
+    match member k j with
+    | `String "" | `Null -> None
+    | `String s -> Some s
+    | _ -> None
+  in
+  let req_str k =
+    match str_opt k with
+    | Some s -> s
+    | None -> invalid_arg ("Finam DTO asset: missing string field " ^ k)
+  in
+  let ticker = Ticker.of_string (req_str "ticker") in
+  let venue  = Mic.of_string (req_str "mic") in
+  let isin =
+    match str_opt "isin" with
+    | None -> None
+    | Some s -> try Some (Isin.of_string s) with Invalid_argument _ -> None
+  in
+  let board =
+    match str_opt "board" with
+    | None -> None
+    | Some s -> try Some (Board.of_string s) with Invalid_argument _ -> None
+  in
+  Instrument.make ~ticker ~venue ?isin ?board ()
+
 let candles_of_json j : Candle.t list =
   let arr = match Yojson.Safe.Util.member "bars" j with
     | `List l -> l

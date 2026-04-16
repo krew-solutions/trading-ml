@@ -5,8 +5,10 @@
  *  Endpoints:
  *    GET  /api/indicators
  *    GET  /api/strategies
- *    GET  /api/candles?symbol=...&n=...
- *    POST /api/backtest
+ *    GET  /api/exchanges
+ *    GET  /api/candles?symbol=TICKER@MIC[/BOARD]&n=...&timeframe=...
+ *    GET  /api/stream?symbol=TICKER@MIC[/BOARD]&timeframe=...   (SSE)
+ *    POST /api/backtest   { symbol: "TICKER@MIC[/BOARD]", ... }
  *
  *  Run:  node mock-server.mjs   (or `npm run mock`)
  *
@@ -120,7 +122,7 @@ const TIMEFRAME_SECONDS = {
 };
 
 function generateCandles({
-  symbol = 'SBER', n = 500, timeframe = 'H1',
+  symbol = 'SBER@MISX', n = 500, timeframe = 'H1',
 } = {}) {
   const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
   const rng = mulberry32(hash(`${symbol}:${timeframe}:${n}`));
@@ -219,7 +221,7 @@ function json(res, body, status = 200) {
  *  random walk and pushes a `bar_update`. Useful only for eyeballing
  *  real-time behaviour in the UI without running OCaml. */
 function serveSse(req, res, url) {
-  const symbol = url.searchParams.get('symbol') || 'SBER';
+  const symbol = url.searchParams.get('symbol') || 'SBER@MISX';
   const timeframe = url.searchParams.get('timeframe') || 'H1';
   const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
   const interval = Math.min(30_000, Math.max(2_000, tfSeconds * 1000 / 12));
@@ -295,7 +297,7 @@ const server = createServer(async (req, res) => {
       ]});
     }
     if (req.method === 'GET' && path === '/api/candles') {
-      const symbol = url.searchParams.get('symbol') || 'SBER';
+      const symbol = url.searchParams.get('symbol') || 'SBER@MISX';
       const n = Number(url.searchParams.get('n') ?? 500);
       const timeframe = url.searchParams.get('timeframe') || 'H1';
       return json(res, { candles:
@@ -324,7 +326,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`mock-server: listening on http://127.0.0.1:${PORT}`);
   console.log('  GET  /api/indicators');
   console.log('  GET  /api/strategies');
-  console.log('  GET  /api/candles?symbol=SBER&n=500&timeframe=H1');
-  console.log('  GET  /api/stream?symbol=SBER&timeframe=H1   (SSE)');
-  console.log('  POST /api/backtest   { symbol, strategy, params, n }');
+  console.log('  GET  /api/candles?symbol=SBER@MISX&n=500&timeframe=H1');
+  console.log('  GET  /api/stream?symbol=SBER@MISX&timeframe=H1   (SSE)');
+  console.log('  POST /api/backtest   { symbol: "SBER@MISX[/BOARD]", strategy, params, n }');
 });

@@ -59,7 +59,7 @@ Specifications carried today:
 | `lib/core/candle.mli`      | `make` invariants: `low ≤ open,close ≤ high`, `volume ≥ 0`   |
 | `lib/engine/portfolio.mli` | `fill` preconditions (quantity > 0, fee ≥ 0) — documented    |
 
-The portfolio `.mli` uses cross-library types (`Core.Symbol.t`); Gospel's
+The portfolio `.mli` uses cross-library types (`Core.Instrument.t`); Gospel's
 load-path resolution for dune-wrapped libraries is limited, so those
 specs are documentation-grade rather than machine-checked. JSON encodings
 live in `*_json.ml` companion files to keep the verified `.mli` free of
@@ -159,7 +159,7 @@ the pane key via `overlayRegistry`.
    - **types** `params`, `state`;
    - **values** `name : string`, `default_params : params`,
      `init : params -> state`,
-     `on_candle : state -> Symbol.t -> Candle.t -> state * Signal.t`.
+     `on_candle : state -> Instrument.t -> Candle.t -> state * Signal.t`.
 2. Add one line to `lib/strategies/registry.ml`.
 3. Add a catalog entry to `ui/mock-server.mjs`.
 
@@ -171,7 +171,10 @@ in production. Set your token and account via:
 
     let cfg = Finam.Config.make ~access_token ~account_id () in
     let client = Finam.Rest.make ~transport ~cfg in
-    let bars = Finam.Rest.bars client ~symbol ~timeframe:Timeframe.H1 in
+    let sber = Instrument.make
+      ~ticker:(Ticker.of_string "SBER")
+      ~venue:(Mic.of_string "MISX") () in
+    let bars = Finam.Rest.bars client ~instrument:sber ~timeframe:Timeframe.H1 in
     ...
 
 WebSocket (`lib/finam/ws.ml`) defines the async-api subscription protocol

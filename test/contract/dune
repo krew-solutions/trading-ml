@@ -1,0 +1,4 @@
+(test
+ (name contract_runner)
+ (libraries core finam bcs yojson
+            alcotest))

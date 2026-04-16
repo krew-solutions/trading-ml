@@ -1,0 +1,39 @@
+(** Unit test runner. [test/unit/] mirrors [lib/] by directory; dune's
+    [include_subdirs unqualified] flattens everything into a single
+    module namespace, so filenames are globally unique — vendor-specific
+    tests carry a broker prefix to avoid collisions between e.g.
+    [finam/auth_test.ml] and [bcs/auth_test.ml]. *)
+
+let () =
+  Alcotest.run "trading-unit" [
+    (* Domain *)
+    "decimal",     Decimal_test.tests;
+    "portfolio",   Portfolio_test.tests;
+    "backtest",    Backtest_test.tests;
+    (* Indicators — one file per indicator, mirrored from lib *)
+    "sma",         Sma_test.tests;
+    "ema",         Ema_test.tests;
+    "wma",         Wma_test.tests;
+    "rsi",         Rsi_test.tests;
+    "macd",        Macd_test.tests;
+    "macd-w",      Macd_weighted_test.tests;
+    "bollinger",   Bollinger_test.tests;
+    "atr",         Atr_test.tests;
+    "obv",         Obv_test.tests;
+    "a/d",         Ad_test.tests;
+    "chaikin osc", Chaikin_oscillator_test.tests;
+    "stochastic",  Stochastic_test.tests;
+    "mfi",         Mfi_test.tests;
+    "cmf",         Cmf_test.tests;
+    "cvi",         Cvi_test.tests;
+    "cvd",         Cvd_test.tests;
+    "volume",      Volume_test.tests;
+    "volume ma",   Volume_ma_test.tests;
+    (* ACL: Finam *)
+    "finam dto",       Finam_dto_test.tests;
+    "finam auth",      Finam_auth_test.tests;
+    "finam ws frame",  Finam_ws_frame_test.tests;
+    (* ACL: BCS *)
+    "bcs auth",    Bcs_auth_test.tests;
+    "bcs rest",    Bcs_rest_test.tests;
+  ]

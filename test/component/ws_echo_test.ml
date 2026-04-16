@@ -25,7 +25,7 @@ let test_echo_roundtrip () =
     Eio.Net.accept_fork ~sw listener
       ~on_error:(fun _ -> ())
       (fun flow _addr ->
-         Finam.Ws_server_test_helper.accept_and_echo flow;
+         Ws_server_test_helper.accept_and_echo flow;
          Eio.Promise.resolve (snd server_done) ()));
   (* Client fiber: connect and roundtrip. *)
   let uri = Uri.of_string

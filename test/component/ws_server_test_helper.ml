@@ -28,7 +28,7 @@ let accept_and_echo flow : unit =
   let buf = Eio.Buf_read.of_flow flow ~max_size:65536 in
   let hdrs = read_request_headers buf in
   let key = List.assoc "sec-websocket-key" hdrs in
-  let accept = Ws_frame.accept_token key in
+  let accept = Finam.Ws_frame.accept_token key in
   let resp =
     "HTTP/1.1 101 Switching Protocols\r\n" ^
     header_line "Upgrade" "websocket" ^
@@ -43,21 +43,21 @@ let accept_and_echo flow : unit =
         try Eio.Buf_read.take n buf
         with End_of_file -> failwith "srv: short read"
     end in
-    (module R : Ws_frame.Reader)
+    (module R : Finam.Ws_frame.Reader)
   in
   let rec loop () =
-    match Ws_frame.decode reader with
+    match Finam.Ws_frame.decode reader with
     | { opcode = Close; _ } ->
       (* Echo the close back. Server→client frames are unmasked. *)
-      let f = { Ws_frame.fin = true; opcode = Close; payload = "" } in
-      Eio.Flow.copy_string (Ws_frame.encode ~mask_key:"" f) flow
+      let f = { Finam.Ws_frame.fin = true; opcode = Close; payload = "" } in
+      Eio.Flow.copy_string (Finam.Ws_frame.encode ~mask_key:"" f) flow
     | { opcode = Text; payload; _ } ->
-      let out = { Ws_frame.fin = true; opcode = Text; payload } in
-      Eio.Flow.copy_string (Ws_frame.encode ~mask_key:"" out) flow;
+      let out = { Finam.Ws_frame.fin = true; opcode = Text; payload } in
+      Eio.Flow.copy_string (Finam.Ws_frame.encode ~mask_key:"" out) flow;
       loop ()
     | { opcode = Ping; payload; _ } ->
-      let out = { Ws_frame.fin = true; opcode = Pong; payload } in
-      Eio.Flow.copy_string (Ws_frame.encode ~mask_key:"" out) flow;
+      let out = { Finam.Ws_frame.fin = true; opcode = Pong; payload } in
+      Eio.Flow.copy_string (Finam.Ws_frame.encode ~mask_key:"" out) flow;
       loop ()
     | _ -> loop ()
   in

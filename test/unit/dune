@@ -1,0 +1,11 @@
+(test
+ (name unit_runner)
+ (libraries core indicators strategies engine
+            http_transport broker finam bcs
+            eio eio_main str
+            alcotest qcheck-core))
+
+; Unqualified flattens the subdirectory tree into a single module namespace.
+; Filenames must therefore be globally unique — vendor-specific tests carry
+; a [finam_] / [bcs_] prefix to disambiguate.
+(include_subdirs unqualified)

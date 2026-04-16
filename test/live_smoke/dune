@@ -1,0 +1,13 @@
+(test
+ (name live_smoke_runner)
+ (libraries core finam bcs http_transport
+            eio eio_main mirage-crypto-rng.unix
+            alcotest)
+ ; Skipped from the default [@runtest] alias — live tests need real
+ ; broker credentials and network reach, and would fail CI otherwise.
+ ; Run explicitly: `dune build @live_smoke`.
+ (enabled_if false))
+
+(alias
+ (name live_smoke)
+ (deps (alias_rec all)))

@@ -1,0 +1,5 @@
+(test
+ (name e2e_runner)
+ (libraries server broker core finam bcs
+            cohttp-eio eio eio_main mirage-crypto-rng.unix
+            alcotest))

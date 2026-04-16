@@ -1,0 +1,5 @@
+(test
+ (name component_runner)
+ (libraries core finam
+            eio eio_main
+            alcotest))

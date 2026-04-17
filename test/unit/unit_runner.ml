@@ -59,4 +59,6 @@ let () =
     "bcs orders",  Bcs_order_test.tests;
     (* Infrastructure: Paper decorator *)
     "paper broker", Paper_broker_test.tests;
+    (* Application: live engine *)
+    "live engine",  Live_engine_test.tests;
   ]

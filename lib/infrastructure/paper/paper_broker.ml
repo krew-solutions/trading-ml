@@ -22,14 +22,16 @@ type t = {
   source : Broker.client;
   mutable book : (string * entry) list;
   mutable fills : fill list;
+  mutable portfolio : Engine.Portfolio.t;
   last_ts : (Instrument.t, int64) Hashtbl.t;
   mutex : Mutex.t;
 }
 
-let make ~source () = {
+let make ?(initial_cash = Decimal.of_int 1_000_000) ~source () = {
   source;
   book = [];
   fills = [];
+  portfolio = Engine.Portfolio.empty ~cash:initial_cash;
   last_ts = Hashtbl.create 8;
   mutex = Mutex.create ();
 }
@@ -106,7 +108,12 @@ let apply_fill t (e : entry) (c : Candle.t) (price : Decimal.t) =
     side = o.side;
     quantity = o.quantity;
     price;
-  } :: t.fills
+  } :: t.fills;
+  (* No fees in this cut — add a [fee_rate] parameter to [make] when
+     slippage modelling is introduced. *)
+  t.portfolio <- Engine.Portfolio.fill t.portfolio
+    ~instrument:o.instrument ~side:o.side
+    ~quantity:o.quantity ~price ~fee:Decimal.zero
 
 let on_bar t ~instrument (c : Candle.t) =
   with_lock t (fun () ->
@@ -156,6 +163,9 @@ let cancel_order t ~client_order_id =
 
 let fills t =
   with_lock t (fun () -> List.rev t.fills)
+
+let portfolio t =
+  with_lock t (fun () -> t.portfolio)
 
 (** Market data path. Delegates to the wrapped source, then sinks the
     trailing candle into {!on_bar} so that simple deployments (e.g.

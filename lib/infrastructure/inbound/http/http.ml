@@ -184,6 +184,27 @@ let route client registry request body : int * Cohttp_eio.Server.response_action
     | `POST, "/api/backtest" ->
       let body = Eio.Flow.read_all body in
       ok (json_response (run_backtest client body))
+    | `GET, "/api/orders" ->
+      let orders = Broker.get_orders client in
+      ok (json_response (Api.orders_json orders))
+    | `POST, "/api/orders" ->
+      let body = Eio.Flow.read_all body in
+      let req = Api.place_order_of_json (Yojson.Safe.from_string body) in
+      let o = Broker.place_order client
+        ~instrument:req.instrument ~side:req.side
+        ~quantity:req.quantity ~kind:req.kind ~tif:req.tif
+        ~client_order_id:req.client_order_id in
+      ok (json_response (Api.order_json o))
+    | `GET, path when String.length path > 12
+                   && String.sub path 0 12 = "/api/orders/" ->
+      let cid = String.sub path 12 (String.length path - 12) in
+      let o = Broker.get_order client ~client_order_id:cid in
+      ok (json_response (Api.order_json o))
+    | `DELETE, path when String.length path > 12
+                      && String.sub path 0 12 = "/api/orders/" ->
+      let cid = String.sub path 12 (String.length path - 12) in
+      let o = Broker.cancel_order client ~client_order_id:cid in
+      ok (json_response (Api.order_json o))
     | `GET, "/" | `GET, "/health" ->
       ok (string_response ("ok (" ^ Broker.name client ^ ")"))
     | _ -> 404, `Response (string_response ~status:`Not_found "not found")

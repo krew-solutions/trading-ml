@@ -1,0 +1,4 @@
+(library
+ (name live_engine)
+ (public_name trading.live_engine)
+ (libraries core broker strategies engine log))

@@ -24,7 +24,10 @@ open Core
 
 type t
 
-val make : source:Broker.client -> unit -> t
+val make : ?initial_cash:Decimal.t -> source:Broker.client -> unit -> t
+(** [initial_cash] defaults to 1_000_000 — the same scale as
+    {!Engine.Backtest.default_config}, so paper and backtest P&L are
+    comparable out of the box. *)
 
 val as_broker : t -> Broker.client
 (** Re-wrap [t] as a {!Broker.client} implementing the extended
@@ -61,3 +64,8 @@ type fill = {
 val fills : t -> fill list
 (** Chronological list of simulated fills. Exposed for diagnostics and
     tests; not part of the {!Broker.S} port. *)
+
+val portfolio : t -> Engine.Portfolio.t
+(** Current paper portfolio (cash + positions + realized PnL).
+    Updated on every fill using {!Engine.Portfolio.fill}. Exposed for
+    diagnostics, CLI order summaries and UI — not part of the port. *)

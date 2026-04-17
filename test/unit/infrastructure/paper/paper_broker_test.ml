@@ -184,6 +184,34 @@ let test_cross_instrument_isolation () =
   Alcotest.(check int) "no cross-instrument fill" 0
     (List.length (Paper.Paper_broker.fills p))
 
+let test_portfolio_updates_on_fill () =
+  let p = Paper.Paper_broker.make
+    ~initial_cash:(d_int 100_000)
+    ~source:(mk_source ()) () in
+  let inst = mk_instrument "SBER" in
+  Paper.Paper_broker.on_bar p ~instrument:inst
+    (bar ~ts:100 ~o:100.0 ~h:100.0 ~l:100.0 ~c:100.0);
+  let _ = Paper.Paper_broker.place_order p
+    ~instrument:inst ~side:Buy ~quantity:(d_int 10)
+    ~kind:Order.Market ~tif:Order.DAY
+    ~client_order_id:"cid-pf"
+  in
+  Paper.Paper_broker.on_bar p ~instrument:inst
+    (bar ~ts:200 ~o:101.0 ~h:102.0 ~l:100.5 ~c:101.5);
+  let pf = Paper.Paper_broker.portfolio p in
+  Alcotest.(check (option (pair string decimal_testable)))
+    "position 10 @ 101 after buy"
+    (Some ("SBER", d 101.0))
+    (Option.map
+       (fun (pos : Engine.Portfolio.position) ->
+         Ticker.to_string (Instrument.ticker pos.instrument),
+         pos.avg_price)
+       (Engine.Portfolio.position pf inst));
+  let expected_cash = Decimal.sub (d_int 100_000)
+    (Decimal.mul (d_int 10) (d 101.0)) in
+  Alcotest.(check decimal_testable) "cash debited"
+    expected_cash pf.cash
+
 let tests = [
   "market fills at next open",   `Quick, test_market_fills_at_next_open;
   "same bar does not fill",      `Quick, test_same_bar_does_not_fill;
@@ -193,4 +221,5 @@ let tests = [
   "cancel prevents fill",        `Quick, test_cancel_prevents_fill;
   "get_orders chronological",    `Quick, test_get_orders_returns_insertion_order;
   "cross-instrument isolation",  `Quick, test_cross_instrument_isolation;
+  "portfolio updates on fill",   `Quick, test_portfolio_updates_on_fill;
 ]

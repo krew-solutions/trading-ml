@@ -74,6 +74,32 @@ export const MICS_FALLBACK: Mic[] = ['MISX', 'IEXG'];
  *  uses its configured default. */
 export type Board = string;
 
+export interface Order {
+  client_order_id: string;
+  id: string;
+  instrument: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;
+  filled: number;
+  remaining: number;
+  status: string;
+  tif: string;
+  kind: { type: 'MARKET' }
+      | { type: 'LIMIT'; price: number }
+      | { type: 'STOP';  price: number }
+      | { type: 'STOP_LIMIT'; stop_price: number; limit_price: number };
+  ts: number;
+}
+
+export interface PlaceOrderRequest {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;
+  client_order_id: string;
+  kind: Order['kind'];
+  tif?: 'DAY' | 'GTC' | 'IOC' | 'FOK';
+}
+
 export interface BacktestResult {
   num_trades: number;
   total_return: number;
@@ -111,6 +137,16 @@ export class Api {
     params: Record<string, number | boolean>; n: number;
   }): Observable<BacktestResult> {
     return this.http.post<BacktestResult>('/api/backtest', body);
+  }
+
+  orders(): Observable<{ orders: Order[] }> {
+    return this.http.get<{ orders: Order[] }>('/api/orders');
+  }
+  placeOrder(req: PlaceOrderRequest): Observable<Order> {
+    return this.http.post<Order>('/api/orders', req);
+  }
+  cancelOrder(cid: string): Observable<Order> {
+    return this.http.delete<Order>(`/api/orders/${encodeURIComponent(cid)}`);
   }
 
   /** Opens a Server-Sent Events connection. Returns an Observable that

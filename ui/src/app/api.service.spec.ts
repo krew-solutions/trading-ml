@@ -106,6 +106,44 @@ describe('Api', () => {
     });
   });
 
+  it('GETs /api/orders and returns the list', () => {
+    const sample = {
+      client_order_id: 'cid-1', id: 'cid-1', instrument: 'SBER@MISX',
+      side: 'BUY' as const, quantity: 10, filled: 0, remaining: 10,
+      status: 'New', tif: 'DAY', kind: { type: 'MARKET' as const }, ts: 0,
+    };
+    let got: unknown;
+    api.orders().subscribe(r => (got = r.orders));
+    httpCtrl.expectOne('/api/orders').flush({ orders: [sample] });
+    expect(got).toEqual([sample]);
+  });
+
+  it('POSTs /api/orders with the place-order body', () => {
+    api.placeOrder({
+      symbol: 'SBER@MISX', side: 'BUY', quantity: 10,
+      client_order_id: 'cid-2', kind: { type: 'MARKET' },
+    }).subscribe();
+    const req = httpCtrl.expectOne('/api/orders');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body.client_order_id).toBe('cid-2');
+    req.flush({
+      client_order_id: 'cid-2', id: 'cid-2', instrument: 'SBER@MISX',
+      side: 'BUY', quantity: 10, filled: 0, remaining: 10,
+      status: 'New', tif: 'DAY', kind: { type: 'MARKET' }, ts: 0,
+    });
+  });
+
+  it('DELETEs /api/orders/:cid on cancel', () => {
+    api.cancelOrder('cid-3').subscribe();
+    const req = httpCtrl.expectOne('/api/orders/cid-3');
+    expect(req.request.method).toBe('DELETE');
+    req.flush({
+      client_order_id: 'cid-3', id: 'cid-3', instrument: 'SBER@MISX',
+      side: 'BUY', quantity: 10, filled: 0, remaining: 0,
+      status: 'Cancelled', tif: 'DAY', kind: { type: 'MARKET' }, ts: 0,
+    });
+  });
+
   it('POSTs /api/backtest with JSON body', () => {
     api.backtest({
       symbol: 'GAZP', strategy: 'SMA_Crossover',

@@ -22,6 +22,7 @@ let usage () =
   prerr_endline {|trading <command> [options]
 
   serve [--port 8080] [--broker synthetic|finam|bcs] [--paper]
+        [--strategy NAME] [--engine-symbol SBER@MISX]
         [--secret SECRET] [--account ACCOUNT_ID]
         [--log-level debug|info|warning|error]
       start HTTP API server (bound to localhost).
@@ -36,12 +37,22 @@ let usage () =
       but every order is intercepted and filled against the live
       candle stream. Use for strategy smoke-testing before routing to
       a real broker.
+      --strategy NAME attaches a live engine that feeds every upstream
+      bar into the named strategy (see `trading list`) and submits
+      market orders via the broker. Combine with --paper for a safe
+      dry-run. Engine symbol defaults to SBER@MISX.
 
   list
       show registered indicators and strategies
 
   backtest <strategy> [--n N] [--symbol SBER@MISX]
       run a backtest on synthetic data and print summary
+
+  orders <list|get|place|cancel> [--host http://localhost:8080]
+      talk to a running `serve` instance via its /api/orders surface.
+      Use this to smoke-test paper mode or poke live broker orders
+      without touching the UI. Run `orders` with no subcommand for
+      per-action flags.
 |};
   exit 2
 
@@ -276,6 +287,12 @@ let cmd_serve args =
       exit 2
   in
   let paper_mode = List.mem "--paper" args in
+  let strategy_name = arg_value "--strategy" args in
+  let engine_symbol =
+    match arg_value "--engine-symbol" args with
+    | Some v -> Instrument.of_qualified v
+    | None -> Instrument.of_qualified "SBER@MISX"
+  in
   let opened = match broker_id with
     | "synthetic" -> open_synthetic ()
     | "finam" -> open_finam ~env ~secret:(need_secret ()) ~account
@@ -293,30 +310,178 @@ let cmd_serve args =
     | Some p -> Paper.Paper_broker.as_broker p
     | None -> source_client
   in
-  Log.info "broker: %s%s (account=%s)"
+  (* Live engine — optional; constructed only when --strategy is set.
+     Trades [engine_symbol] through [client] (which is Paper-wrapped
+     when --paper, so engine orders are simulated in that case). *)
+  let engine_t = match strategy_name with
+    | None -> None
+    | Some name ->
+      match Strategies.Registry.find name with
+      | None ->
+        Printf.eprintf "unknown --strategy: %s (use `trading list`)\n" name;
+        exit 2
+      | Some spec ->
+        let strat = spec.build [] in
+        let equity = Decimal.of_int 1_000_000 in
+        let cfg : Live_engine.config = {
+          broker = client;
+          strategy = strat;
+          instrument = engine_symbol;
+          initial_cash = equity;
+          limits = Engine.Risk.default_limits ~equity;
+          tif = Order.DAY;
+        } in
+        Some (Live_engine.make cfg)
+  in
+  Log.info "broker: %s%s (account=%s)%s"
     (Broker.name source_client)
     (if paper_mode then " [paper]" else "")
-    (Option.value account ~default:"<none>");
-  (* WS feeds live upstream bars to the SSE stream and, when paper
-     mode is active, to the Paper decorator so pending orders can
-     fill without waiting for a UI poll. *)
+    (Option.value account ~default:"<none>")
+    (match strategy_name with
+     | Some n -> Printf.sprintf " [engine: %s on %s]"
+                   n (Instrument.to_qualified engine_symbol)
+     | None -> "");
+  (* Bar sinks fan out every upstream candle to (a) the Paper decorator
+     so pending orders can fill without a UI poll and (b) the live
+     engine so strategy signals translate into orders. Both are no-ops
+     when the corresponding feature is disabled. *)
   let paper_sink = match paper_t with
     | Some p -> fun instrument candle ->
       Paper.Paper_broker.on_bar p ~instrument candle
     | None -> fun _ _ -> ()
   in
+  let engine_sink = match engine_t with
+    | Some e -> fun instrument candle ->
+      if Instrument.equal instrument engine_symbol
+      then Live_engine.on_bar e candle
+    | None -> fun _ _ -> ()
+  in
+  let bar_sink instrument candle =
+    paper_sink instrument candle;
+    engine_sink instrument candle
+  in
   let ws_setup = match opened with
-    | Opened_finam     { rest; _ } -> Some (finam_live_setup ~env ~paper_sink rest)
-    | Opened_bcs       { rest; _ } -> Some (bcs_live_setup   ~env ~paper_sink rest)
+    | Opened_finam     { rest; _ } -> Some (finam_live_setup ~env ~paper_sink:bar_sink rest)
+    | Opened_bcs       { rest; _ } -> Some (bcs_live_setup   ~env ~paper_sink:bar_sink rest)
     | Opened_synthetic _           -> None
   in
   Log.info "listening on http://127.0.0.1:%d (%s)"
     port (Broker.name client);
   Server.Http.run ?setup:ws_setup ~env ~port ~client ()
 
+(** Tiny HTTP client for the [orders] subcommand. Talks to a running
+    server (default http://localhost:8080); the same surface the UI
+    consumes, so CLI and UI share the same Paper-vs-live semantics. *)
+let api_url host path = Uri.of_string (host ^ path)
+
+let api_request ~env ~host ~meth ?body path : Yojson.Safe.t =
+  let transport = Http_transport.make_eio ~env in
+  let headers = [
+    "Content-Type", "application/json";
+    "Accept",       "application/json";
+  ] in
+  let resp = transport {
+    meth; url = api_url host path; headers; body;
+  } in
+  if resp.status >= 200 && resp.status < 300 then
+    Yojson.Safe.from_string resp.body
+  else begin
+    Printf.eprintf "HTTP %d: %s\n" resp.status resp.body;
+    exit 1
+  end
+
+let format_order (j : Yojson.Safe.t) : string =
+  let open Yojson.Safe.Util in
+  let cid     = j |> member "client_order_id" |> to_string in
+  let symbol  = j |> member "instrument"      |> to_string in
+  let side    = j |> member "side"            |> to_string in
+  let qty     = j |> member "quantity"        |> to_float in
+  let filled  = j |> member "filled"          |> to_float in
+  let status  = j |> member "status"          |> to_string in
+  let kind    = j |> member "kind" |> member "type" |> to_string in
+  Printf.sprintf "%-24s %-14s %-4s qty=%-8g filled=%-8g %-6s %s"
+    cid symbol side qty filled kind status
+
+let cmd_orders_list ~env ~host () =
+  let j = api_request ~env ~host ~meth:`GET "/api/orders" in
+  let orders = Yojson.Safe.Util.(j |> member "orders" |> to_list) in
+  if orders = [] then print_endline "(no orders)"
+  else List.iter (fun o -> print_endline (format_order o)) orders
+
+let cmd_orders_get ~env ~host cid =
+  let j = api_request ~env ~host ~meth:`GET ("/api/orders/" ^ cid) in
+  print_endline (format_order j)
+
+let cmd_orders_place ~env ~host args =
+  let get name =
+    match arg_value ("--" ^ name) args with
+    | Some v -> v
+    | None -> Printf.eprintf "missing --%s\n" name; exit 2
+  in
+  let optional name = arg_value ("--" ^ name) args in
+  let body_fields = [
+    "symbol",          `String (get "symbol");
+    "side",            `String (String.uppercase_ascii (get "side"));
+    "quantity",        `Float (float_of_string (get "qty"));
+    "client_order_id", `String (get "cid");
+    "tif",             `String (Option.value (optional "tif") ~default:"DAY");
+  ] in
+  let kind : Yojson.Safe.t =
+    let k = String.uppercase_ascii (Option.value (optional "kind") ~default:"MARKET") in
+    match k with
+    | "MARKET" -> `Assoc [ "type", `String "MARKET" ]
+    | "LIMIT" -> `Assoc [
+        "type",  `String "LIMIT";
+        "price", `Float (float_of_string (get "price"));
+      ]
+    | "STOP" -> `Assoc [
+        "type",  `String "STOP";
+        "price", `Float (float_of_string (get "price"));
+      ]
+    | "STOP_LIMIT" -> `Assoc [
+        "type",        `String "STOP_LIMIT";
+        "stop_price",  `Float (float_of_string (get "stop"));
+        "limit_price", `Float (float_of_string (get "price"));
+      ]
+    | other -> Printf.eprintf "unknown --kind %s\n" other; exit 2
+  in
+  let payload : Yojson.Safe.t =
+    `Assoc (body_fields @ [ "kind", kind ]) in
+  let body = Yojson.Safe.to_string payload in
+  let j = api_request ~env ~host ~meth:`POST ~body "/api/orders" in
+  print_endline (format_order j)
+
+let cmd_orders_cancel ~env ~host cid =
+  let j = api_request ~env ~host ~meth:`DELETE ("/api/orders/" ^ cid) in
+  print_endline (format_order j)
+
+let cmd_orders args =
+  let host =
+    Option.value (arg_value "--host" args) ~default:"http://localhost:8080"
+  in
+  Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_unix.use_default ();
+  match args with
+  | "list" :: _ -> cmd_orders_list ~env ~host ()
+  | "get" :: cid :: _ -> cmd_orders_get ~env ~host cid
+  | "place" :: rest -> cmd_orders_place ~env ~host rest
+  | "cancel" :: cid :: _ -> cmd_orders_cancel ~env ~host cid
+  | _ ->
+    prerr_endline
+      {|orders <list|get|place|cancel> [--host http://localhost:8080]
+
+  list                     list all orders on the running server
+  get <cid>                fetch one order by client_order_id
+  place --symbol SBER@MISX --side BUY --qty 10 --cid my-cid
+        [--kind MARKET|LIMIT|STOP|STOP_LIMIT]
+        [--price PRICE] [--stop PRICE] [--tif DAY|GTC|IOC|FOK]
+  cancel <cid>             cancel by client_order_id|};
+    exit 2
+
 let () =
   match Array.to_list Sys.argv with
   | _ :: "list" :: _ -> cmd_list ()
   | _ :: "backtest" :: rest -> cmd_backtest rest
   | _ :: "serve" :: rest -> cmd_serve rest
+  | _ :: "orders" :: rest -> cmd_orders rest
   | _ -> usage ()

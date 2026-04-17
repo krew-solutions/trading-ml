@@ -273,6 +273,49 @@ function readBody(req) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Orders — in-memory book, mirrors Paper.Paper_broker semantics. Orders
+// go straight to Filled so the UI can exercise the lifecycle; refresh
+// the page to reset.
+// ─────────────────────────────────────────────────────────────────────────
+
+const ordersBook = new Map();
+
+function ordersList() { return [...ordersBook.values()]; }
+
+function placeOrderMock(body) {
+  const cid = body?.client_order_id ?? `mock-${Date.now()}`;
+  const order = {
+    client_order_id: cid,
+    id: cid,
+    instrument: body?.symbol ?? 'SBER@MISX',
+    side: body?.side ?? 'BUY',
+    quantity: Number(body?.quantity ?? 0),
+    filled: Number(body?.quantity ?? 0),
+    remaining: 0,
+    status: 'Filled',
+    tif: body?.tif ?? 'DAY',
+    kind: body?.kind ?? { type: 'MARKET' },
+    ts: Math.floor(Date.now() / 1000),
+  };
+  ordersBook.set(cid, order);
+  return order;
+}
+
+function getOrderMock(cid) {
+  const o = ordersBook.get(cid);
+  if (!o) throw new Error(`no order ${cid}`);
+  return o;
+}
+
+function cancelOrderMock(cid) {
+  const o = ordersBook.get(cid);
+  if (!o) throw new Error(`no order ${cid}`);
+  const cancelled = { ...o, status: 'Cancelled', filled: 0, remaining: o.quantity };
+  ordersBook.set(cid, cancelled);
+  return cancelled;
+}
+
 const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, CORS);
@@ -306,6 +349,18 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'GET' && path === '/api/stream') {
       return serveSse(req, res, url);
+    }
+    if (req.method === 'GET' && path === '/api/orders') {
+      return json(res, { orders: ordersList() });
+    }
+    if (req.method === 'POST' && path === '/api/orders') {
+      const body = await readBody(req);
+      return json(res, placeOrderMock(body));
+    }
+    if (path.startsWith('/api/orders/')) {
+      const cid = decodeURIComponent(path.slice('/api/orders/'.length));
+      if (req.method === 'GET')    return json(res, getOrderMock(cid));
+      if (req.method === 'DELETE') return json(res, cancelOrderMock(cid));
     }
     if (req.method === 'GET' && (path === '/' || path === '/health')) {
       res.writeHead(200, { 'Content-Type': 'text/plain', ...CORS });

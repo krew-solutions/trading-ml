@@ -10,6 +10,7 @@ import {
   type Board, type Mic, type StreamEvent, type Timeframe,
 } from './api.service';
 import { ChartComponent } from './chart.component';
+import { OrdersComponent } from './orders.component';
 import {
   emptyOverlay, overlayRegistry, LINE_STYLES,
   type IndicatorOverlay, type LineStyle, type LineWidth, type OverlayStyle,
@@ -37,7 +38,7 @@ let nextSlotId = 1;
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [FormsModule, ChartComponent],
+  imports: [FormsModule, ChartComponent, OrdersComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="layout">
@@ -170,6 +171,11 @@ let nextSlotId = 1;
           </div>
         </section>
       }
+
+      <section class="orders-panel">
+        <h3>Orders</h3>
+        <app-orders></app-orders>
+      </section>
     </div>
   `,
   styles: [`

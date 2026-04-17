@@ -7,6 +7,7 @@ import {
 } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
 import { ChartComponent } from './chart.component';
+import { OrdersComponent } from './orders.component';
 import type { IndicatorOverlay } from './indicators';
 import { Candle } from './api.service';
 
@@ -20,6 +21,13 @@ class ChartStubComponent {
   readonly overlays = input<IndicatorOverlay[]>([]);
   readonly seriesKey = input<string>('');
 }
+
+@Component({
+  selector: 'app-orders',
+  standalone: true,
+  template: '',
+})
+class OrdersStubComponent {}
 
 describe('AppComponent', () => {
   let fixture: ComponentFixture<AppComponent>;
@@ -57,8 +65,8 @@ describe('AppComponent', () => {
       ],
     });
     TestBed.overrideComponent(AppComponent, {
-      remove: { imports: [ChartComponent] },
-      add: { imports: [ChartStubComponent] },
+      remove: { imports: [ChartComponent, OrdersComponent] },
+      add: { imports: [ChartStubComponent, OrdersStubComponent] },
     });
 
     fixture = TestBed.createComponent(AppComponent);

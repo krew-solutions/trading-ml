@@ -1,17 +1,8 @@
-(** Wires [Websocket.Client] + [Ws] DTOs together: connects to the
-    Finam async endpoint *lazily* on the first subscribe call,
-    multiplexes all active subscriptions on one socket, and tears
-    down the connection when the last subscription is removed.
+(** Finam WebSocket bridge — thin wrapper over {!Websocket.Resilient}.
 
-    Why lazy connect: Finam closes the WebSocket ~5 seconds after
-    handshake if no subscription message has been sent. Eagerly
-    connecting at server startup (before any SSE client appears)
-    lost the connection before we ever had a reason to subscribe.
-
-    JWT is pulled fresh from [Auth.t] on every outbound message (the
-    asyncapi spec requires the token in the message body, not just
-    at handshake), so token refresh transparently covers long-lived
-    subscriptions. *)
+    One multiplexed socket for all subscriptions. On reconnect,
+    resubscribes all active keys. Heartbeat and backoff are handled
+    by the resilient layer. *)
 
 open Core
 
@@ -25,114 +16,98 @@ end
 module SubMap = Map.Make (SubKey)
 
 type bridge = {
-  env : Eio_unix.Stdenv.base;
-  sw : Eio.Switch.t;
-  cfg : Config.t;
   auth : Auth.t;
-  authenticator : X509.Authenticator.t option;
   on_event : Ws.event -> unit;
   mutex : Eio.Mutex.t;
-  mutable client : Websocket.Client.t option;
-  (* For inbound BARS events the wire payload only carries [symbol],
-     so we keep the timeframe per active subscription and use the
-     symbol's [Instrument.equal] to recover it. *)
+  mutable conn : Websocket.Resilient.t option;
   mutable bar_subs : Timeframe.t SubMap.t;
+  make_conn : on_reconnect:(unit -> unit) -> Websocket.Resilient.t;
 }
 
 let make ~env ~sw ~cfg ~auth ~on_event : bridge =
   let authenticator =
     match Http_transport.load_authenticator () with
     | Ok a -> Some a
-    | Error m ->
-      Log.warn "[finam ws] CA load failed: %s" m;
-      None
+    | Error m -> Log.warn "[finam ws] CA load failed: %s" m; None
   in
-  { env; sw; cfg; auth; authenticator; on_event;
+  let t_ref = ref None in
+  let make_conn ~on_reconnect =
+    let config : Websocket.Resilient.config = {
+      label = "finam ws";
+      ping_interval = 30.0;
+      max_backoff = 60.0;
+      connect = (fun () ->
+        Websocket.Client.connect ~env ~sw ~uri:cfg.Config.ws_url
+          ?authenticator ());
+      on_text = (fun payload ->
+        match !t_ref with
+        | None -> ()
+        | Some t ->
+          (try t.on_event (Ws.event_of_json
+                             (Yojson.Safe.from_string payload))
+           with e ->
+             Log.warn "[finam ws] decode failed: %s raw: %s"
+               (Printexc.to_string e) payload));
+      on_reconnect;
+    } in
+    Websocket.Resilient.create ~env ~sw ~config
+  in
+  let t = {
+    auth; on_event;
     mutex = Eio.Mutex.create ();
-    client = None;
-    bar_subs = SubMap.empty }
+    conn = None;
+    bar_subs = SubMap.empty;
+    make_conn;
+  } in
+  t_ref := Some t;
+  t
 
-(** Spawn the reader loop for a freshly-opened [client]. Runs as a
-    daemon on the bridge's switch; exits when the socket closes.
-    On exit it clears the bridge's client slot so the next
-    [subscribe_bars] lazily reopens. *)
-let spawn_reader t client =
-  Eio.Fiber.fork_daemon ~sw:t.sw (fun () ->
-    (try
-       let running = ref true in
-       while !running do
-         match Websocket.Client.recv client with
-         | Text payload ->
-           (try t.on_event (Ws.event_of_json
-                              (Yojson.Safe.from_string payload))
-            with e ->
-              Log.warn "[finam ws] decode failed: %s raw: %s"
-                (Printexc.to_string e) payload)
-         | Binary _ | Close _ -> running := false
-       done
-     with End_of_file -> ());
-    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-      t.client <- None;
-      t.bar_subs <- SubMap.empty);
-    `Stop_daemon)
+let send_subscribe t ~instrument ~timeframe =
+  let token = Auth.current t.auth in
+  let j = Ws.subscribe_message ~token
+    (Sub_bars { instrument; timeframe }) in
+  match t.conn with
+  | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
+  | None -> ()
 
-let ensure_client t : Websocket.Client.t =
-  match t.client with
+let resubscribe_all t () =
+  let subs = Eio.Mutex.use_ro t.mutex (fun () -> t.bar_subs) in
+  SubMap.iter (fun (instrument, timeframe) _ ->
+    send_subscribe t ~instrument ~timeframe
+  ) subs
+
+let ensure_conn t =
+  match t.conn with
   | Some c -> c
   | None ->
-    let c =
-      Websocket.Client.connect
-        ~env:t.env ~sw:t.sw ~uri:t.cfg.Config.ws_url
-        ?authenticator:t.authenticator ()
-    in
-    t.client <- Some c;
-    spawn_reader t c;
+    let c = t.make_conn ~on_reconnect:(resubscribe_all t) in
+    t.conn <- Some c;
     c
 
 let subscribe_bars (t : bridge) ~instrument ~timeframe : unit =
-  let token = Auth.current t.auth in
-  let j = Ws.subscribe_message ~token
-    (Sub_bars { instrument; timeframe })
-  in
-  let wire = Yojson.Safe.to_string j in
-  let client =
-    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-      let c = ensure_client t in
-      t.bar_subs <- SubMap.add (instrument, timeframe) timeframe t.bar_subs;
-      c)
-  in
-  Websocket.Client.send_text client wire
+  Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+    ignore (ensure_conn t);
+    t.bar_subs <- SubMap.add (instrument, timeframe) timeframe t.bar_subs);
+  send_subscribe t ~instrument ~timeframe
 
 let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   let token = Auth.current t.auth in
   let j = Ws.unsubscribe_message ~token
-    (Sub_bars { instrument; timeframe })
-  in
-  let wire = Yojson.Safe.to_string j in
-  let action =
+    (Sub_bars { instrument; timeframe }) in
+  let should_close =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
       t.bar_subs <- SubMap.remove (instrument, timeframe) t.bar_subs;
-      match t.client with
-      | None -> `Nothing
-      | Some c when SubMap.is_empty t.bar_subs ->
-        t.client <- None;
-        `Send_then_close c
-      | Some c -> `Send c)
+      SubMap.is_empty t.bar_subs)
   in
-  match action with
-  | `Nothing -> ()
-  | `Send c ->
-    (try Websocket.Client.send_text c wire with _ -> ())
-  | `Send_then_close c ->
-    (try Websocket.Client.send_text c wire with _ -> ());
-    (try Websocket.Client.send_close c () with _ -> ())
+  (match t.conn with
+   | Some c ->
+     Websocket.Resilient.send c (Yojson.Safe.to_string j);
+     if should_close then begin
+       Websocket.Resilient.close c;
+       t.conn <- None
+     end
+   | None -> ())
 
-(** Look up the active timeframe(s) for an inbound [Bars] event whose
-    payload only carries the instrument. Multiple timeframes for the
-    same instrument can be subscribed simultaneously; the bridge is
-    not currently able to disambiguate which one this batch belongs
-    to. For now we dispatch to all matching subscriptions (the
-    [Stream] deduplicates by [(instrument, timeframe)]). *)
 let timeframes_for_instrument (t : bridge) instrument : Timeframe.t list =
   Eio.Mutex.use_ro t.mutex (fun () ->
     SubMap.fold (fun (i, tf) _ acc ->

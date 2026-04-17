@@ -38,8 +38,13 @@ let send_frame (t : t) (f : Frame.frame) : unit =
 let send_text (t : t) (s : string) : unit =
   send_frame t { fin = true; opcode = Text; payload = s }
 
+let send_ping (t : t) ?(payload = "") () : unit =
+  send_frame t { fin = true; opcode = Ping; payload }
+
 let send_pong (t : t) ~payload : unit =
   send_frame t { fin = true; opcode = Pong; payload }
+
+let is_closed t = t.closed
 
 let send_close (t : t) ?(code = 1000) ?(reason = "") () : unit =
   if not t.closed then begin

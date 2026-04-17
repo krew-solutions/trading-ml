@@ -63,10 +63,32 @@ let bars t ~n ~instrument:_ ~timeframe =
     symbol [SBER@MISX] working for all downstream logic. *)
 let venues _ = [ Mic.of_string "MISX" ]
 
+(** Synthetic is a data-only source — order execution is out of scope.
+    For synthetic order simulation, wrap this adapter in
+    {!Paper.Paper_broker}: it delegates market data here and owns the
+    order book itself. Calling order methods directly raises so the
+    misconfiguration surfaces at the first call instead of silently
+    returning empty lists. *)
+let unsupported fn =
+  failwith (Printf.sprintf
+    "synthetic broker does not support %s — \
+     wrap it in Paper.Paper_broker for order simulation" fn)
+
+let place_order _ ~instrument:_ ~side:_ ~quantity:_
+    ~kind:_ ~tif:_ ~client_order_id:_ =
+  unsupported "place_order"
+let get_orders _ = unsupported "get_orders"
+let get_order _ ~client_order_id:_ = unsupported "get_order"
+let cancel_order _ ~client_order_id:_ = unsupported "cancel_order"
+
 let as_broker (t : t) : Broker.client =
   Broker.make (module struct
     type nonrec t = t
     let name = name
     let bars = bars
     let venues = venues
+    let place_order = place_order
+    let get_orders = get_orders
+    let get_order = get_order
+    let cancel_order = cancel_order
   end) t

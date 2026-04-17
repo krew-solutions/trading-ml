@@ -21,7 +21,7 @@ open Core
 let usage () =
   prerr_endline {|trading <command> [options]
 
-  serve [--port 8080] [--broker synthetic|finam|bcs]
+  serve [--port 8080] [--broker synthetic|finam|bcs] [--paper]
         [--secret SECRET] [--account ACCOUNT_ID]
         [--log-level debug|info|warning|error]
       start HTTP API server (bound to localhost).
@@ -31,6 +31,11 @@ let usage () =
       likewise via --account or <BROKER>_ACCOUNT_ID. Synthetic
       ignores credentials and serves a deterministic random-walk
       through the same Broker.S port.
+      --paper wraps the selected broker in an in-memory order
+      simulator: bars still come from the real source (or synthetic),
+      but every order is intercepted and filled against the live
+      candle stream. Use for strategy smoke-testing before routing to
+      a real broker.
 
   list
       show registered indicators and strategies
@@ -105,11 +110,21 @@ type opened =
   | Opened_bcs      of { client : Broker.client; rest : Bcs.Rest.t }
   | Opened_synthetic of { client : Broker.client }
 
+let require_account ~broker_id = function
+  | Some a -> a
+  | None ->
+    Printf.eprintf
+      "--broker %s requires --account (or %s_ACCOUNT_ID)\n"
+      broker_id (String.uppercase_ascii broker_id);
+    exit 2
+
 let open_finam ~env ~secret ~account : opened =
-  let cfg = Finam.Config.make ?account_id:account ~secret () in
+  let account_id = require_account ~broker_id:"finam" account in
+  let cfg = Finam.Config.make ~account_id ~secret () in
   let transport = Http_transport.make_eio ~env in
   let rest = Finam.Rest.make ~transport ~cfg in
-  Opened_finam { client = Finam.Finam_broker.as_broker rest; rest }
+  let adapter = Finam.Finam_broker.make ~account_id rest in
+  Opened_finam { client = Finam.Finam_broker.as_broker adapter; rest }
 
 let open_bcs ~env ~secret ~account : opened =
   let cfg = Bcs.Config.make ?account_id:account ~refresh_token:secret () in
@@ -131,7 +146,7 @@ let opened_client = function
     the server's switch; per-key SUBSCRIBE/UNSUBSCRIBE messages flow
     on subscriber lifecycle hooks; inbound BARS events fan out via
     [Stream.push_from_upstream]. *)
-let finam_live_setup ~env (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
+let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
   let cfg = Finam.Rest.cfg rest in
   let auth = Finam.Rest.auth rest in
   let registry_ref : Server.Stream.t option ref = ref None in
@@ -143,6 +158,7 @@ let finam_live_setup ~env (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
   let on_event (ev : Finam.Ws.event) =
     match ev with
     | Bars { instrument; timeframe; bars } ->
+      List.iter (fun candle -> paper_sink instrument candle) bars;
       (match !registry_ref, timeframe with
        | Some r, Some tf ->
          List.iter (fun candle ->
@@ -194,12 +210,13 @@ let finam_live_setup ~env (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
     to [on_first] and tears down on [on_last]. The BARS fan-out
     callback pushes directly into the registry via
     [Stream.push_from_upstream]. *)
-let bcs_live_setup ~env (rest : Bcs.Rest.t) ~sw : Server.Http.live_setup =
+let bcs_live_setup ~env ~paper_sink (rest : Bcs.Rest.t) ~sw : Server.Http.live_setup =
   let cfg = Bcs.Rest.cfg rest in
   let auth = Bcs.Rest.auth rest in
   let bridge = Bcs.Ws_bridge.make ~env ~sw ~cfg ~auth in
   let registry_ref : Server.Stream.t option ref = ref None in
   let push instrument timeframe candle =
+    paper_sink instrument candle;
     match !registry_ref with
     | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
     | None -> ()
@@ -258,6 +275,7 @@ let cmd_serve args =
         broker_id prefix;
       exit 2
   in
+  let paper_mode = List.mem "--paper" args in
   let opened = match broker_id with
     | "synthetic" -> open_synthetic ()
     | "finam" -> open_finam ~env ~secret:(need_secret ()) ~account
@@ -266,12 +284,30 @@ let cmd_serve args =
       failwith ("unknown --broker: " ^ other
                 ^ " (expected synthetic|finam|bcs)")
   in
-  let client = opened_client opened in
-  Log.info "broker: %s (account=%s)"
-    (Broker.name client) (Option.value account ~default:"<none>");
+  let source_client = opened_client opened in
+  let paper_t = if paper_mode
+    then Some (Paper.Paper_broker.make ~source:source_client ())
+    else None
+  in
+  let client = match paper_t with
+    | Some p -> Paper.Paper_broker.as_broker p
+    | None -> source_client
+  in
+  Log.info "broker: %s%s (account=%s)"
+    (Broker.name source_client)
+    (if paper_mode then " [paper]" else "")
+    (Option.value account ~default:"<none>");
+  (* WS feeds live upstream bars to the SSE stream and, when paper
+     mode is active, to the Paper decorator so pending orders can
+     fill without waiting for a UI poll. *)
+  let paper_sink = match paper_t with
+    | Some p -> fun instrument candle ->
+      Paper.Paper_broker.on_bar p ~instrument candle
+    | None -> fun _ _ -> ()
+  in
   let ws_setup = match opened with
-    | Opened_finam     { rest; _ } -> Some (finam_live_setup ~env rest)
-    | Opened_bcs       { rest; _ } -> Some (bcs_live_setup   ~env rest)
+    | Opened_finam     { rest; _ } -> Some (finam_live_setup ~env ~paper_sink rest)
+    | Opened_bcs       { rest; _ } -> Some (bcs_live_setup   ~env ~paper_sink rest)
     | Opened_synthetic _           -> None
   in
   Log.info "listening on http://127.0.0.1:%d (%s)"

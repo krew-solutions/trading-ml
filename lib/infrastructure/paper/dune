@@ -1,0 +1,4 @@
+(library
+ (name paper)
+ (public_name trading.paper)
+ (libraries core broker))

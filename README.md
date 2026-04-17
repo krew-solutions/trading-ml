@@ -388,3 +388,71 @@ Docs:
 - Portal: <https://trade-api.bcs.ru/>
 - Reference Go client (protocol source of truth):
   <https://github.com/tigusigalpa/bcs-trade-go>
+
+## Paper-trading mode
+
+`lib/infrastructure/paper/paper_broker.ml` is a decorator that wraps
+any `Broker.client`, intercepts order operations, and simulates fills
+against an in-memory book. Market data (`bars`, `venues`) still
+delegates to the wrapped source — live Finam, BCS, or Synthetic — so
+charts and strategies see the same prices they would in production,
+but no order ever leaves the process.
+
+Use it to smoke-test a strategy on a real data feed before routing
+orders to a broker:
+
+    dune exec -- bin/main.exe serve --broker finam --paper \
+        --secret "$FINAM_SECRET" --account "$FINAM_ACCOUNT_ID"
+
+`--paper` composes with every `--broker` choice: `synthetic` is fine
+for offline simulation, `finam` / `bcs` for a live-data dress
+rehearsal.
+
+### Fill model
+
+Paper follows the same **next-bar execution** rule as the backtester
+(`lib/domain/engine/backtest.ml`), so a strategy's P&L in paper and in
+backtest match on identical signal streams:
+
+| Kind        | Fill trigger                                      | Fill price                |
+| ----------- | ------------------------------------------------- | ------------------------- |
+| Market      | first bar strictly after placement                | `open` of that bar        |
+| Limit buy   | next bar whose `open ≤ limit` or `low ≤ limit`    | `min(open, limit)` — gap favours the trader |
+| Limit sell  | next bar whose `open ≥ limit` or `high ≥ limit`   | `max(open, limit)`        |
+| Stop buy    | next bar whose `open ≥ stop` or `high ≥ stop`     | `max(open, stop)`         |
+| Stop sell   | next bar whose `open ≤ stop` or `low ≤ stop`      | `min(open, stop)`         |
+| Stop-limit  | not simulated in this release — stays `New`       | —                         |
+
+An order placed "during" bar T cannot fill at bar T itself; it can
+only fill at bar T+1's open or later. This is the rule that keeps
+paper fills free of same-bar lookahead.
+
+### How the decorator learns about new bars
+
+Paper is passive by design — callers feed bars via `on_bar`. The wiring
+in `bin/main.ml` plugs two sources into the decorator:
+
+1. The live WebSocket path: whenever `Finam.Ws_bridge` or
+   `Bcs.Ws_bridge` delivers a candle, `bin/main.ml` calls
+   `Paper.on_bar` in addition to `Stream.push_from_upstream`.
+2. The polling path: `Paper.bars` sinks the trailing candle it
+   returns, so synthetic-source deployments (no WS) still advance as
+   the UI polls `/api/candles`.
+
+Tests drive `on_bar` directly — unit tests in
+`test/unit/infrastructure/paper/paper_broker_test.ml` cover market
+fill at next open, same-bar non-fill, limit fill with and without gap,
+stop trigger, cancel-before-fill, and cross-instrument isolation.
+
+### What paper does not do (yet)
+
+- No partial fills — orders go straight from `New` to `Filled`.
+- No fees or slippage modelling.
+- No position / cash accounting on the decorator itself (the
+  backtester's `Portfolio` is the reference for that; a live engine
+  running on top of paper can wrap the same structure).
+- Stop-limit orders are accepted but never transition past `New`.
+
+These are natural follow-ups once a live strategy engine is in place;
+the decorator's surface area is intentionally small so those additions
+land without breaking the current API.

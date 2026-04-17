@@ -40,6 +40,7 @@ let () =
     "macd momentum",    Macd_momentum_test.tests;
     "bollinger brk",    Bollinger_breakout_test.tests;
     "strat registry",   Registry_test.tests;
+    "composite strat",  Composite_test.tests;
     (* ACL: Finam *)
     "finam dto",       Finam_dto_test.tests;
     "finam auth",      Finam_auth_test.tests;

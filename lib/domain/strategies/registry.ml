@@ -78,5 +78,63 @@ let specs : spec list = [
       Strategy.make (module Bollinger_breakout) params };
 ]
 
-let find n = List.find_opt (fun s -> s.name = n) specs
-let names () = List.map (fun s -> s.name) specs
+(** Build a composite strategy from registry entries. Used by the
+    composite spec builder below and available for programmatic use. *)
+let build_child name params =
+  match List.find_opt (fun s -> s.name = name) specs with
+  | Some s -> s.build params
+  | None -> invalid_arg ("Registry: unknown child strategy " ^ name)
+
+let composite_specs : spec list = [
+  { name = "Composite_SMA_RSI";
+    params = [ "policy", Int 1 ];
+    build = fun p ->
+      let policy = match get_int p "policy" 1 with
+        | 0 -> Composite.Unanimous
+        | 2 -> Composite.Any
+        | _ -> Majority
+      in
+      let children = [
+        build_child Sma_crossover.name [];
+        build_child Rsi_mean_reversion.name [];
+      ] in
+      Strategy.make (module Composite)
+        Composite.{ policy; children } };
+
+  { name = "Composite_SMA_MACD";
+    params = [ "policy", Int 1 ];
+    build = fun p ->
+      let policy = match get_int p "policy" 1 with
+        | 0 -> Composite.Unanimous
+        | 2 -> Composite.Any
+        | _ -> Majority
+      in
+      let children = [
+        build_child Sma_crossover.name [];
+        build_child Macd_momentum.name [];
+      ] in
+      Strategy.make (module Composite)
+        Composite.{ policy; children } };
+
+  { name = "Composite_All";
+    params = [ "policy", Int 1 ];
+    build = fun p ->
+      let policy = match get_int p "policy" 1 with
+        | 0 -> Composite.Unanimous
+        | 2 -> Composite.Any
+        | _ -> Majority
+      in
+      let children = [
+        build_child Sma_crossover.name [];
+        build_child Rsi_mean_reversion.name [];
+        build_child Macd_momentum.name [];
+        build_child Bollinger_breakout.name [];
+      ] in
+      Strategy.make (module Composite)
+        Composite.{ policy; children } };
+]
+
+let all_specs = specs @ composite_specs
+
+let find n = List.find_opt (fun s -> s.name = n) all_specs
+let names () = List.map (fun s -> s.name) all_specs

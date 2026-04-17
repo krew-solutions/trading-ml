@@ -39,19 +39,23 @@ let get_query_int uri k d =
 let parse_timeframe s =
   try Timeframe.of_string s with _ -> Timeframe.H1
 
-(** Fetch bars from whatever broker the server was started with. On
-    failure we log and return [] — previous versions would silently
-    fall back to a synthetic generator, but that masked real errors.
-    Callers that want deterministic mock data run the server with
-    [--broker synthetic], which wires in a proper
-    {!Synthetic.Synthetic_broker} adapter through the same path. *)
+(** Fetch bars from whatever broker the server was started with.
+    Errors propagate as exceptions — both call sites handle them:
+
+    - HTTP [/api/candles] wraps routing in a top-level try/with that
+      turns the exception into a 500 response, so the UI sees a real
+      error rather than a misleading empty chart.
+    - The [Stream] polling fiber swallows exceptions and keeps the
+      previous cache intact, so a transient upstream failure doesn't
+      wipe the subscribers' view or gate the WS fan-out (which
+      depends on the cache being non-empty).
+
+    Previously we'd silently fall back to a synthetic generator or
+    return []. Both masked real errors. Callers that want
+    deterministic mock data run the server with [--broker synthetic]
+    — a {!Synthetic.Synthetic_broker} adapter on the same path. *)
 let fetch_candles client ~instrument ~n ~timeframe =
-  try Broker.bars client ~n ~instrument ~timeframe
-  with e ->
-    Log.warn "%s bars(%s) failed: %s"
-      (Broker.name client) (Instrument.to_qualified instrument)
-      (Printexc.to_string e);
-    []
+  Broker.bars client ~n ~instrument ~timeframe
 
 let strategy_params_of_json j =
   match j with

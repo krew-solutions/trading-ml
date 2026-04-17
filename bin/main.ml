@@ -133,51 +133,60 @@ let opened_client = function
 let finam_live_setup ~env (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
   let cfg = Finam.Rest.cfg rest in
   let auth = Finam.Rest.auth rest in
-  match
-    try Ok (Finam.Ws_bridge.connect ~env ~sw ~cfg ~auth)
-    with e -> Error e
-  with
-  | Error e ->
-    Server.Log.warn "[finam ws] connect failed: %s — falling back to polling"
-      (Printexc.to_string e);
-    Server.Http.no_live_setup
-  | Ok bridge ->
-    let registry_ref : Server.Stream.t option ref = ref None in
-    Eio.Fiber.fork_daemon ~sw (fun () ->
-      Finam.Ws_bridge.run bridge ~on_event:(fun ev ->
-        match ev with
-        | Bars { instrument; bars } ->
-          (match !registry_ref with
-           | None -> ()
-           | Some r ->
-             let tfs =
-               Finam.Ws_bridge.timeframes_for_instrument bridge instrument
-             in
-             List.iter (fun candle ->
-               List.iter (fun timeframe ->
-                 Server.Stream.push_from_upstream r
-                   ~instrument ~timeframe candle
-               ) tfs
-             ) bars)
-        | Error_ev { code; type_; message } ->
-          Server.Log.warn "[finam ws] error %d %s: %s" code type_ message
-        | Lifecycle { event; code; reason } ->
-          Server.Log.info "[finam ws] %s (%d) %s" event code reason
-        | _ -> ());
-      `Stop_daemon);
-    Server.Http.{
-      on_first = (fun ~instrument ~timeframe ->
-        try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-        with e ->
-          Server.Log.warn "[finam ws] subscribe failed: %s"
-            (Printexc.to_string e));
-      on_last = (fun ~instrument ~timeframe ->
-        try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-        with e ->
-          Server.Log.warn "[finam ws] unsubscribe failed: %s"
-            (Printexc.to_string e));
-      bind = (fun r -> registry_ref := Some r);
-    }
+  let registry_ref : Server.Stream.t option ref = ref None in
+  (* Forward-declared to break the mutual dependency: the bridge's
+     event handler needs to know the bridge to look up active
+     timeframes, so we close over a ref that gets set right after
+     [make] returns. *)
+  let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
+  let on_event (ev : Finam.Ws.event) =
+    match ev with
+    | Bars { instrument; timeframe; bars } ->
+      (match !registry_ref, timeframe with
+       | Some r, Some tf ->
+         List.iter (fun candle ->
+           Server.Stream.push_from_upstream r
+             ~instrument ~timeframe:tf candle
+         ) bars
+       | Some _, None ->
+         (* No subscription_key in the frame — fall back to the
+            legacy scan of active subs for this instrument. *)
+         (match !bridge_ref with
+          | None -> ()
+          | Some b ->
+            let tfs =
+              Finam.Ws_bridge.timeframes_for_instrument b instrument in
+            match !registry_ref with
+            | None -> ()
+            | Some r ->
+              List.iter (fun candle ->
+                List.iter (fun tf ->
+                  Server.Stream.push_from_upstream r
+                    ~instrument ~timeframe:tf candle
+                ) tfs
+              ) bars)
+       | None, _ -> ())
+    | Error_ev { code; type_; message } ->
+      Server.Log.warn "[finam ws] error %d %s: %s" code type_ message
+    | Lifecycle { event; code; reason } ->
+      Server.Log.info "[finam ws] %s (%d) %s" event code reason
+    | _ -> ()
+  in
+  let bridge = Finam.Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event in
+  bridge_ref := Some bridge;
+  Server.Http.{
+    on_first = (fun ~instrument ~timeframe ->
+      try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
+      with e ->
+        Server.Log.warn "[finam ws] subscribe failed: %s"
+          (Printexc.to_string e));
+    on_last = (fun ~instrument ~timeframe ->
+      try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
+      with e ->
+        Server.Log.warn "[finam ws] unsubscribe failed: %s"
+          (Printexc.to_string e));
+    bind = (fun r -> registry_ref := Some r);
+  }
 
 (** Build a {!Server.Http.live_setup} for BCS. Unlike Finam, BCS
     opens one socket per subscription, so the bridge defers connect

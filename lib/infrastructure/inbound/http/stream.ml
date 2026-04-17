@@ -141,8 +141,27 @@ let start_poll t (key : key) (sub : sub_state) =
            let fresh = t.fetch ~instrument ~n:500 ~timeframe in
            let events, clients =
              Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-               let evs = diff_and_emit ~cached:sub.last_candles ~fresh in
-               sub.last_candles <- fresh;
+               (* Merge fresh (REST snapshot) with any live WS updates
+                  that landed after the last poll. REST can lag WS by
+                  a minute or more (Finam caches at minute boundaries),
+                  so unconditionally replacing the cache would roll its
+                  tail backwards — the next WS candle would then look
+                  "newer" than the cache tail and get re-emitted as
+                  Bar_closed, producing spurious duplicate-ts events.
+
+                  Strategy: keep every cached bar strictly newer than
+                  fresh's tail, append it after the REST history. *)
+               let merged = match last fresh, last sub.last_candles with
+                 | None, _ -> sub.last_candles  (* poll empty → keep cache *)
+                 | Some _, None -> fresh
+                 | Some fl, Some _ ->
+                   let ws_tail = List.filter (fun (c : Candle.t) ->
+                     Int64.compare c.ts fl.ts > 0) sub.last_candles
+                   in
+                   fresh @ ws_tail
+               in
+               let evs = diff_and_emit ~cached:sub.last_candles ~fresh:merged in
+               sub.last_candles <- merged;
                evs, sub.clients)
            in
            List.iter (fun ev ->

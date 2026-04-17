@@ -105,35 +105,84 @@ let unsubscribe_message ~token = function
       "token",  `String token;
     ]
 
-(** Decoded server-side events. The [bars] payload is always a list
-    because Finam may batch (warm-up snapshot + live updates), but each
-    list element shares one [(instrument, timeframe)] subscription —
-    the timeframe is recovered by the bridge from its subscription
-    table, since the wire payload only carries [symbol]. *)
+(** Decoded server-side events. BARS events carry the timeframe
+    directly (recovered from [subscription_key], which Finam encodes
+    as ["<TICKER>@<MIC>:<TIMEFRAME>"]), so dispatch is exact rather
+    than best-effort. *)
 type event =
-  | Bars of { instrument : Instrument.t; bars : Candle.t list }
+  | Bars of {
+      instrument : Instrument.t;
+      timeframe : Timeframe.t option;
+      bars : Candle.t list;
+    }
   | Quote of { instrument : Instrument.t;
                bid : Decimal.t; ask : Decimal.t; ts : int64 }
   | Error_ev of { code : int; type_ : string; message : string }
   | Lifecycle of { event : string; code : int; reason : string }
   | Other of Yojson.Safe.t
 
+(** Finam's gRPC→REST bridge frequently double-encodes [payload] as a
+    JSON string (the gRPC wrapper type [google.protobuf.Value]
+    renders nested messages as JSON text). Unwrap so downstream field
+    lookups see a real object. *)
+let unwrap_payload (j : Yojson.Safe.t) : Yojson.Safe.t =
+  match j with
+  | `String s ->
+    (try Yojson.Safe.from_string s with _ -> `Null)
+  | other -> other
+
+(** Parse [subscription_key] formatted as ["<TICKER>@<MIC>:<TIMEFRAME>"]
+    (e.g. [SBER@MISX:TIME_FRAME_M1]) into the corresponding typed
+    pair. Returns [None] if the format doesn't match. *)
+let parse_subscription_key (k : string) : (Instrument.t * Timeframe.t) option =
+  match String.index_opt k ':' with
+  | None -> None
+  | Some i ->
+    let sym = String.sub k 0 i in
+    let tf  = String.sub k (i + 1) (String.length k - i - 1) in
+    try
+      let instrument = Instrument.of_qualified sym in
+      let timeframe = match tf with
+        | "TIME_FRAME_M1"  -> Timeframe.M1
+        | "TIME_FRAME_M5"  -> M5
+        | "TIME_FRAME_M15" -> M15
+        | "TIME_FRAME_M30" -> M30
+        | "TIME_FRAME_H1"  -> H1
+        | "TIME_FRAME_H4"  -> H4
+        | "TIME_FRAME_D"   -> D1
+        | "TIME_FRAME_W"   -> W1
+        | "TIME_FRAME_MN"  -> MN1
+        | _ -> raise Exit
+      in
+      Some (instrument, timeframe)
+    with _ -> None
+
 let event_of_json (j : Yojson.Safe.t) : event =
   let open Yojson.Safe.Util in
   match member "type" j with
   | `String "DATA" ->
+    let sub_key = match member "subscription_key" j with
+      | `String s -> parse_subscription_key s
+      | _ -> None
+    in
     (match member "subscription_type" j with
      | `String "BARS" ->
-       let payload = member "payload" j in
-       let instrument =
-         Instrument.of_qualified (member "symbol" payload |> to_string) in
+       let payload = unwrap_payload (member "payload" j) in
+       let instrument, timeframe = match sub_key with
+         | Some (i, tf) -> i, Some tf
+         | None ->
+           (* Fallback: recover instrument from payload, timeframe unknown. *)
+           let i = Instrument.of_qualified
+             (member "symbol" payload |> to_string) in
+           i, None
+       in
        let bars = match member "bars" payload with
          | `List items -> List.map Dto.candle_of_json items
          | _ -> []
        in
-       Bars { instrument; bars }
+       Bars { instrument; timeframe; bars }
      | `String "QUOTES" ->
-       let payload = member "payload" j in
+       let payload = unwrap_payload (member "payload" j) in
        (* Each quote arrives as one element in payload.quote[]. We surface
           the first; callers that care about deeper books can read raw. *)
        (match member "quote" payload with

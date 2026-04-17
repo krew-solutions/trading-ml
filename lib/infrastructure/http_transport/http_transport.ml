@@ -9,7 +9,7 @@
 type headers = (string * string) list
 
 type request = {
-  meth : [ `GET | `POST | `DELETE ];
+  meth : [ `GET | `POST | `PUT | `DELETE ];
   url : Uri.t;
   headers : headers;
   body : string option;
@@ -106,6 +106,8 @@ let make_eio ~env : t =
       | `DELETE -> Cohttp_eio.Client.delete ~sw ~headers client req.url
       | `POST   ->
         Cohttp_eio.Client.post ~sw ~headers ?body client req.url
+      | `PUT    ->
+        Cohttp_eio.Client.put ~sw ~headers ?body client req.url
     in
     let status = Cohttp.Code.code_of_status (Cohttp.Response.status resp) in
     let body_str = Eio.Flow.read_all body_in in

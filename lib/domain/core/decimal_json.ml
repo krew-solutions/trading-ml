@@ -1,7 +1,14 @@
 (** Separate JSON encoding so [Decimal.mli] stays free of external-module
     references and remains Gospel-checkable. *)
 
+(** Canonical string encoding — used for candle data and most fields. *)
 let yojson_of_t x : Yojson.Safe.t = `String (Decimal.to_string x)
+
+(** gRPC [google.type.Decimal] wrapper: [{"value": "<string>"}].
+    Required by Finam's REST API for price/quantity fields in order
+    placement. *)
+let yojson_of_t_wrapped x : Yojson.Safe.t =
+  `Assoc [ "value", `String (Decimal.to_string x) ]
 
 let t_of_yojson : Yojson.Safe.t -> Decimal.t = function
   | `String s -> Decimal.of_string s

@@ -45,6 +45,7 @@ let () =
     "finam auth",      Finam_auth_test.tests;
     "ws frame",        Websocket_frame_test.tests;
     "finam ws proto",  Finam_ws_test.tests;
+    "finam orders",    Finam_order_test.tests;
     (* ACL: BCS *)
     "bcs auth",    Bcs_auth_test.tests;
     "bcs rest",    Bcs_rest_test.tests;

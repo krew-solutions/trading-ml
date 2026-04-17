@@ -38,7 +38,7 @@ let subscribe_message ~token = function
       "type",   `String "QUOTES";
       "data",   `Assoc [
         "symbols", `List (List.map (fun i ->
-          `String (Rest.qualify_instrument i)) is);
+          `String (Routing.qualify_instrument i)) is);
       ];
       "token",  `String token;
     ]
@@ -47,7 +47,7 @@ let subscribe_message ~token = function
       "action", `String "SUBSCRIBE";
       "type",   `String "ORDER_BOOK";
       "data",   `Assoc [
-        "symbol", `String (Rest.qualify_instrument i);
+        "symbol", `String (Routing.qualify_instrument i);
       ];
       "token",  `String token;
     ]
@@ -56,7 +56,7 @@ let subscribe_message ~token = function
       "action", `String "SUBSCRIBE";
       "type",   `String "BARS";
       "data",   `Assoc [
-        "symbol",    `String (Rest.qualify_instrument instrument);
+        "symbol",    `String (Routing.qualify_instrument instrument);
         "timeframe", `String (Rest.timeframe_wire timeframe);
       ];
       "token",  `String token;
@@ -75,7 +75,7 @@ let unsubscribe_message ~token = function
       "action", `String "UNSUBSCRIBE";
       "type",   `String "BARS";
       "data",   `Assoc [
-        "symbol",    `String (Rest.qualify_instrument instrument);
+        "symbol",    `String (Routing.qualify_instrument instrument);
         "timeframe", `String (Rest.timeframe_wire timeframe);
       ];
       "token",  `String token;
@@ -86,7 +86,7 @@ let unsubscribe_message ~token = function
       "type",   `String "QUOTES";
       "data",   `Assoc [
         "symbols", `List (List.map (fun i ->
-          `String (Rest.qualify_instrument i)) is);
+          `String (Routing.qualify_instrument i)) is);
       ];
       "token",  `String token;
     ]
@@ -94,7 +94,7 @@ let unsubscribe_message ~token = function
     `Assoc [
       "action", `String "UNSUBSCRIBE";
       "type",   `String "ORDER_BOOK";
-      "data",   `Assoc [ "symbol", `String (Rest.qualify_instrument i) ];
+      "data",   `Assoc [ "symbol", `String (Routing.qualify_instrument i) ];
       "token",  `String token;
     ]
   | Sub_account account_id ->

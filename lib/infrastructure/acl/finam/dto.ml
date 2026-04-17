@@ -153,6 +153,136 @@ let instrument_of_asset_json (j : Yojson.Safe.t) : Instrument.t =
   in
   Instrument.make ~ticker ~venue ?isin ?board ()
 
+(** --- Finam wire-format enum converters (gRPC convention) --- *)
+
+let finam_kind_to_wire : Order.kind -> string = function
+  | Market -> "ORDER_TYPE_MARKET"
+  | Limit _ -> "ORDER_TYPE_LIMIT"
+  | Stop _ -> "ORDER_TYPE_STOP"
+  | Stop_limit _ -> "ORDER_TYPE_STOP_LIMIT"
+
+let finam_kind_of_wire s price_fn =
+  match s with
+  | "ORDER_TYPE_LIMIT" -> Order.Limit (price_fn "limit_price")
+  | "ORDER_TYPE_STOP" -> Stop (price_fn "stop_price")
+  | "ORDER_TYPE_STOP_LIMIT" ->
+    Stop_limit { stop = price_fn "stop_price"; limit = price_fn "limit_price" }
+  | _ -> Market
+
+let finam_tif_to_wire : Order.time_in_force -> string = function
+  | DAY -> "TIME_IN_FORCE_DAY"
+  | GTC -> "TIME_IN_FORCE_GOOD_TILL_CANCEL"
+  | IOC -> "TIME_IN_FORCE_IOC"
+  | FOK -> "TIME_IN_FORCE_FOK"
+
+let finam_tif_of_wire = function
+  | "TIME_IN_FORCE_GOOD_TILL_CANCEL" -> Order.GTC
+  | "TIME_IN_FORCE_IOC" -> IOC
+  | "TIME_IN_FORCE_FOK" -> FOK
+  | _ -> DAY
+
+let finam_side_to_wire : Side.t -> string = function
+  | Buy -> "SIDE_BUY" | Sell -> "SIDE_SELL"
+
+let finam_side_of_wire = function
+  | "SIDE_SELL" -> Side.Sell | _ -> Buy
+
+let finam_status_of_wire = function
+  | "ORDER_STATUS_NEW" -> Order.New
+  | "ORDER_STATUS_PARTIALLY_FILLED" -> Partially_filled
+  | "ORDER_STATUS_FILLED" -> Filled
+  | "ORDER_STATUS_CANCELED" -> Cancelled
+  | "ORDER_STATUS_REJECTED"
+  | "ORDER_STATUS_REJECTED_BY_EXCHANGE"
+  | "ORDER_STATUS_DENIED_BY_BROKER" -> Rejected
+  | "ORDER_STATUS_EXPIRED" -> Expired
+  | "ORDER_STATUS_PENDING_CANCEL" -> Pending_cancel
+  | "ORDER_STATUS_PENDING_NEW" -> Pending_new
+  | "ORDER_STATUS_SUSPENDED" -> Suspended
+  | "ORDER_STATUS_FAILED" -> Failed
+  | _ -> New
+
+(** --- Order DTO: encode PlaceOrder body and decode OrderState response --- *)
+
+(** Build the JSON body for [POST /v1/accounts/{id}/orders].
+    Prices and quantities use the [{"value": "..."}] wrapper Finam
+    requires on the wire (protobuf [google.type.Decimal]). *)
+let place_order_payload
+    ~(instrument : Instrument.t)
+    ~(side : Side.t)
+    ~(quantity : Decimal.t)
+    ~(kind : Order.kind)
+    ~(tif : Order.time_in_force)
+    ?client_order_id
+    () : Yojson.Safe.t =
+  let w = Decimal_json.yojson_of_t_wrapped in
+  let price_fields = match kind with
+    | Market -> []
+    | Limit p -> [ "limit_price", w p ]
+    | Stop p  -> [ "stop_price", w p ]
+    | Stop_limit { stop; limit } -> [
+        "limit_price", w limit;
+        "stop_price", w stop;
+      ]
+  in
+  let coid = match client_order_id with
+    | None -> [] | Some id -> [ "client_order_id", `String id ]
+  in
+  `Assoc ([
+    "symbol",        `String (Routing.qualify_instrument instrument);
+    "quantity",       w quantity;
+    "side",          `String (finam_side_to_wire side);
+    "type",          `String (finam_kind_to_wire kind);
+    "time_in_force", `String (finam_tif_to_wire tif);
+  ] @ price_fields @ coid)
+
+(** Decode a single Finam [OrderState] JSON (returned by GetOrder,
+    PlaceOrder, and as array elements in GetOrders). The nested
+    [order] object carries the original request parameters;
+    top-level fields carry execution state. *)
+let order_of_json (j : Yojson.Safe.t) : Order.t =
+  let open Yojson.Safe.Util in
+  let str k = match member k j with `String s -> s | _ -> "" in
+  let inner = member "order" j in
+  let inner_str k = match member k inner with `String s -> s | _ -> "" in
+  let dec k obj =
+    try decimal_of_json (member k obj) with _ -> Decimal.zero
+  in
+  let instrument =
+    try Instrument.of_qualified (inner_str "symbol")
+    with _ ->
+      Instrument.make ~ticker:(Ticker.of_string "UNKNOWN")
+        ~venue:(Mic.of_string "XXXX") ()
+  in
+  let price_fn field_name = dec field_name inner in
+  let kind = finam_kind_of_wire (inner_str "type") price_fn in
+  let tif = finam_tif_of_wire (inner_str "time_in_force") in
+  let side = finam_side_of_wire (inner_str "side") in
+  let status = finam_status_of_wire (str "status") in
+  let created_ts = match member "transact_at" j with
+    | `String s -> parse_iso8601 s | _ -> 0L
+  in
+  {
+    Order.id = str "order_id";
+    exec_id = str "exec_id";
+    instrument;
+    side;
+    quantity = dec "initial_quantity" j;
+    filled = dec "executed_quantity" j;
+    remaining = dec "remaining_quantity" j;
+    kind;
+    tif;
+    status;
+    created_ts;
+    client_order_id = inner_str "client_order_id";
+  }
+
+let orders_of_json (j : Yojson.Safe.t) : Order.t list =
+  let open Yojson.Safe.Util in
+  match member "orders" j with
+  | `List items -> List.map order_of_json items
+  | _ -> []
+
 let candles_of_json j : Candle.t list =
   let arr = match Yojson.Safe.Util.member "bars" j with
     | `List l -> l

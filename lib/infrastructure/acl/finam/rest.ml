@@ -75,10 +75,7 @@ let delete t path =
   let resp = send_with_auth_retry t ~meth:`DELETE ~url:u ~body:None in
   ignore (ensure_ok resp)
 
-(** Finam's new API expects symbols in [TICKER@MIC] form. *)
-let qualify_instrument (i : Instrument.t) : string =
-  Ticker.to_string (Instrument.ticker i)
-  ^ "@" ^ Mic.to_string (Instrument.venue i)
+let qualify_instrument = Routing.qualify_instrument
 
 (** Finam gRPC TimeFrame enum mapping. Kept here, not in [Core.Timeframe],
     so the core type stays broker-agnostic. *)
@@ -142,6 +139,19 @@ let account t ~account_id =
 let exchanges t : Yojson.Safe.t =
   get_json t "/v1/exchanges" []
 
+(** GET /v1/accounts/{account_id}/orders — list all orders. *)
+let get_orders t ~account_id : Order.t list =
+  let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
+  Dto.orders_of_json (get_json t path [])
+
+(** GET /v1/accounts/{account_id}/orders/{order_id} — single order. *)
+let get_order t ~account_id ~order_id : Order.t =
+  let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
+  Dto.order_of_json (get_json t path [])
+
+(** POST /v1/accounts/{account_id}/orders — place a new order.
+    Returns the server's order state (including the assigned
+    [order_id] and initial [status]). *)
 let place_order
     (t : t)
     ~account_id
@@ -149,29 +159,23 @@ let place_order
     ~(side : Side.t)
     ~(quantity : Decimal.t)
     ~(kind : Order.kind)
-    ~(tif : Order.time_in_force) : Yojson.Safe.t =
+    ~(tif : Order.time_in_force)
+    ?client_order_id
+    () : Order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
-  let price_fields = match kind with
-    | Market -> []
-    | Limit p -> [ "limit_price", Decimal_json.yojson_of_t p ]
-    | Stop p  -> [ "stop_price", Decimal_json.yojson_of_t p ]
-    | Stop_limit { stop; limit } -> [
-        "limit_price", Decimal_json.yojson_of_t limit;
-        "stop_price", Decimal_json.yojson_of_t stop;
-      ]
+  let payload =
+    Dto.place_order_payload ~instrument ~side ~quantity ~kind ~tif
+      ?client_order_id ()
   in
-  let payload : Yojson.Safe.t = `Assoc ([
-    "symbol", `String (qualify_instrument instrument);
-    "side", `String (Side.to_string side);
-    "quantity", Decimal_json.yojson_of_t quantity;
-    "type", `String (Order.kind_to_string kind);
-    "time_in_force", `String (Order.tif_to_string tif);
-  ] @ price_fields)
-  in
-  post_json t path payload
+  Dto.order_of_json (post_json t path payload)
 
-let cancel_order t ~account_id ~order_id =
-  delete t (Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id)
+(** DELETE /v1/accounts/{account_id}/orders/{order_id} — cancel. *)
+let cancel_order t ~account_id ~order_id : Order.t =
+  let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
+  let resp = send_with_auth_retry t ~meth:`DELETE
+    ~url:(url t.cfg path []) ~body:None in
+  Dto.order_of_json
+    (Yojson.Safe.from_string (ensure_ok resp))
 
 (** Exposed for [Ws_bridge] so it can put the current JWT into the
     upgrade handshake's Authorization header. *)

@@ -76,6 +76,54 @@ let specs : spec list = [
         allow_short = get_bool p "allow_short" true;
       } in
       Strategy.make (module Bollinger_breakout) params };
+
+  { name = Mfi_mean_reversion.name;
+    params = [
+      "period", Int 14;
+      "lower", Float 20.0; "upper", Float 80.0;
+      "exit_long", Float 50.0; "exit_short", Float 50.0;
+      "allow_short", Bool false;
+    ];
+    build = fun p ->
+      let params = Mfi_mean_reversion.{
+        period = get_int p "period" 14;
+        lower = get_float p "lower" 20.0;
+        upper = get_float p "upper" 80.0;
+        exit_long = get_float p "exit_long" 50.0;
+        exit_short = get_float p "exit_short" 50.0;
+        allow_short = get_bool p "allow_short" false;
+      } in
+      Strategy.make (module Mfi_mean_reversion) params };
+
+  { name = Obv_ma_crossover.name;
+    params = [ "period", Int 20; "allow_short", Bool false ];
+    build = fun p ->
+      let params = Obv_ma_crossover.{
+        period = get_int p "period" 20;
+        allow_short = get_bool p "allow_short" false;
+      } in
+      Strategy.make (module Obv_ma_crossover) params };
+
+  { name = Chaikin_momentum.name;
+    params = [
+      "fast", Int 3; "slow", Int 10; "allow_short", Bool false;
+    ];
+    build = fun p ->
+      let params = Chaikin_momentum.{
+        fast = get_int p "fast" 3;
+        slow = get_int p "slow" 10;
+        allow_short = get_bool p "allow_short" false;
+      } in
+      Strategy.make (module Chaikin_momentum) params };
+
+  { name = Ad_ma_crossover.name;
+    params = [ "period", Int 20; "allow_short", Bool false ];
+    build = fun p ->
+      let params = Ad_ma_crossover.{
+        period = get_int p "period" 20;
+        allow_short = get_bool p "allow_short" false;
+      } in
+      Strategy.make (module Ad_ma_crossover) params };
 ]
 
 (** Build a composite strategy from registry entries. Used by the

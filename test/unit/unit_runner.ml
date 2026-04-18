@@ -41,6 +41,10 @@ let () =
     "rsi mean rev",     Rsi_mean_reversion_test.tests;
     "macd momentum",    Macd_momentum_test.tests;
     "bollinger brk",    Bollinger_breakout_test.tests;
+    "mfi mean rev",     Mfi_mean_reversion_test.tests;
+    "obv ma crossover", Obv_ma_crossover_test.tests;
+    "chaikin momentum", Chaikin_momentum_test.tests;
+    "ad ma crossover",  Ad_ma_crossover_test.tests;
     "strat registry",   Registry_test.tests;
     "composite strat",  Composite_test.tests;
     (* ML *)

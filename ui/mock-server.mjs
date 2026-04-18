@@ -86,6 +86,27 @@ const strategiesCatalog = [
       { name: 'k',           type: 'float', default:  2 },
       { name: 'allow_short', type: 'bool',  default: true },
   ]},
+  { name: 'MFI_MeanReversion', params: [
+      { name: 'period',      type: 'int',   default: 14 },
+      { name: 'lower',       type: 'float', default: 20 },
+      { name: 'upper',       type: 'float', default: 80 },
+      { name: 'exit_long',   type: 'float', default: 50 },
+      { name: 'exit_short',  type: 'float', default: 50 },
+      { name: 'allow_short', type: 'bool',  default: false },
+  ]},
+  { name: 'OBV_MA_Crossover', params: [
+      { name: 'period',      type: 'int',  default: 20 },
+      { name: 'allow_short', type: 'bool', default: false },
+  ]},
+  { name: 'Chaikin_Momentum', params: [
+      { name: 'fast',        type: 'int',  default:  3 },
+      { name: 'slow',        type: 'int',  default: 10 },
+      { name: 'allow_short', type: 'bool', default: false },
+  ]},
+  { name: 'AD_MA_Crossover', params: [
+      { name: 'period',      type: 'int',  default: 20 },
+      { name: 'allow_short', type: 'bool', default: false },
+  ]},
 ];
 
 // ─────────────────────────────────────────────────────────────────────────

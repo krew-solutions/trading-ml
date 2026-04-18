@@ -1,12 +1,17 @@
 (** The strategy registry is the thing the UI/CLI actually dispatches
     through, so a couple of sanity checks guard against name drift. *)
 
-let test_all_four_strategies_listed () =
+let test_all_strategies_listed () =
   let names = Strategies.Registry.names () in
   List.iter (fun expected ->
     Alcotest.(check bool) (expected ^ " registered") true
       (List.mem expected names))
-    [ "SMA_Crossover"; "RSI_MeanReversion"; "MACD_Momentum"; "Bollinger_Breakout" ]
+    [ "SMA_Crossover"; "RSI_MeanReversion"; "MACD_Momentum";
+      "Bollinger_Breakout";
+      (* Volume-based strategies *)
+      "MFI_MeanReversion"; "OBV_MA_Crossover";
+      "Chaikin_Momentum"; "AD_MA_Crossover";
+    ]
 
 let test_find_returns_some () =
   match Strategies.Registry.find "SMA_Crossover" with
@@ -28,7 +33,7 @@ let test_build_respects_default_params () =
     Alcotest.(check bool) "builds without params" true true
 
 let tests = [
-  "catalog has four strategies", `Quick, test_all_four_strategies_listed;
+  "catalog has all strategies",  `Quick, test_all_strategies_listed;
   "find known",                  `Quick, test_find_returns_some;
   "find unknown → None",         `Quick, test_find_unknown_returns_none;
   "build with empty params",     `Quick, test_build_respects_default_params;

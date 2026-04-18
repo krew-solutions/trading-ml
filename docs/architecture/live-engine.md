@@ -20,6 +20,9 @@ type t = {
   mutable placed : Order.t list;
   pending : (string, pending) Hashtbl.t;  (* cid → reservation meta *)
   mutable bars_since_reconcile : int;
+  mutable peak_equity : Decimal.t;           (* kill-switch *)
+  mutable halted : bool;                     (* kill-switch *)
+  mutable recent_order_ts : float list;      (* rate-limit *)
   mutex : Mutex.t;
 }
 ```
@@ -36,6 +39,8 @@ type config = {
   tif : Order.time_in_force;
   fee_rate : float;
   reconcile_every : int;
+  max_drawdown_pct : float;            (* kill-switch, 0.0 disables *)
+  rate_limit : (int * float) option;   (* (max_orders, window_seconds) *)
 }
 ```
 
@@ -121,6 +126,75 @@ broker call so if Paper's synchronous on_fill fires from inside
 
 On submission failure the reservation is released and the cid map
 cleaned up — cash becomes available again for subsequent signals.
+
+## Safety gates
+
+Before every `Broker.place_order`, `submit_order` consults
+`check_gates`:
+
+```ocaml
+let check_gates t : [ `Allow | `Drop of string ] =
+  if t.halted then `Drop "kill switch tripped"
+  else if not (rate_limit_ok t) then `Drop "rate limit exceeded"
+  else `Allow
+```
+
+A `Drop` releases the reservation and logs the reason; a second
+signal from the strategy on a later bar will try again. An
+`Allow` records the order's timestamp (for rate-limit windowing)
+and proceeds to the broker.
+
+Two gates are implemented; the pattern is extensible — any new
+invariant (position concentration cap, session window, circuit
+breaker on consecutive rejects) fits as another branch in
+`check_gates`.
+
+### Kill switch — drawdown
+
+`update_drawdown`, called on every `apply_event` before
+`submit_order`, tracks peak equity and trips `halted = true`
+when
+
+```
+(peak - current) / peak > config.max_drawdown_pct
+```
+
+Equity is marked to the current bar's close. Peak equity
+updates on new highs; once the switch trips, it stays tripped
+until `reset` is called deliberately. Tripping DOES NOT affect
+reservations already in flight — those continue to receive
+fill events and commit normally via `on_fill_event` or
+`reconcile`. Only **new** order submissions are blocked.
+
+Typical production values: `max_drawdown_pct = 0.10..0.20`.
+`0.0` disables the switch.
+
+`Live_engine.reset t` clears the flag and re-baselines
+`peak_equity` to the current equity — intended as a deliberate
+human operation after investigating the cause.
+
+### Rate limit — order throughput
+
+`rate_limit_ok` prunes `recent_order_ts` to entries within
+`config.rate_limit`'s window and checks the count:
+
+```ocaml
+let rate_limit_ok t =
+  match t.cfg.rate_limit with
+  | None -> true
+  | Some (max_orders, window_seconds) ->
+    let cutoff = Unix.gettimeofday () -. window_seconds in
+    let recent = List.filter (fun ts -> ts >= cutoff) t.recent_order_ts in
+    t.recent_order_ts <- recent;
+    List.length recent < max_orders
+```
+
+Protects against runaway strategies (a bug that emits 1000
+Enter_longs on one bar would be rate-limited) and against
+broker API quotas. `None` disables.
+
+Dropped orders release their reservation, so over-production
+of signals doesn't leak cash.
 
 ## Fill event path
 

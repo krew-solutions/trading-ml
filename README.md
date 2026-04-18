@@ -484,3 +484,68 @@ same `fee_rate`.
   the live engine via `Engine.Risk`, not in Paper.
 - **No market-impact model beyond volume participation** — large
   orders consume bar volume but do not move the next bar's prices.
+
+## Live engine
+
+`lib/application/live_engine/` drives a strategy in real time: it
+consumes bars from a WebSocket stream, threads them through the
+same `Pipeline.run` that `Backtest.run` uses, and submits market
+orders via `Broker.place_order`. Attach by adding `--strategy
+NAME` to `serve`:
+
+    dune exec -- bin/main.exe serve --broker finam --paper \
+        --strategy SMA_Crossover --secret "$FINAM_SECRET" \
+        --account "$FINAM_ACCOUNT_ID"
+
+The engine runs in its own Eio fiber, consuming a `Candle.t`
+stream pushed by the broker's WS bridge. Paper and real brokers
+plug in identically through the shared `Broker.S` port.
+
+### Two-phase order ledger
+
+Orders go through a **reservation ledger** that mirrors how
+professional systems handle the broker-latency gap:
+
+1. `Step.execute_pending` reserves cash (and quantity for sells)
+   — `available_cash` drops, but actual `cash` / `positions` are
+   unchanged.
+2. `Broker.place_order` submits to the broker.
+3. On a broker fill event (`Paper.on_fill`, or WS `order_update`
+   from a real broker), `Live_engine.on_fill_event` commits the
+   reservation against actual fill numbers.
+4. A periodic `reconcile` catches anything the primary event
+   path missed — polls `Broker.get_orders`, reads actual per-
+   execution prices via `Broker.get_executions`, commits or
+   releases as needed.
+
+`Risk.check` gates on `available_cash`, so back-to-back signals
+can't collectively overspend while an earlier order is in flight.
+See [`docs/architecture/reservations.md`][res-doc] for the full
+mechanism.
+
+[res-doc]: docs/architecture/reservations.md
+
+### Safety gates
+
+Before every broker submission the engine consults two gates:
+
+- **Kill switch** — `max_drawdown_pct` (set to `0.15` by default
+  in `bin/main.ml`). Tracks peak equity marked-to-market; trips
+  when drawdown exceeds the threshold. Once tripped, no new
+  orders are submitted until `Live_engine.reset` is called
+  deliberately. Existing reservations continue to settle
+  normally.
+- **Rate limit** — optional `(max_orders, window_seconds)`.
+  Protects against runaway strategies and broker API quotas.
+
+Gates are cheap to add — see `check_gates` in
+`live_engine.ml` for the pattern.
+
+### What's deferred
+
+- **Real broker WS `order_update`** handlers for Finam/BCS —
+  today Paper is the only source of `on_fill_event`. The Finam
+  adapter's `get_executions` stub will be wired to
+  `/v1/accounts/{id}/trades` alongside the live smoke-test.
+- **CLI flags for `--max-drawdown` and `--rate-limit`** — values
+  are hard-coded reasonable defaults in `bin/main.ml` for now.

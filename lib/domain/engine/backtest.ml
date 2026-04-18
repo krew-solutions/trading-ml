@@ -1,11 +1,11 @@
-(** Event-driven backtester. Runs a strategy over a historical candle
-    stream, routes signals through the risk gate, executes fills at the
-    next bar's open ("next-bar execution" avoids look-ahead bias), and
-    records an equity curve.
+(** Historical replay driver over {!Step}. Folds the shared
+    state machine over a candle list, collecting fills and a
+    mark-to-market equity curve, then aggregates return / drawdown.
 
-    All state is explicit and the function is referentially transparent:
-    given the same inputs, the same trade log comes out. This is the
-    property backtest correctness tests rely on. *)
+    All the trade-sizing, risk-gating and portfolio-update logic
+    lives in {!Step.execute_pending} / {!Step.advance_strategy} —
+    {!Live_engine} drives the same primitives on streaming bars,
+    so paper P&L converges with a backtest over identical data. *)
 
 open Core
 
@@ -19,18 +19,10 @@ type fill = {
   reason : string;
 }
 
-type step = {
-  ts : int64;
-  equity : Decimal.t;
-  cash : Decimal.t;
-  signal : Signal.t option;
-  fill : fill option;
-}
-
 type result = {
   final : Portfolio.t;
-  fills : fill list;          (** chronological *)
-  equity_curve : (int64 * Decimal.t) list;   (** chronological *)
+  fills : fill list;
+  equity_curve : (int64 * Decimal.t) list;
   max_drawdown : float;
   total_return : float;
   num_trades : int;
@@ -38,58 +30,13 @@ type result = {
 
 type config = {
   initial_cash : Decimal.t;
-  fee_rate : float;         (** e.g. 0.0005 = 5 bps *)
+  fee_rate : float;
   limits : Risk.limits;
 }
 
 let default_config ?(initial_cash = Decimal.of_int 1_000_000) () =
   { initial_cash; fee_rate = 0.0005;
     limits = Risk.default_limits ~equity:initial_cash }
-
-let apply_signal
-    ~config ~portfolio ~instrument ~(next_open : Decimal.t option)
-    (sig_ : Signal.t) : Portfolio.t * fill option =
-  let mark _ = next_open in
-  match next_open with
-  | None -> portfolio, None
-  | Some price ->
-    let equity = Portfolio.equity portfolio mark in
-    let open Signal in
-    let open_side_opt =
-      match sig_.action with
-      | Enter_long  -> Some Side.Buy
-      | Enter_short -> Some Sell
-      | Exit_long   -> Some Sell
-      | Exit_short  -> Some Buy
-      | Hold -> None
-    in
-    match open_side_opt with
-    | None -> portfolio, None
-    | Some side ->
-      let qty =
-        match sig_.action with
-        | Exit_long | Exit_short ->
-          (match Portfolio.position portfolio instrument with
-           | Some p -> Decimal.abs p.quantity
-           | None -> Decimal.zero)
-        | _ ->
-          Risk.size_from_strength
-            ~equity ~price ~limits:config.limits
-            ~strength:(Float.max 0.1 sig_.strength)
-      in
-      if Decimal.is_zero qty then portfolio, None
-      else match
-        Risk.check ~portfolio ~limits:config.limits
-          ~instrument ~side ~quantity:qty ~price ~mark
-      with
-      | Reject _ -> portfolio, None
-      | Accept q ->
-        let fee = Decimal.mul (Decimal.mul q price)
-                    (Decimal.of_float config.fee_rate) in
-        let p' = Portfolio.fill portfolio
-                   ~instrument ~side ~quantity:q ~price ~fee in
-        p', Some { ts = sig_.ts; instrument; side; quantity = q; price; fee;
-                   reason = sig_.reason }
 
 let max_drawdown equity_curve =
   match equity_curve with
@@ -106,46 +53,51 @@ let max_drawdown equity_curve =
     ) equity_curve;
     !max_dd
 
-(** [run config strategy instrument candles] — candles must be chronological. *)
 let run
     ~(config : config)
     ~(strategy : Strategies.Strategy.t)
     ~(instrument : Instrument.t)
     ~(candles : Candle.t list) : result =
-  let rec loop strat portfolio pending_sig_opt fills eq_curve = function
-    | [] ->
-      { final = portfolio;
-        fills = List.rev fills;
-        equity_curve = List.rev eq_curve;
-        max_drawdown = max_drawdown (List.rev eq_curve);
-        total_return =
-          (let init = Decimal.to_float config.initial_cash in
-           let fin =
-             Portfolio.equity portfolio (fun _ -> None) |> Decimal.to_float
-           in
-           if init = 0.0 then 0.0 else (fin -. init) /. init);
-        num_trades = List.length fills }
+  let step_cfg : Step.config = {
+    limits = config.limits;
+    instrument;
+    fee_rate = config.fee_rate;
+  } in
+  let init = Step.make_state ~strategy ~cash:config.initial_cash in
+  let rec loop state fills eq_curve = function
+    | [] -> state, fills, eq_curve
     | c :: rest ->
-      (* 1. execute pending signal at this bar's open. *)
-      let portfolio, fill_opt =
-        match pending_sig_opt with
-        | Some s ->
-          apply_signal ~config ~portfolio ~instrument
-            ~next_open:(Some c.Candle.open_) s
-        | None -> portfolio, None
+      (* 1. Execute pending signal from previous bar at [c.open_]. *)
+      let state1, fill_opt = Step.execute_pending step_cfg state c in
+      let fills' = match fill_opt with
+        | Some ((sig_ : Signal.t), (s : Step.settled)) ->
+          { ts = sig_.ts; instrument; side = s.side;
+            quantity = s.quantity; price = s.price; fee = s.fee;
+            reason = sig_.reason } :: fills
+        | None -> fills
       in
-      (* 2. mark-to-market at close. *)
+      (* 2. Mark-to-market at [c.close]. *)
       let mark _ = Some c.Candle.close in
-      let eq = Portfolio.equity portfolio mark in
-      let eq_curve = (c.ts, eq) :: eq_curve in
-      let fills = match fill_opt with
-        | Some f -> f :: fills | None -> fills in
-      (* 3. feed the strategy for the next bar's decision. *)
-      let strat', sig_ = Strategies.Strategy.on_candle strat instrument c in
-      let pending =
-        if sig_.Signal.action = Signal.Hold then None else Some sig_
-      in
-      loop strat' portfolio pending fills eq_curve rest
+      let eq = Portfolio.equity state1.portfolio mark in
+      let eq_curve' = (c.ts, eq) :: eq_curve in
+      (* 3. Feed [c] to strategy; any non-Hold signal goes pending. *)
+      let state2 = Step.advance_strategy step_cfg state1 c in
+      loop state2 fills' eq_curve' rest
   in
-  let p0 = Portfolio.empty ~cash:config.initial_cash in
-  loop strategy p0 None [] [] candles
+  let final_state, fills, eq_curve = loop init [] [] candles in
+  let equity_curve = List.rev eq_curve in
+  let fills = List.rev fills in
+  let total_return =
+    let init_c = Decimal.to_float config.initial_cash in
+    let fin = Portfolio.equity final_state.portfolio (fun _ -> None)
+              |> Decimal.to_float in
+    if init_c = 0.0 then 0.0 else (fin -. init_c) /. init_c
+  in
+  {
+    final = final_state.portfolio;
+    fills;
+    equity_curve;
+    max_drawdown = max_drawdown equity_curve;
+    total_return;
+    num_trades = List.length fills;
+  }

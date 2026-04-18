@@ -1,11 +1,12 @@
-(** Event-driven backtester. Runs a strategy over a historical candle
-    stream, routes signals through the risk gate, executes fills at the
-    next bar's open ("next-bar execution" avoids look-ahead bias), and
-    records an equity curve.
+(** Historical replay driver over {!Step}: folds the shared
+    trading state machine across a candle list and aggregates the
+    mark-to-market equity curve into summary statistics
+    (total_return, max_drawdown).
 
-    All state is explicit and the function is referentially transparent:
-    given the same inputs, the same trade log comes out. This is the
-    property backtest correctness tests rely on. *)
+    Referentially transparent: given the same strategy, config and
+    candle series, the same [result] comes out. {!Live_engine}
+    drives the same {!Step} primitives on streaming bars, so paper
+    P&L matches a backtest on identical data. *)
 
 open Core
 
@@ -18,15 +19,6 @@ type fill = {
   price : Decimal.t;
   fee : Decimal.t;
   reason : string;
-}
-
-(** One step of the equity curve (used internally and in tests). *)
-type step = {
-  ts : int64;
-  equity : Decimal.t;
-  cash : Decimal.t;
-  signal : Signal.t option;
-  fill : fill option;
 }
 
 (** Summary of a completed backtest run. *)

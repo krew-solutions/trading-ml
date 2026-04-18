@@ -25,6 +25,14 @@ type config = {
   limits : Risk.limits;
   instrument : Instrument.t;
   fee_rate : float;
+  auto_commit : bool;
+  (** When [true], {!execute_pending} applies the fill to the
+      portfolio immediately after reserving (atomic reserve+commit
+      in one step). Backtest uses this — it has no broker latency.
+
+      When [false], {!execute_pending} only reserves; the
+      reservation stays open and callers must invoke {!commit_fill}
+      when the broker reports an actual fill. Live engine mode. *)
 }
 
 type settled = {
@@ -69,3 +77,24 @@ val advance_strategy : config -> state -> Candle.t -> state
 (** Feed [c] to the strategy; any non-Hold signal becomes the new
     pending, to be executed on the next bar's open. Also advances
     [last_bar_ts]. *)
+
+val commit_fill :
+  state ->
+  reservation_id:int ->
+  actual_quantity:Core.Decimal.t ->
+  actual_price:Core.Decimal.t ->
+  actual_fee:Core.Decimal.t ->
+  state
+(** Settle a reservation with actual broker numbers. Used in Live
+    mode when a broker fill event arrives — the engine looks up the
+    reservation by [reservation_id] and applies
+    {!Portfolio.commit_fill}. Raises [Not_found] when the id is
+    unknown (already settled or never existed).
+
+    Not called in Backtest: [auto_commit = true] handles it inside
+    {!execute_pending}. *)
+
+val release :
+  state -> reservation_id:int -> state
+(** Drop a reservation without a fill — used on broker reject /
+    cancel. No-op when the id is unknown. *)

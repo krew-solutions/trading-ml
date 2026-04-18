@@ -68,6 +68,7 @@ let run
     limits = config.limits;
     instrument;
     fee_rate = config.fee_rate;
+    auto_commit = true;  (* synthetic fill — no broker latency *)
   } in
   let state0 = Step.make_state ~strategy ~cash:config.initial_cash in
   (* Consume the shared Pipeline: materialise events, then aggregate.

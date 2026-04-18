@@ -13,7 +13,10 @@ let bar ~ts ~px =
     ~open_:(d px) ~high:(d px) ~low:(d px) ~close:(d px)
     ~volume:(d_int 1)
 
-(** Mock broker that records every place_order call. *)
+(** Mock broker that records every place_order call AND
+    synchronously confirms it back as a fill. Emulates a zero-latency
+    broker so tests can assert on committed portfolio state without
+    bringing up Paper + bar feeding. *)
 module Recording_broker = struct
   type record = {
     client_order_id : string;
@@ -24,11 +27,13 @@ module Recording_broker = struct
 
   type t = {
     mutable placed : record list;
+    mutable on_place : (record -> unit) list;
   }
 
-  let create () = { placed = [] }
+  let create () = { placed = []; on_place = [] }
   let records t = List.rev t.placed
   let count t = List.length t.placed
+  let on_place t cb = t.on_place <- cb :: t.on_place
 end
 
 let mk_broker (rec_ : Recording_broker.t) : Broker.client =
@@ -39,7 +44,9 @@ let mk_broker (rec_ : Recording_broker.t) : Broker.client =
     let venues _ = []
     let place_order rec_ ~instrument ~side ~quantity ~kind ~tif ~client_order_id =
       let open Recording_broker in
-      rec_.placed <- { client_order_id; side; quantity; kind } :: rec_.placed;
+      let r = { client_order_id; side; quantity; kind } in
+      rec_.placed <- r :: rec_.placed;
+      List.iter (fun cb -> cb r) (List.rev rec_.on_place);
       {
         Order.id = client_order_id;
         exec_id = "";
@@ -56,6 +63,30 @@ let mk_broker (rec_ : Recording_broker.t) : Broker.client =
     let cancel_order _ ~client_order_id:_ = failwith "n/a"
   end in
   Broker.make (module M) rec_
+
+(** Queue placed orders as "pending broker confirmations" and return
+    a [flush] function that drains them into the engine via
+    {!Live_engine.on_fill_event}. Deferred to avoid mutex reentrance
+    — [on_place] fires *inside* [Live_engine.submit_order], which is
+    itself under the engine's mutex. Real brokers deliver fills on a
+    separate WS frame, so this also emulates production timing. *)
+let auto_confirm_fills
+    (rec_ : Recording_broker.t) (eng : Live_engine.t) =
+  let pending = Queue.create () in
+  Recording_broker.on_place rec_ (fun r -> Queue.push r pending);
+  fun () ->
+    while not (Queue.is_empty pending) do
+      let (r : Recording_broker.record) = Queue.pop pending in
+      Live_engine.on_fill_event eng {
+        client_order_id = r.client_order_id;
+        actual_quantity = r.quantity;
+        actual_price = d 100.0;
+        actual_fee = Decimal.zero;
+      }
+    done
+
+let drive flush e bars =
+  List.iter (fun c -> Live_engine.on_bar e c; flush ()) bars
 
 (** Fixed-signal strategy: always emits the configured action with
     strength 0.5. Lets us drive the engine's translation logic
@@ -162,19 +193,20 @@ let test_enter_then_exit_roundtrip () =
     fee_rate = 0.0;
   } in
   let e = Live_engine.make cfg in
+  let flush = auto_confirm_fills rec_ e in
   (* Bar 100: strategy emits Enter_long → queued; no order yet. *)
-  Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:100 ~px:100.0); flush ();
   Alcotest.(check int) "no order on signal bar"
     0 (Recording_broker.count rec_);
   (* Bar 200: pending Enter executes at open[200]; new signal Exit
      gets queued for next bar. *)
-  Live_engine.on_bar e (bar ~ts:200 ~px:101.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:101.0); flush ();
   Alcotest.(check int) "one order after enter executes"
     1 (Recording_broker.count rec_);
   let qty = Live_engine.position e in
   Alcotest.(check bool) "long after enter" true (Decimal.is_positive qty);
   (* Bar 300: pending Exit executes. Strategy emits Hold, nothing queued. *)
-  Live_engine.on_bar e (bar ~ts:300 ~px:102.0);
+  Live_engine.on_bar e (bar ~ts:300 ~px:102.0); flush ();
   Alcotest.(check int) "two orders after exit" 2 (Recording_broker.count rec_);
   Alcotest.(check bool) "flat after exit"
     true (Decimal.is_zero (Live_engine.position e));
@@ -218,12 +250,11 @@ let test_position_tracks_intent () =
   let rec_ = Recording_broker.create () in
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Enter_long in
+  let flush = auto_confirm_fills rec_ e in
   (* Three bars with a constant Enter_long signal → two orders
      (first bar queues, next two fire pending and queue fresh).
      Position grows monotonically. *)
-  List.iter (fun ts ->
-    Live_engine.on_bar e (bar ~ts ~px:100.0)
-  ) [100; 200; 300];
+  drive flush e (List.map (fun ts -> bar ~ts ~px:100.0) [100; 200; 300]);
   Alcotest.(check int) "two orders over three bars"
     2 (Recording_broker.count rec_);
   Alcotest.(check bool) "position grew"

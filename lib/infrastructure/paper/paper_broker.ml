@@ -28,11 +28,8 @@ type t = {
   mutex : Mutex.t;
   fee_rate : float;
   slippage_bps : float;
-  (** When [None], every matching order fills in one go on its
-      triggering bar (the simple model). When [Some rate], per-bar
-      fill qty is capped at [rate * bar.volume], forcing partial
-      fills across bars for orders large relative to traded volume. *)
   participation_rate : float option;
+  mutable fill_listeners : (fill -> unit) list;
 }
 
 let make
@@ -50,6 +47,7 @@ let make
   fee_rate;
   slippage_bps;
   participation_rate;
+  fill_listeners = [];
 }
 
 (** Paper's critical sections are non-blocking (no IO, no effects) so
@@ -59,6 +57,10 @@ let make
 let with_lock t f =
   Mutex.lock t.mutex;
   Fun.protect ~finally:(fun () -> Mutex.unlock t.mutex) f
+
+let on_fill t cb =
+  with_lock t (fun () ->
+    t.fill_listeners <- cb :: t.fill_listeners)
 
 let name = "paper"
 
@@ -161,7 +163,7 @@ let apply_fill t (e : entry) (c : Candle.t) (price_intent : Decimal.t) =
       remaining = new_remaining;
       exec_id = o.client_order_id ^ "-" ^ Int64.to_string c.ts;
     };
-    t.fills <- {
+    let fill_rec = {
       client_order_id = o.client_order_id;
       ts = c.ts;
       instrument = o.instrument;
@@ -169,10 +171,16 @@ let apply_fill t (e : entry) (c : Candle.t) (price_intent : Decimal.t) =
       quantity = qty;
       price;
       fee;
-    } :: t.fills;
+    } in
+    t.fills <- fill_rec :: t.fills;
     t.portfolio <- Engine.Portfolio.fill t.portfolio
       ~instrument:o.instrument ~side:o.side
-      ~quantity:qty ~price ~fee
+      ~quantity:qty ~price ~fee;
+    (* Fire synchronous listeners (e.g., Live_engine's commit_fill
+       handler). Call them in registration order — reverse the stack
+       since listeners are prepended. Listeners run inside the mutex
+       for state consistency; they must not re-enter Paper APIs. *)
+    List.iter (fun cb -> cb fill_rec) (List.rev t.fill_listeners)
 
 let on_bar t ~instrument (c : Candle.t) =
   with_lock t (fun () ->

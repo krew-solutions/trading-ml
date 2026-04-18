@@ -78,3 +78,22 @@ val portfolio : t -> Engine.Portfolio.t
 val placed : t -> Order.t list
 (** Chronological list of orders the engine has submitted via
     [Broker.place_order]. Exposed for tests and diagnostics. *)
+
+type fill_event = {
+  client_order_id : string;
+  actual_quantity : Decimal.t;
+  actual_price : Decimal.t;
+  actual_fee : Decimal.t;
+}
+
+val on_fill_event : t -> fill_event -> unit
+(** Process a fill reported by the broker. Looks up the reservation
+    by [client_order_id], commits it against the engine's portfolio
+    via {!Engine.Step.commit_fill}, and evicts the mapping. Idempotent
+    on unknown cids (warns and returns) — a fill event for an order
+    the engine didn't place (e.g. from manual intervention on the
+    broker) isn't a crash.
+
+    Paper mode wires this to {!Paper.Paper_broker.on_fill} at
+    construction; real brokers wire it from their WS bridges after
+    parsing [order_update] frames. *)

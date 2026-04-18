@@ -72,11 +72,22 @@ let run_live instrument candles =
     fee_rate;
   } in
   let eng = Live_engine.make cfg in
+  (* Wire Paper's fill events to Live_engine's reservation commit.
+     This is the production wiring too — main.ml does the same. *)
+  Paper.Paper_broker.on_fill paper (fun (f : Paper.Paper_broker.fill) ->
+    Live_engine.on_fill_event eng {
+      client_order_id = f.client_order_id;
+      actual_quantity = f.quantity;
+      actual_price = f.price;
+      actual_fee = f.fee;
+    });
   List.iter (fun c ->
     (* Order matters: Live_engine.on_bar must run *before* Paper's
        last_ts advances, so the order Paper records [placed_after_ts]
        at the previous bar's ts. Then Paper.on_bar fills the pending
-       order at [c.open_], matching Backtest's "next-bar open" rule. *)
+       order at [c.open_] and synchronously fires the on_fill
+       callback, which triggers Live_engine.on_fill_event to
+       commit the reservation. *)
     Live_engine.on_bar eng c;
     Paper.Paper_broker.on_bar paper ~instrument c
   ) candles;

@@ -334,6 +334,20 @@ let cmd_serve args =
         } in
         Some (Live_engine.make cfg)
   in
+  (* Wire Paper's fill events into Live_engine's reservation ledger.
+     In real live trading this will be driven by WS [order_update]
+     frames from Finam/BCS instead — Paper is the stand-in with the
+     same callback contract. *)
+  (match paper_t, engine_t with
+   | Some p, Some e ->
+     Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
+       Live_engine.on_fill_event e {
+         client_order_id = f.client_order_id;
+         actual_quantity = f.quantity;
+         actual_price = f.price;
+         actual_fee = f.fee;
+       })
+   | _ -> ());
   Log.info "broker: %s%s (account=%s)%s"
     (Broker.name source_client)
     (if paper_mode then " [paper]" else "")

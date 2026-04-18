@@ -4,6 +4,7 @@ type config = {
   limits : Risk.limits;
   instrument : Instrument.t;
   fee_rate : float;
+  auto_commit : bool;
 }
 
 type settled = {
@@ -73,26 +74,38 @@ let execute_pending config state (c : Candle.t)
       | Accept q ->
         let fee = Decimal.mul
           (Decimal.mul q price) (Decimal.of_float config.fee_rate) in
-        (* Reserve-then-commit within the same step. Behaviour is
-           equivalent to a direct [Portfolio.fill], but the trade now
-           passes through the reservations vocabulary — available_cash
-           dips during the tick and stays consistent if a second
-           signal on the same bar consults it. Phase B.2 will split
-           the commit out of Step for Live so it can wait for broker
-           confirmation while Backtest keeps the atomic path. *)
         let reservation_id = state.reservation_seq in
         let portfolio_r = Portfolio.reserve state.portfolio
           ~id:reservation_id ~side ~instrument:config.instrument
           ~quantity:q ~price
-          ~slippage_buffer:0.0  (* will be exposed as config in B.2 *)
+          ~slippage_buffer:0.0
           ~fee_rate:config.fee_rate in
-        let portfolio' = Portfolio.commit_fill portfolio_r
-          ~id:reservation_id
-          ~actual_quantity:q ~actual_price:price ~actual_fee:fee in
+        (* [auto_commit]: Backtest commits immediately (no broker
+           latency); Live leaves the reservation open until a fill
+           event arrives and calls {!commit_fill} externally. *)
+        let portfolio' =
+          if config.auto_commit then
+            Portfolio.commit_fill portfolio_r
+              ~id:reservation_id
+              ~actual_quantity:q ~actual_price:price ~actual_fee:fee
+          else
+            portfolio_r
+        in
         { cleared with
           portfolio = portfolio';
           reservation_seq = reservation_id + 1; },
         Some (sig_, { side; quantity = q; price; fee; reservation_id })
+
+let commit_fill state ~reservation_id
+    ~actual_quantity ~actual_price ~actual_fee =
+  let portfolio' = Portfolio.commit_fill state.portfolio
+    ~id:reservation_id
+    ~actual_quantity ~actual_price ~actual_fee in
+  { state with portfolio = portfolio' }
+
+let release state ~reservation_id =
+  let portfolio' = Portfolio.release state.portfolio ~id:reservation_id in
+  { state with portfolio = portfolio' }
 
 let advance_strategy config state (c : Candle.t) : state =
   let strat', sig_ = Strategies.Strategy.on_candle

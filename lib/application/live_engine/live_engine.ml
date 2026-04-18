@@ -19,6 +19,10 @@ type t = {
   mutable state : Engine.Step.state;
   mutable seq : int;
   mutable placed : Order.t list;    (** newest first *)
+  cid_to_reservation : (string, int) Hashtbl.t;
+  (** Map from broker-facing [client_order_id] back to the internal
+      [reservation_id]. Populated at [submit_order]; consumed by
+      {!on_fill_event} when the broker confirms. *)
   mutex : Mutex.t;
 }
 
@@ -27,6 +31,10 @@ let make (cfg : config) : t =
     limits = cfg.limits;
     instrument = cfg.instrument;
     fee_rate = cfg.fee_rate;
+    auto_commit = false;
+    (* Live defers commit until the broker reports a fill via
+       {!on_fill_event}. Reservations stay open until then and
+       properly shrink [available_cash] for subsequent Risk gates. *)
   } in
   {
     cfg;
@@ -35,6 +43,7 @@ let make (cfg : config) : t =
       ~strategy:cfg.strategy ~cash:cfg.initial_cash;
     seq = 0;
     placed = [];
+    cid_to_reservation = Hashtbl.create 16;
     mutex = Mutex.create ();
   }
 
@@ -54,6 +63,10 @@ let submit_order t ~(strat_name : string) (settled : Engine.Step.settled) =
     ~strat_name
     ~seq:t.seq in
   t.seq <- t.seq + 1;
+  (* Record [cid → reservation_id] BEFORE the broker call so we're
+     ready for an instant fill event (Paper's listener fires
+     synchronously during place_order evaluation on the next bar). *)
+  Hashtbl.replace t.cid_to_reservation cid settled.reservation_id;
   try
     let o = Broker.place_order t.cfg.broker
       ~instrument:t.cfg.instrument
@@ -67,7 +80,12 @@ let submit_order t ~(strat_name : string) (settled : Engine.Step.settled) =
       cid (Order.status_to_string o.status)
   with e ->
     Log.warn "[engine] place_order failed (cid=%s): %s"
-      cid (Printexc.to_string e)
+      cid (Printexc.to_string e);
+    (* Broker rejected — release the reservation so cash/qty
+       becomes available again. *)
+    Hashtbl.remove t.cid_to_reservation cid;
+    t.state <- Engine.Step.release t.state
+      ~reservation_id:settled.reservation_id
 
 (** Fold a {!Pipeline.event} into the mutable wrapper: update the
     state snapshot for external queries, submit any settled trade to
@@ -98,6 +116,36 @@ let run t ~source =
   |> Engine.Pipeline.run t.step_cfg t.state
   |> Stream.iter (fun event ->
     with_lock t (fun () -> apply_event t event))
+
+type fill_event = {
+  client_order_id : string;
+  actual_quantity : Decimal.t;
+  actual_price : Decimal.t;
+  actual_fee : Decimal.t;
+}
+
+let on_fill_event t (fe : fill_event) =
+  with_lock t (fun () ->
+    match Hashtbl.find_opt t.cid_to_reservation fe.client_order_id with
+    | None ->
+      Log.warn "[engine] fill_event for unknown cid=%s (ignored)"
+        fe.client_order_id
+    | Some reservation_id ->
+      (* Partial fills: broker may fire multiple events for the same
+         cid before the full quantity arrives. For now we commit
+         each event as if it were a full fill (Portfolio.commit_fill
+         drops the reservation after one call). Phase B.3 will
+         distinguish partial vs final and re-reserve the remainder. *)
+      Hashtbl.remove t.cid_to_reservation fe.client_order_id;
+      t.state <- Engine.Step.commit_fill t.state
+        ~reservation_id
+        ~actual_quantity:fe.actual_quantity
+        ~actual_price:fe.actual_price
+        ~actual_fee:fe.actual_fee;
+      Log.info "[engine] commit cid=%s qty=%s @ %s"
+        fe.client_order_id
+        (Decimal.to_string fe.actual_quantity)
+        (Decimal.to_string fe.actual_price))
 
 let position t = with_lock t (fun () ->
   match Engine.Portfolio.position t.state.portfolio t.cfg.instrument with

@@ -92,6 +92,16 @@ val fills : t -> fill list
 (** Chronological list of simulated fills. Exposed for diagnostics and
     tests; not part of the {!Broker.S} port. *)
 
+val on_fill : t -> (fill -> unit) -> unit
+(** Subscribe to fill events. Every subsequent fill (full or
+    partial) invokes the callback synchronously, in-process, before
+    {!on_bar} returns. Multiple subscriptions compose: all callbacks
+    fire in registration order.
+
+    Used by {!Live_engine} to commit its reservations against
+    actual broker numbers — Paper is the stand-in for a real WS
+    fill stream, with identical semantics on the consumer side. *)
+
 val portfolio : t -> Engine.Portfolio.t
 (** Current paper portfolio (cash + positions + realized PnL).
     Updated on every fill using {!Engine.Portfolio.fill}. Exposed for

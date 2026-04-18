@@ -24,7 +24,11 @@ let make_state ~strategy ~cash = {
   strat = strategy;
   portfolio = Portfolio.empty ~cash;
   pending_signal = None;
-  last_bar_ts = 0L;
+  (* Initial value must be strictly less than any real candle ts so
+     the first bar is never rejected by the monotonicity guard in
+     [Pipeline.run]. Real ts values are non-negative unix epoch
+     seconds — [Int64.min_int] is safely below the floor. *)
+  last_bar_ts = Int64.min_int;
 }
 
 let size_for_signal ~config ~portfolio ~price (sig_ : Signal.t)

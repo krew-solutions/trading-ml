@@ -69,23 +69,35 @@ let submit_order t ~(strat_name : string) (settled : Engine.Step.settled) =
     Log.warn "[engine] place_order failed (cid=%s): %s"
       cid (Printexc.to_string e)
 
+(** Fold a {!Pipeline.event} into the mutable wrapper: update the
+    state snapshot for external queries, submit any settled trade to
+    the broker. Called under the mutex. *)
+let apply_event t (event : Engine.Pipeline.event) =
+  let strat_name = Strategies.Strategy.name t.state.strat in
+  t.state <- event.state;
+  match event.settled with
+  | Some (_sig, settled) -> submit_order t ~strat_name settled
+  | None -> ()
+
 let on_bar t (c : Candle.t) =
   with_lock t (fun () ->
-    if Int64.compare c.ts t.state.last_bar_ts <= 0 then ()
-    else begin
-      let strat_name = Strategies.Strategy.name t.state.strat in
-      let state1, fill_opt = Engine.Step.execute_pending
-        t.step_cfg t.state c in
-      (match fill_opt with
-       | Some (_sig, settled) -> submit_order t ~strat_name settled
-       | None -> ());
-      let state2 = Engine.Step.advance_strategy t.step_cfg state1 c in
-      t.state <- state2
-    end)
+    (* One-bar driver: feed a singleton stream through the same
+       Pipeline.run that Live's streaming [run] and Backtest use. Out-
+       of-order bars are filtered inside Pipeline, not here. *)
+    Stream.of_list [c]
+    |> Engine.Pipeline.run t.step_cfg t.state
+    |> Stream.iter (apply_event t))
 
 let run t ~source =
+  (* Stream driver: WS bridge pushes candles into [source], pipeline
+     threads state internally, we mirror each event into [t.state] and
+     route settled trades to the broker. Exactly the same
+     [Pipeline.run] that Backtest consumes via [to_list + aggregate] —
+     divergence in behaviour is impossible by construction. *)
   Eio_stream.of_eio_stream source
-  |> Stream.iter (fun c -> on_bar t c)
+  |> Engine.Pipeline.run t.step_cfg t.state
+  |> Stream.iter (fun event ->
+    with_lock t (fun () -> apply_event t event))
 
 let position t = with_lock t (fun () ->
   match Engine.Portfolio.position t.state.portfolio t.cfg.instrument with

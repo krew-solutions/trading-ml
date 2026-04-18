@@ -274,6 +274,93 @@ let test_client_order_ids_unique () =
   Alcotest.(check int) "all cids unique"
     (List.length cids) (List.length unique)
 
+(** Broker that reports arbitrary order status on [get_orders] —
+    lets us drive [reconcile] through the full status state machine
+    without a real WS bridge. *)
+module Reporting_broker = struct
+  type t = {
+    mutable orders : Order.t list;
+  }
+  let create () = { orders = [] }
+  let set_orders t os = t.orders <- os
+end
+
+let mk_reporting_broker (r : Reporting_broker.t) : Broker.client =
+  let module M = struct
+    type t = Reporting_broker.t
+    let name = "reporting"
+    let bars _ ~n:_ ~instrument:_ ~timeframe:_ = []
+    let venues _ = []
+    let place_order (r : Reporting_broker.t)
+        ~instrument ~side ~quantity ~kind ~tif ~client_order_id =
+      let o = { Order.id = client_order_id; exec_id = "";
+                instrument; side; quantity;
+                filled = Decimal.zero; remaining = quantity;
+                kind; tif; status = Order.New;
+                created_ts = 0L; client_order_id } in
+      r.orders <- o :: r.orders;
+      o
+    let get_orders (r : Reporting_broker.t) = r.orders
+    let get_order _ ~client_order_id:_ = failwith "n/a"
+    let cancel_order _ ~client_order_id:_ = failwith "n/a"
+  end in
+  Broker.make (module M) r
+
+let set_status (r : Reporting_broker.t) cid status =
+  r.orders <- List.map (fun (o : Order.t) ->
+    if o.client_order_id = cid then { o with status } else o) r.orders
+
+let test_reconcile_commits_filled () =
+  let r = Reporting_broker.create () in
+  let broker = mk_reporting_broker r in
+  let e = mk_engine ~broker ~action:Signal.Enter_long in
+  Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);  (* order placed *)
+  (* At this point the reservation is open; broker says New. *)
+  Alcotest.(check bool) "still not filled" true
+    (Decimal.is_zero (Live_engine.position e));
+  (* Broker updates status to Filled. *)
+  (match Reporting_broker.(r.orders) with
+   | [o] -> set_status r o.client_order_id Order.Filled
+   | _ -> Alcotest.fail "expected one order");
+  Live_engine.reconcile e;
+  Alcotest.(check bool) "position after reconcile" true
+    (Decimal.is_positive (Live_engine.position e))
+
+let test_reconcile_releases_rejected () =
+  let r = Reporting_broker.create () in
+  let broker = mk_reporting_broker r in
+  let e = mk_engine ~broker ~action:Signal.Enter_long in
+  Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
+  let before = Engine.Portfolio.available_cash
+    (Live_engine.portfolio e) in
+  (match Reporting_broker.(r.orders) with
+   | [o] -> set_status r o.client_order_id Order.Rejected
+   | _ -> Alcotest.fail "expected one order");
+  Live_engine.reconcile e;
+  let after = Engine.Portfolio.available_cash
+    (Live_engine.portfolio e) in
+  Alcotest.(check bool) "reservation released → available_cash grows"
+    true (Decimal.compare after before > 0)
+
+let test_reconcile_idempotent () =
+  let r = Reporting_broker.create () in
+  let broker = mk_reporting_broker r in
+  let e = mk_engine ~broker ~action:Signal.Enter_long in
+  Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
+  (match Reporting_broker.(r.orders) with
+   | [o] -> set_status r o.client_order_id Order.Filled
+   | _ -> Alcotest.fail "expected one order");
+  Live_engine.reconcile e;
+  let pos1 = Live_engine.position e in
+  (* Second reconcile shouldn't double-commit; pending map is empty. *)
+  Live_engine.reconcile e;
+  let pos2 = Live_engine.position e in
+  Alcotest.(check bool) "position unchanged on second reconcile"
+    true (Decimal.equal pos1 pos2)
+
 let tests = [
   "enter_long places buy",       `Quick, test_enter_long_places_buy;
   "hold places nothing",         `Quick, test_hold_places_nothing;
@@ -282,4 +369,7 @@ let tests = [
   "position tracks intent",      `Quick, test_position_tracks_intent;
   "client_order_ids unique",     `Quick, test_client_order_ids_unique;
   "enter then exit roundtrip",   `Quick, test_enter_then_exit_roundtrip;
+  "reconcile commits filled",    `Quick, test_reconcile_commits_filled;
+  "reconcile releases rejected", `Quick, test_reconcile_releases_rejected;
+  "reconcile idempotent",        `Quick, test_reconcile_idempotent;
 ]

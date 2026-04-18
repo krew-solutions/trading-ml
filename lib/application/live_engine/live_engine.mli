@@ -97,3 +97,22 @@ val on_fill_event : t -> fill_event -> unit
     Paper mode wires this to {!Paper.Paper_broker.on_fill} at
     construction; real brokers wire it from their WS bridges after
     parsing [order_update] frames. *)
+
+val reconcile : t -> unit
+(** Poll the broker's current order state via {!Broker.get_orders}
+    and reconcile it against the engine's outstanding reservations.
+    For each order the engine has tracked:
+
+    - [Filled] → commit the reservation using the intended numbers
+      from {!submit_order} (we don't have the broker's actual fill
+      price via this endpoint — WS [order_update] does, but that's
+      the primary path; reconcile is a safety net).
+    - [Cancelled], [Rejected], [Expired], [Failed] → release.
+    - [Partially_filled], [New], [Pending_*], [Suspended] → leave
+      alone; check again next tick.
+
+    Safe to call repeatedly — already-committed/released reservations
+    are absent from the internal map and so skipped. Intended for a
+    periodic trigger (every N seconds or every M bars) to catch
+    orders whose fill events were missed due to network drops or
+    broker restarts. *)

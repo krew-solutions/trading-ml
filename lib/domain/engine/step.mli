@@ -32,6 +32,12 @@ type settled = {
   quantity : Decimal.t;
   price : Decimal.t;
   fee : Decimal.t;
+  reservation_id : int;
+  (** Handle into [state.portfolio.reservations] — consumers call
+      {!Portfolio.commit_fill} or {!Portfolio.release} with this id
+      when the broker reports the corresponding fill or rejection.
+      In Backtest the commit is immediate (same tick); in live mode
+      it awaits a broker event. *)
 }
 
 type state = private {
@@ -39,6 +45,10 @@ type state = private {
   portfolio : Portfolio.t;
   pending_signal : Signal.t option;
   last_bar_ts : int64;
+  reservation_seq : int;
+  (** Monotonic counter; every {!execute_pending} that produces a
+      settled trade consumes one slot for the new
+      [reservation_id]. *)
 }
 
 val make_state :

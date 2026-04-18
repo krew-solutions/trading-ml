@@ -49,11 +49,15 @@ let check
   else if Decimal.is_zero price then Reject "zero price"
   else
     let notional = Decimal.mul quantity price in
-    let new_cash = match side with
-      | Side.Buy -> Decimal.sub portfolio.cash notional
-      | Sell -> Decimal.add portfolio.cash notional
+    (* Uses available_cash (cash minus outstanding reservations) so
+       back-to-back signals on consecutive bars can't collectively
+       overspend. For reservation-free portfolios this equals cash. *)
+    let available = Portfolio.available_cash portfolio in
+    let new_available = match side with
+      | Side.Buy -> Decimal.sub available notional
+      | Sell -> Decimal.add available notional
     in
-    if Decimal.compare new_cash limits.min_cash_buffer < 0 then
+    if Decimal.compare new_available limits.min_cash_buffer < 0 then
       Reject "would breach min_cash_buffer"
     else
       let gross =

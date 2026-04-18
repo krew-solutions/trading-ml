@@ -11,6 +11,7 @@ type settled = {
   quantity : Decimal.t;
   price : Decimal.t;
   fee : Decimal.t;
+  reservation_id : int;
 }
 
 type state = {
@@ -18,17 +19,15 @@ type state = {
   portfolio : Portfolio.t;
   pending_signal : Signal.t option;
   last_bar_ts : int64;
+  reservation_seq : int;
 }
 
 let make_state ~strategy ~cash = {
   strat = strategy;
   portfolio = Portfolio.empty ~cash;
   pending_signal = None;
-  (* Initial value must be strictly less than any real candle ts so
-     the first bar is never rejected by the monotonicity guard in
-     [Pipeline.run]. Real ts values are non-negative unix epoch
-     seconds — [Int64.min_int] is safely below the floor. *)
   last_bar_ts = Int64.min_int;
+  reservation_seq = 0;
 }
 
 let size_for_signal ~config ~portfolio ~price (sig_ : Signal.t)
@@ -74,11 +73,26 @@ let execute_pending config state (c : Candle.t)
       | Accept q ->
         let fee = Decimal.mul
           (Decimal.mul q price) (Decimal.of_float config.fee_rate) in
-        let portfolio' = Portfolio.fill state.portfolio
-          ~instrument:config.instrument ~side
-          ~quantity:q ~price ~fee in
-        { cleared with portfolio = portfolio' },
-        Some (sig_, { side; quantity = q; price; fee })
+        (* Reserve-then-commit within the same step. Behaviour is
+           equivalent to a direct [Portfolio.fill], but the trade now
+           passes through the reservations vocabulary — available_cash
+           dips during the tick and stays consistent if a second
+           signal on the same bar consults it. Phase B.2 will split
+           the commit out of Step for Live so it can wait for broker
+           confirmation while Backtest keeps the atomic path. *)
+        let reservation_id = state.reservation_seq in
+        let portfolio_r = Portfolio.reserve state.portfolio
+          ~id:reservation_id ~side ~instrument:config.instrument
+          ~quantity:q ~price
+          ~slippage_buffer:0.0  (* will be exposed as config in B.2 *)
+          ~fee_rate:config.fee_rate in
+        let portfolio' = Portfolio.commit_fill portfolio_r
+          ~id:reservation_id
+          ~actual_quantity:q ~actual_price:price ~actual_fee:fee in
+        { cleared with
+          portfolio = portfolio';
+          reservation_seq = reservation_id + 1; },
+        Some (sig_, { side; quantity = q; price; fee; reservation_id })
 
 let advance_strategy config state (c : Candle.t) : state =
   let strat', sig_ = Strategies.Strategy.on_candle

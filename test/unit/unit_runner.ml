@@ -61,4 +61,5 @@ let () =
     "paper broker", Paper_broker_test.tests;
     (* Application: live engine *)
     "live engine",  Live_engine_test.tests;
+    "bt vs live",   Differential_test.tests;
   ]

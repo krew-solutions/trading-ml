@@ -93,14 +93,22 @@ let mk_engine ~broker ~action =
     initial_cash = equity;
     limits = Engine.Risk.default_limits ~equity;
     tif = Order.DAY;
+    fee_rate = 0.0;
   } in
   Live_engine.make cfg
+
+(* Pending-signal semantics: a signal on bar T fires an order at bar
+   T+1's open. Tests feed two bars — the first produces the signal,
+   the second executes it. *)
 
 let test_enter_long_places_buy () =
   let rec_ = Recording_broker.create () in
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Enter_long in
   Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Alcotest.(check int) "no order until next bar"
+    0 (Recording_broker.count rec_);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
   Alcotest.(check int) "one order placed" 1 (Recording_broker.count rec_);
   match Recording_broker.records rec_ with
   | [r] ->
@@ -114,6 +122,7 @@ let test_hold_places_nothing () =
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Hold in
   Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
   Alcotest.(check int) "no orders" 0 (Recording_broker.count rec_)
 
 (** Time-based strategy: Enter_long on the first bar (ts=100),
@@ -150,13 +159,22 @@ let test_enter_then_exit_roundtrip () =
     initial_cash = equity;
     limits = Engine.Risk.default_limits ~equity;
     tif = Order.DAY;
+    fee_rate = 0.0;
   } in
   let e = Live_engine.make cfg in
+  (* Bar 100: strategy emits Enter_long → queued; no order yet. *)
   Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
-  Alcotest.(check int) "one order after enter" 1 (Recording_broker.count rec_);
+  Alcotest.(check int) "no order on signal bar"
+    0 (Recording_broker.count rec_);
+  (* Bar 200: pending Enter executes at open[200]; new signal Exit
+     gets queued for next bar. *)
+  Live_engine.on_bar e (bar ~ts:200 ~px:101.0);
+  Alcotest.(check int) "one order after enter executes"
+    1 (Recording_broker.count rec_);
   let qty = Live_engine.position e in
   Alcotest.(check bool) "long after enter" true (Decimal.is_positive qty);
-  Live_engine.on_bar e (bar ~ts:200 ~px:101.0);
+  (* Bar 300: pending Exit executes. Strategy emits Hold, nothing queued. *)
+  Live_engine.on_bar e (bar ~ts:300 ~px:102.0);
   Alcotest.(check int) "two orders after exit" 2 (Recording_broker.count rec_);
   Alcotest.(check bool) "flat after exit"
     true (Decimal.is_zero (Live_engine.position e));
@@ -173,6 +191,7 @@ let test_exit_long_when_flat_is_noop () =
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Exit_long in
   Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
   Alcotest.(check int) "no order from exit-when-flat"
     0 (Recording_broker.count rec_);
   Alcotest.(check bool) "position still zero"
@@ -182,10 +201,12 @@ let test_out_of_order_bar_ignored () =
   let rec_ = Recording_broker.create () in
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Enter_long in
-  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
+  Live_engine.on_bar e (bar ~ts:100 ~px:100.0);   (* queues Enter *)
+  Live_engine.on_bar e (bar ~ts:200 ~px:100.0);   (* fires at open[200] *)
   let after_first = Recording_broker.count rec_ in
+  Alcotest.(check int) "one order after two-bar warmup" 1 after_first;
   (* Feed an older bar — should be dropped, no second order. *)
-  Live_engine.on_bar e (bar ~ts:100 ~px:99.0);
+  Live_engine.on_bar e (bar ~ts:150 ~px:99.0);
   Alcotest.(check int) "no new order from stale bar"
     after_first (Recording_broker.count rec_);
   (* Equal-ts is also idempotent (strictly greater required). *)
@@ -197,12 +218,14 @@ let test_position_tracks_intent () =
   let rec_ = Recording_broker.create () in
   let broker = mk_broker rec_ in
   let e = mk_engine ~broker ~action:Signal.Enter_long in
-  (* Feed several bars — each produces another Enter_long order,
-     position grows monotonically. *)
+  (* Three bars with a constant Enter_long signal → two orders
+     (first bar queues, next two fire pending and queue fresh).
+     Position grows monotonically. *)
   List.iter (fun ts ->
     Live_engine.on_bar e (bar ~ts ~px:100.0)
   ) [100; 200; 300];
-  Alcotest.(check int) "three orders" 3 (Recording_broker.count rec_);
+  Alcotest.(check int) "two orders over three bars"
+    2 (Recording_broker.count rec_);
   Alcotest.(check bool) "position grew"
     true (Decimal.is_positive (Live_engine.position e))
 
@@ -212,7 +235,7 @@ let test_client_order_ids_unique () =
   let e = mk_engine ~broker ~action:Signal.Enter_long in
   List.iter (fun ts ->
     Live_engine.on_bar e (bar ~ts ~px:100.0)
-  ) [100; 200; 300];
+  ) [100; 200; 300; 400];
   let cids = List.map
     (fun (r : Recording_broker.record) -> r.client_order_id)
     (Recording_broker.records rec_) in

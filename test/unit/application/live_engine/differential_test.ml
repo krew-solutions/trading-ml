@@ -70,7 +70,7 @@ let run_live instrument candles =
     initial_cash = equity_init;
     limits = Engine.Risk.default_limits ~equity:equity_init;
     tif = Order.DAY;
-    fee_rate; reconcile_every = 0;
+    fee_rate; reconcile_every = 0; max_drawdown_pct = 0.0; rate_limit = None;
   } in
   let eng = Live_engine.make cfg in
   (* Wire Paper's fill events to Live_engine's reservation commit.

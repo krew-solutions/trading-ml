@@ -43,6 +43,18 @@ type config = {
       [reconcile] only — tests often prefer this). A modest value
       like [10] trades a bit of broker API load for bounded drift
       detection latency. *)
+  max_drawdown_pct : float;
+  (** Kill switch: if equity falls below
+      [peak * (1 - max_drawdown_pct)], the engine halts — no new
+      orders are submitted until {!reset} is called. Set to [0.0]
+      to disable (no kill switch). Typical production value:
+      [0.10] .. [0.20] (10–20%). *)
+  rate_limit : (int * float) option;
+  (** [Some (max_orders, window_seconds)] caps submission to
+      [max_orders] orders within any rolling [window_seconds]
+      window. Orders exceeding the limit are dropped (reservation
+      released). [None] disables the limit. Useful against
+      runaway strategies and to respect broker API quotas. *)
 }
 
 type t
@@ -84,6 +96,16 @@ val portfolio : t -> Engine.Portfolio.t
 val placed : t -> Order.t list
 (** Chronological list of orders the engine has submitted via
     [Broker.place_order]. Exposed for tests and diagnostics. *)
+
+val halted : t -> bool
+(** Whether the kill switch has tripped. [true] means no new
+    orders will be submitted; in-flight reservations continue to
+    receive fill events / reconcile normally. *)
+
+val reset : t -> unit
+(** Clear the [halted] flag and reset the peak-equity baseline to
+    the current equity. Intended as a deliberate manual operation
+    after a human has investigated what tripped the switch. *)
 
 type fill_event = {
   client_order_id : string;

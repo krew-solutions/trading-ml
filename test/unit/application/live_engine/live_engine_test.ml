@@ -125,7 +125,7 @@ let mk_engine ~broker ~action =
     initial_cash = equity;
     limits = Engine.Risk.default_limits ~equity;
     tif = Order.DAY;
-    fee_rate = 0.0; reconcile_every = 0;
+    fee_rate = 0.0; reconcile_every = 0; max_drawdown_pct = 0.0; rate_limit = None;
   } in
   Live_engine.make cfg
 
@@ -191,7 +191,7 @@ let test_enter_then_exit_roundtrip () =
     initial_cash = equity;
     limits = Engine.Risk.default_limits ~equity;
     tif = Order.DAY;
-    fee_rate = 0.0; reconcile_every = 0;
+    fee_rate = 0.0; reconcile_every = 0; max_drawdown_pct = 0.0; rate_limit = None;
   } in
   let e = Live_engine.make cfg in
   let flush = auto_confirm_fills rec_ e in
@@ -374,6 +374,97 @@ let tests = [
   "reconcile commits filled",    `Quick, test_reconcile_commits_filled;
   "reconcile releases rejected", `Quick, test_reconcile_releases_rejected;
   "reconcile idempotent",        `Quick, test_reconcile_idempotent;
+  "kill switch halts on drawdown", `Quick, (fun () ->
+    (* After a profitable Enter_long, simulate a drawdown via a
+       price drop on subsequent bars. With max_drawdown_pct=0.10,
+       a 10% drop in equity should trip the switch. Once tripped,
+       further signals do NOT produce broker submissions. *)
+    let rec_ = Recording_broker.create () in
+    let broker = mk_broker rec_ in
+    let strat = Strategies.Strategy.make
+      (module Fixed_signal_strategy) { action = Signal.Enter_long } in
+    let equity = d_int 100_000 in
+    let cfg : Live_engine.config = {
+      broker;
+      strategy = strat;
+      instrument = mk_instrument "SBER";
+      initial_cash = equity;
+      limits = Engine.Risk.default_limits ~equity;
+      tif = Order.DAY;
+      fee_rate = 0.0;
+      reconcile_every = 0;
+      max_drawdown_pct = 0.10; rate_limit = None;
+    } in
+    let e = Live_engine.make cfg in
+    let flush = auto_confirm_fills rec_ e in
+    (* Build up a long position at 100. *)
+    Live_engine.on_bar e (bar ~ts:100 ~px:100.0); flush ();
+    Live_engine.on_bar e (bar ~ts:200 ~px:100.0); flush ();
+    Live_engine.on_bar e (bar ~ts:300 ~px:100.0); flush ();
+    let orders_at_peak = Recording_broker.count rec_ in
+    Alcotest.(check bool) "not halted at peak" false (Live_engine.halted e);
+    (* Position after 2 fills ≈ 400 shares @ 100. Price crash to 70
+       → equity drops from 100k to 88k, drawdown 12% > 10%. *)
+    Live_engine.on_bar e (bar ~ts:400 ~px:70.0);
+    Alcotest.(check bool) "halted after drawdown" true (Live_engine.halted e);
+    (* Further bars do not produce new orders (gate drops them). *)
+    Live_engine.on_bar e (bar ~ts:500 ~px:70.0); flush ();
+    Live_engine.on_bar e (bar ~ts:600 ~px:70.0); flush ();
+    Alcotest.(check int) "no new orders while halted"
+      orders_at_peak (Recording_broker.count rec_));
+  "rate limit drops excess orders", `Quick, (fun () ->
+    (* max_orders=2 within 60s. First two enters get through; the
+       third is dropped + reservation released. *)
+    let rec_ = Recording_broker.create () in
+    let broker = mk_broker rec_ in
+    let strat = Strategies.Strategy.make
+      (module Fixed_signal_strategy) { action = Signal.Enter_long } in
+    let equity = d_int 1_000_000 in
+    let cfg : Live_engine.config = {
+      broker;
+      strategy = strat;
+      instrument = mk_instrument "SBER";
+      initial_cash = equity;
+      limits = Engine.Risk.default_limits ~equity;
+      tif = Order.DAY;
+      fee_rate = 0.0;
+      reconcile_every = 0;
+      max_drawdown_pct = 0.0;
+      rate_limit = Some (2, 60.0);
+    } in
+    let e = Live_engine.make cfg in
+    let flush = auto_confirm_fills rec_ e in
+    (* 5 bars → 4 potential orders (bar 1 just queues the first
+       signal). Rate limit caps at 2. *)
+    List.iter (fun ts ->
+      Live_engine.on_bar e (bar ~ts ~px:100.0); flush ()
+    ) [100; 200; 300; 400; 500];
+    Alcotest.(check int) "rate-limited to 2 orders"
+      2 (Recording_broker.count rec_));
+  "kill switch reset clears halted", `Quick, (fun () ->
+    let rec_ = Recording_broker.create () in
+    let broker = mk_broker rec_ in
+    let strat = Strategies.Strategy.make
+      (module Fixed_signal_strategy) { action = Signal.Enter_long } in
+    let equity = d_int 100_000 in
+    let cfg : Live_engine.config = {
+      broker; strategy = strat;
+      instrument = mk_instrument "SBER";
+      initial_cash = equity;
+      limits = Engine.Risk.default_limits ~equity;
+      tif = Order.DAY;
+      fee_rate = 0.0;
+      reconcile_every = 0;
+      max_drawdown_pct = 0.05; rate_limit = None;
+    } in
+    let e = Live_engine.make cfg in
+    let flush = auto_confirm_fills rec_ e in
+    Live_engine.on_bar e (bar ~ts:100 ~px:100.0); flush ();
+    Live_engine.on_bar e (bar ~ts:200 ~px:100.0); flush ();
+    Live_engine.on_bar e (bar ~ts:300 ~px:70.0);
+    Alcotest.(check bool) "tripped" true (Live_engine.halted e);
+    Live_engine.reset e;
+    Alcotest.(check bool) "cleared after reset" false (Live_engine.halted e));
   "reconcile uses actual execution prices via Paper", `Quick, (fun () ->
     (* No on_fill subscription — reconcile is the sole commit path.
        Paper fills at actual open[T+1] which differs from Step's
@@ -405,7 +496,7 @@ let tests = [
       limits = Engine.Risk.default_limits ~equity;
       tif = Order.DAY;
       fee_rate = 0.01;
-      reconcile_every = 0;
+      reconcile_every = 0; max_drawdown_pct = 0.0; rate_limit = None;
     } in
     let eng = Live_engine.make cfg in
     let inst = mk_instrument "SBER" in
@@ -439,7 +530,7 @@ let tests = [
       limits = Engine.Risk.default_limits ~equity;
       tif = Order.DAY;
       fee_rate = 0.0;
-      reconcile_every = 3;   (* every 3 bars *)
+      reconcile_every = 3; max_drawdown_pct = 0.0; rate_limit = None;   (* every 3 bars *)
     } in
     let e = Live_engine.make cfg in
     (* Bar 1: signal queued. Bar 2: signal fires → order placed,
@@ -498,7 +589,7 @@ let tests = [
       initial_cash = equity;
       limits = Engine.Risk.default_limits ~equity;
       tif = Order.DAY;
-      fee_rate = 0.0; reconcile_every = 0;
+      fee_rate = 0.0; reconcile_every = 0; max_drawdown_pct = 0.0; rate_limit = None;
     } in
     let eng = Live_engine.make cfg in
     Paper.Paper_broker.on_fill source

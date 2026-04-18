@@ -8,6 +8,7 @@ let () =
   Alcotest.run "trading-unit" [
     (* Domain *)
     "stream",      Stream_test.tests;
+    "eio_stream",  Eio_stream_test.tests;
     "decimal",     Decimal_test.tests;
     "mic",         Mic_test.tests;
     "ticker",      Ticker_test.tests;

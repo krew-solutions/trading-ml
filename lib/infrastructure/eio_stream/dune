@@ -1,0 +1,4 @@
+(library
+ (name eio_stream)
+ (public_name trading.eio_stream)
+ (libraries stream eio))

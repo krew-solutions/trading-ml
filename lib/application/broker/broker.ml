@@ -61,6 +61,20 @@ module type S = sig
   (** Request cancellation. Returns the updated [Order.t]; the status
       may be [Cancelled] (confirmed) or [Pending_cancel] depending on
       the broker's response semantics. *)
+
+  val get_executions :
+    t -> client_order_id:string -> Order.execution list
+  (** Per-execution detail for the order identified by
+      [client_order_id]. Total [quantity] over the list equals the
+      order's [filled]; prices are the broker's actual fill prices
+      (may differ from limit/market-intended).
+
+      Used by {!Live_engine.reconcile} to commit a reservation with
+      real numbers when a {!Order.Filled} status is observed via
+      polling (the primary WS-event path already carries actuals).
+      Returning an empty list is a valid response for adapters that
+      don't (yet) surface per-execution detail — callers must fall
+      back to intended numbers in that case. *)
 end
 
 type client = E : (module S with type t = 't) * 't -> client
@@ -86,3 +100,6 @@ let get_order (E ((module M), t)) ~client_order_id =
 
 let cancel_order (E ((module M), t)) ~client_order_id =
   M.cancel_order t ~client_order_id
+
+let get_executions (E ((module M), t)) ~client_order_id =
+  M.get_executions t ~client_order_id

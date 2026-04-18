@@ -78,6 +78,11 @@ val get_orders : t -> Order.t list
 val get_order : t -> client_order_id:string -> Order.t
 val cancel_order : t -> client_order_id:string -> Order.t
 
+val get_executions :
+  t -> client_order_id:string -> Order.execution list
+(** Chronological list of executions (simulated fills) that match
+    [client_order_id]. Empty for unknown cids. *)
+
 type fill = {
   client_order_id : string;
   ts : int64;

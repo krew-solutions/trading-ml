@@ -137,13 +137,37 @@ let reconcile_unsafe t =
       match o.status with
       | Filled ->
         Hashtbl.remove t.pending o.client_order_id;
-        t.state <- Engine.Step.commit_fill t.state
-          ~reservation_id:p.reservation_id
-          ~actual_quantity:p.intended_quantity
-          ~actual_price:p.intended_price
-          ~actual_fee:p.intended_fee;
-        Log.info "[engine] reconcile commit cid=%s (fallback)"
-          o.client_order_id
+        (* Prefer actual per-execution prices from the broker over
+           our intended-at-reservation-time snapshot. Empty list
+           (adapter that doesn't surface executions) falls back to
+           intended — bounded drift, documented in
+           docs/architecture/reservations.md. *)
+        let executions = try
+          Broker.get_executions t.cfg.broker
+            ~client_order_id:o.client_order_id
+        with e ->
+          Log.warn "[engine] reconcile: get_executions failed for %s: %s"
+            o.client_order_id (Printexc.to_string e); []
+        in
+        if executions = [] then begin
+          t.state <- Engine.Step.commit_fill t.state
+            ~reservation_id:p.reservation_id
+            ~actual_quantity:p.intended_quantity
+            ~actual_price:p.intended_price
+            ~actual_fee:p.intended_fee;
+          Log.info "[engine] reconcile commit cid=%s (intended fallback)"
+            o.client_order_id
+        end else begin
+          List.iter (fun (ex : Order.execution) ->
+            t.state <- Engine.Step.commit_partial_fill t.state
+              ~reservation_id:p.reservation_id
+              ~actual_quantity:ex.quantity
+              ~actual_price:ex.price
+              ~actual_fee:ex.fee
+          ) executions;
+          Log.info "[engine] reconcile commit cid=%s (%d executions)"
+            o.client_order_id (List.length executions)
+        end
       | Cancelled | Rejected | Expired | Failed ->
         Hashtbl.remove t.pending o.client_order_id;
         t.state <- Engine.Step.release t.state

@@ -61,6 +61,7 @@ let mk_broker (rec_ : Recording_broker.t) : Broker.client =
     let get_orders _ = []
     let get_order _ ~client_order_id:_ = failwith "n/a"
     let cancel_order _ ~client_order_id:_ = failwith "n/a"
+    let get_executions _ ~client_order_id:_ = []
   end in
   Broker.make (module M) rec_
 
@@ -303,6 +304,7 @@ let mk_reporting_broker (r : Reporting_broker.t) : Broker.client =
     let get_orders (r : Reporting_broker.t) = r.orders
     let get_order _ ~client_order_id:_ = failwith "n/a"
     let cancel_order _ ~client_order_id:_ = failwith "n/a"
+    let get_executions _ ~client_order_id:_ = []
   end in
   Broker.make (module M) r
 
@@ -372,6 +374,58 @@ let tests = [
   "reconcile commits filled",    `Quick, test_reconcile_commits_filled;
   "reconcile releases rejected", `Quick, test_reconcile_releases_rejected;
   "reconcile idempotent",        `Quick, test_reconcile_idempotent;
+  "reconcile uses actual execution prices via Paper", `Quick, (fun () ->
+    (* No on_fill subscription — reconcile is the sole commit path.
+       Paper fills at actual open[T+1] which differs from Step's
+       intended price computed at close[T]. If reconcile used
+       intended, Live's cash would diverge from Paper's. *)
+    let paper = Paper.Paper_broker.make
+      ~initial_cash:(d_int 100_000)
+      ~fee_rate:0.01
+      ~source:(let module S = struct
+        type t = unit
+        let name = "stub"
+        let bars () ~n:_ ~instrument:_ ~timeframe:_ = []
+        let venues () = []
+        let place_order () ~instrument:_ ~side:_ ~quantity:_
+            ~kind:_ ~tif:_ ~client_order_id:_ = failwith "n/a"
+        let get_orders () = []
+        let get_order () ~client_order_id:_ = failwith "n/a"
+        let cancel_order () ~client_order_id:_ = failwith "n/a"
+        let get_executions () ~client_order_id:_ = []
+      end in Broker.make (module S) ()) () in
+    let strat = Strategies.Strategy.make
+      (module Fixed_signal_strategy) { action = Enter_long } in
+    let equity = d_int 100_000 in
+    let cfg : Live_engine.config = {
+      broker = Paper.Paper_broker.as_broker paper;
+      strategy = strat;
+      instrument = mk_instrument "SBER";
+      initial_cash = equity;
+      limits = Engine.Risk.default_limits ~equity;
+      tif = Order.DAY;
+      fee_rate = 0.01;
+      reconcile_every = 0;
+    } in
+    let eng = Live_engine.make cfg in
+    let inst = mk_instrument "SBER" in
+    (* Bar T: signal queued. Fill intended at close[T]=100. *)
+    Live_engine.on_bar eng (bar ~ts:100 ~px:100.0);
+    Paper.Paper_broker.on_bar paper ~instrument:inst
+      (Candle.make ~ts:100L ~open_:(d 100.0) ~high:(d 100.0)
+         ~low:(d 100.0) ~close:(d 100.0) ~volume:(d_int 1_000));
+    (* Bar T+1: Pipeline reserves. Paper fills at open[T+1]=105
+       (gap-up), so actual price = 105, NOT intended 100. *)
+    Live_engine.on_bar eng (bar ~ts:200 ~px:105.0);
+    Paper.Paper_broker.on_bar paper ~instrument:inst
+      (Candle.make ~ts:200L ~open_:(d 105.0) ~high:(d 105.0)
+         ~low:(d 105.0) ~close:(d 105.0) ~volume:(d_int 1_000));
+    Live_engine.reconcile eng;
+    let live_cash = (Live_engine.portfolio eng).cash in
+    let paper_cash = (Paper.Paper_broker.portfolio paper).cash in
+    Alcotest.(check (float 1e-4))
+      "reconcile pulled actual execution numbers"
+      (Decimal.to_float paper_cash) (Decimal.to_float live_cash));
   "auto-reconcile after N bars", `Quick, (fun () ->
     let r = Reporting_broker.create () in
     let broker = mk_reporting_broker r in
@@ -430,6 +484,7 @@ let tests = [
         let get_orders () = []
         let get_order () ~client_order_id:_ = failwith "n/a"
         let cancel_order () ~client_order_id:_ = failwith "n/a"
+    let get_executions () ~client_order_id:_ = []
       end in Broker.make (module S) ()) ()
     in
     let strat = Strategies.Strategy.make

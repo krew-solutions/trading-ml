@@ -80,6 +80,7 @@ let place_order _ ~instrument:_ ~side:_ ~quantity:_
 let get_orders _ = unsupported "get_orders"
 let get_order _ ~client_order_id:_ = unsupported "get_order"
 let cancel_order _ ~client_order_id:_ = unsupported "cancel_order"
+let get_executions _ ~client_order_id:_ = unsupported "get_executions"
 
 let as_broker (t : t) : Broker.client =
   Broker.make (module struct
@@ -91,4 +92,5 @@ let as_broker (t : t) : Broker.client =
     let get_orders = get_orders
     let get_order = get_order
     let cancel_order = cancel_order
+    let get_executions = get_executions
   end) t

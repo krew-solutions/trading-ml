@@ -231,6 +231,19 @@ let cancel_order t ~client_order_id =
 let fills t =
   with_lock t (fun () -> List.rev t.fills)
 
+(** Project {!fill}s matching [client_order_id] into domain
+    {!Order.execution} records, chronologically. Paper's fill
+    list IS the execution history — one entry per simulated
+    partial fill — so the projection is a trivial filter. *)
+let get_executions t ~client_order_id =
+  with_lock t (fun () ->
+    List.filter_map (fun (f : fill) ->
+      if f.client_order_id = client_order_id then
+        Some ({ ts = f.ts; quantity = f.quantity;
+                price = f.price; fee = f.fee } : Order.execution)
+      else None
+    ) (List.rev t.fills))
+
 let portfolio t =
   with_lock t (fun () -> t.portfolio)
 
@@ -259,4 +272,5 @@ let as_broker (t : t) : Broker.client =
     let get_orders = get_orders
     let get_order = get_order
     let cancel_order = cancel_order
+    let get_executions = get_executions
   end) t

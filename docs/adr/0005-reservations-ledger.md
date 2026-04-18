@@ -188,13 +188,14 @@ disturbing the domain types.
   every `config.reconcile_every` bars and closes out terminal
   orders. If `reconcile_every = 0` (disabled), reservations
   will leak on broker restart or WS drop.
-- The `reconcile` path currently uses **intended** numbers from
-  the pending map for `commit_fill`, not actual from the
-  broker. This is a documented drift of up to the slippage
-  buffer per reconciled order. Fixing it requires either
-  enriching `Order.t` with `avg_price` (works for BCS) or
-  adding `Broker.S.get_executions` (needed for Finam). Deferred
-  to the live adapter integration task.
+- The `reconcile` path now pulls actual per-execution numbers
+  via `Broker.S.get_executions`. Paper implements this from
+  its own fill history. Finam and BCS adapters have stub
+  implementations (`failwith`) that will be filled in when the
+  live integration lands — until then, `get_executions` fails
+  for those adapters and reconcile falls back to intended
+  numbers (bounded per-order drift, not accumulating). For
+  Paper the path is exact.
 
 ## Consequences observed
 

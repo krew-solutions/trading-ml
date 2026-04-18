@@ -246,25 +246,24 @@ let reconcile_unsafe t =
 Auto-trigger: `Live_engine.config.reconcile_every` runs it every
 N bars inside `on_bar`.
 
-### Caveat: reconcile uses intended prices
+### Reconcile pulls actuals via `get_executions`
 
-Our domain `Order.t` does not carry a weighted-average fill price
-field. When reconcile commits based on status alone, it uses the
-**intended** numbers from the pending map, not actual. Drift on
-slippage is bounded per order (typically < 0.5% for liquid
-instruments) and does not accumulate, but accurate reconcile
-requires either:
+On a `Filled` status, reconcile calls
+`Broker.get_executions ~client_order_id` and commits each
+returned execution via `Step.commit_partial_fill` with actual
+broker numbers. Paper returns its own fill history filtered by
+cid; real brokers (Finam, BCS) will return per-execution trade
+records (Finam's `/v1/accounts/{id}/trades`, BCS's `Deal`
+list) once their adapters are wired.
 
-- enriching `Order.t` with `avg_price` (works for BCS where
-  `averagePrice` is exposed on the order response), or
-- adding `Broker.S.get_executions` (needed for Finam, whose
-  `/v1/accounts/{id}/trades` endpoint returns per-execution
-  trades from which the adapter computes the VWAP).
-
-This is deferred to when the Finam/BCS live adapters are wired;
-WS `order_update` events carry actual numbers and will be the
-primary path in production, reducing reconcile to a genuine
-safety net.
+If `get_executions` returns empty (adapter stub, or broker that
+doesn't expose per-execution detail), reconcile falls back to
+the intended numbers from the pending map. This is a
+documented drift bounded by per-order slippage (typically
+< 0.5% for liquid instruments) and does not accumulate — but
+the ACL adapters for Finam/BCS should implement
+`get_executions` before going to production so the fallback
+never fires for real brokers.
 
 ## Invariants
 

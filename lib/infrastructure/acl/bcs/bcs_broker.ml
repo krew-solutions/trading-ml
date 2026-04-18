@@ -36,6 +36,16 @@ let get_orders t = Rest.get_orders t
 let get_order t ~client_order_id = Rest.get_order t ~client_order_id
 let cancel_order t ~client_order_id = Rest.cancel_order t ~client_order_id
 
+(** TODO: wire up the Deals endpoint once [Rest.get_deals] exists.
+    BCS exposes [averagePrice] on [OrderStatus] directly (simpler
+    shape than Finam), but for identical semantics across brokers
+    we project per-execution [Deal] records into
+    {!Order.execution}. Left as failwith until the Rest helper
+    lands. *)
+let get_executions _ ~client_order_id:_ =
+  failwith "Bcs.Bcs_broker.get_executions: not yet implemented \
+            (pending deals-list integration)"
+
 let as_broker (rest : Rest.t) : Broker.client =
   Broker.make (module struct
     type nonrec t = t
@@ -46,4 +56,5 @@ let as_broker (rest : Rest.t) : Broker.client =
     let get_orders = get_orders
     let get_order = get_order
     let cancel_order = cancel_order
+    let get_executions = get_executions
   end) rest

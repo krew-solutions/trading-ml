@@ -37,9 +37,16 @@ type t = {
   client_order_id : string;
 }
 
-let remaining_qty o = Decimal.sub o.quantity o.filled
+type execution = {
+  ts : int64;
+  quantity : Decimal.t;
+  price : Decimal.t;
+  fee : Decimal.t;
+}
 
-let is_done o =
+let remaining_qty (o : t) = Decimal.sub o.quantity o.filled
+
+let is_done (o : t) =
   match o.status with
   | Filled | Cancelled | Rejected | Expired | Failed -> true
   | New | Partially_filled | Pending_cancel | Pending_new | Suspended -> false

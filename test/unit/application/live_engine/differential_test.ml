@@ -29,6 +29,7 @@ let mk_stub_source () : Broker.client =
     let get_orders () = []
     let get_order () ~client_order_id:_ = failwith "n/a"
     let cancel_order () ~client_order_id:_ = failwith "n/a"
+    let get_executions () ~client_order_id:_ = []
   end in
   Broker.make (module M) ()
 

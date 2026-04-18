@@ -16,16 +16,12 @@ module Make (C : sig val period : int end) : Indicator.S = struct
 
   let update st c =
     let vol = Decimal.to_float c.Candle.volume in
-    let r = Ring.copy st.ring in
-    let sum =
-      if Ring.is_full st.ring then begin
+    let r, sum =
+      if Ring.is_full st.ring then
         let old = Ring.oldest st.ring in
-        Ring.push r vol;
-        st.sum -. old +. vol
-      end else begin
-        Ring.push r vol;
-        st.sum +. vol
-      end
+        Ring.push st.ring vol, st.sum -. old +. vol
+      else
+        Ring.push st.ring vol, st.sum +. vol
     in
     let st' = { ring = r; sum } in
     let out =

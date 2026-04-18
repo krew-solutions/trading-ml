@@ -43,10 +43,11 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let range =
       Decimal.to_float c.Candle.high -. Decimal.to_float c.low in
     let st' = step_ema st range in
-    let h = Ring.copy st'.history in
-    (match st'.ema_value with
-     | Some v -> Ring.push h v
-     | None -> ());
+    let h =
+      match st'.ema_value with
+      | Some v -> Ring.push st'.history v
+      | None -> st'.history
+    in
     let st'' = { st' with history = h } in
     let out =
       if Ring.size h = C.period + 1 then

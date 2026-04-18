@@ -45,16 +45,14 @@ module Make (C : sig val fast : int val slow : int val signal : int end) :
 
   let update st candle =
     let price = Decimal.to_float candle.Candle.close in
-    let f = Ring.copy st.fast in Ring.push f price;
-    let s = Ring.copy st.slow in Ring.push s price;
-    let mh = Ring.copy st.macd_hist in
-    let macd_opt =
+    let f = Ring.push st.fast price in
+    let s = Ring.push st.slow price in
+    let mh, macd_opt =
       match wma f d_fast C.fast, wma s d_slow C.slow with
       | Some a, Some b ->
         let m = a -. b in
-        Ring.push mh m;
-        Some m
-      | _ -> None
+        Ring.push st.macd_hist m, Some m
+      | _ -> st.macd_hist, None
     in
     let st' = { fast = f; slow = s; macd_hist = mh } in
     let out =

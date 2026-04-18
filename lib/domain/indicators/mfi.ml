@@ -45,18 +45,19 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     | Some prev ->
       let pos = if typical > prev then raw else 0.0 in
       let neg = if typical < prev then raw else 0.0 in
-      let pr = Ring.copy st.pos_ring in
-      let nr = Ring.copy st.neg_ring in
-      let sum_pos, sum_neg =
+      let pr, nr, sum_pos, sum_neg =
         if Ring.is_full st.pos_ring then
           let op = Ring.oldest st.pos_ring in
           let on = Ring.oldest st.neg_ring in
-          Ring.push pr pos; Ring.push nr neg;
-          st.sum_pos -. op +. pos, st.sum_neg -. on +. neg
-        else begin
-          Ring.push pr pos; Ring.push nr neg;
-          st.sum_pos +. pos, st.sum_neg +. neg
-        end
+          Ring.push st.pos_ring pos,
+          Ring.push st.neg_ring neg,
+          st.sum_pos -. op +. pos,
+          st.sum_neg -. on +. neg
+        else
+          Ring.push st.pos_ring pos,
+          Ring.push st.neg_ring neg,
+          st.sum_pos +. pos,
+          st.sum_neg +. neg
       in
       let samples = st.samples + 1 in
       let st' = {

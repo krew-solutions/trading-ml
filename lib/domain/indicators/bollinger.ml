@@ -26,20 +26,16 @@ module Make (C : sig val period : int val k : float end) :
 
   let update st candle =
     let p = Decimal.to_float candle.Candle.close in
-    let r = Ring.copy st.ring in
     let st =
       if Ring.is_full st.ring then
         let old = Ring.oldest st.ring in
-        Ring.push r p;
-        { ring = r;
+        { ring = Ring.push st.ring p;
           sum = st.sum -. old +. p;
           sum_sq = st.sum_sq -. old *. old +. p *. p }
-      else begin
-        Ring.push r p;
-        { ring = r;
+      else
+        { ring = Ring.push st.ring p;
           sum = st.sum +. p;
           sum_sq = st.sum_sq +. p *. p }
-      end
     in
     let out =
       if Ring.is_full st.ring then

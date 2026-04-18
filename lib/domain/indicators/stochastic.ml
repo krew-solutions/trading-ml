@@ -42,8 +42,8 @@ module Make (C : sig val k_period : int val d_period : int end) :
     let high = Decimal.to_float c.Candle.high in
     let low  = Decimal.to_float c.low in
     let close = Decimal.to_float c.close in
-    let h = Ring.copy st.highs in Ring.push h high;
-    let l = Ring.copy st.lows  in Ring.push l low;
+    let h = Ring.push st.highs high in
+    let l = Ring.push st.lows  low in
     let k_opt =
       if Ring.is_full h then
         let hi = max_of h in
@@ -57,16 +57,12 @@ module Make (C : sig val k_period : int val d_period : int end) :
       match k_opt with
       | None -> { st with highs = h; lows = l }
       | Some kv ->
-        let kr = Ring.copy st.k_ring in
-        let k_sum =
+        let kr, k_sum =
           if Ring.is_full st.k_ring then
             let old = Ring.oldest st.k_ring in
-            Ring.push kr kv;
-            st.k_sum -. old +. kv
-          else begin
-            Ring.push kr kv;
-            st.k_sum +. kv
-          end
+            Ring.push st.k_ring kv, st.k_sum -. old +. kv
+          else
+            Ring.push st.k_ring kv, st.k_sum +. kv
         in
         { highs = h; lows = l; k_ring = kr; k_sum }
     in

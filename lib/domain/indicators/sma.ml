@@ -23,13 +23,11 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let price = Decimal.to_float candle.Candle.close in
     let st =
       if Ring.is_full st.ring then
-        { ring = (let r = Ring.copy st.ring in Ring.push r price; r);
+        { ring = Ring.push st.ring price;
           sum = st.sum -. Ring.oldest st.ring +. price }
-      else begin
-        let r = Ring.copy st.ring in
-        Ring.push r price;
-        { ring = r; sum = st.sum +. price }
-      end
+      else
+        { ring = Ring.push st.ring price;
+          sum = st.sum +. price }
     in
     let out =
       if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period)

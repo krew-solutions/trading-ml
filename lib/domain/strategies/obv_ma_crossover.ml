@@ -32,17 +32,16 @@ let scalar ind =
   | Some (_, [v]) -> Some v
   | _ -> None
 
-(** Push [x] into a copy of [ring] and return the updated ring + sum.
-    Mirrors the pattern used inside {!Indicators.Sma}. *)
+(** Push [x] into [ring] and return the updated ring + rolling
+    sum. [Ring.push] is persistent — [ring] is unchanged, the
+    returned ring is the one with [x] appended. *)
 let roll ring sum x =
-  let ring' = Indicators.Ring.copy ring in
   let sum' =
     if Indicators.Ring.is_full ring
     then sum -. Indicators.Ring.oldest ring +. x
     else sum +. x
   in
-  Indicators.Ring.push ring' x;
-  ring', sum'
+  Indicators.Ring.push ring x, sum'
 
 let on_candle st instrument (c : Candle.t) =
   let obv = Indicators.Indicator.update st.obv c in

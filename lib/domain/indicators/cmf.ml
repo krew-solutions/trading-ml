@@ -33,18 +33,19 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let mfm = if range = 0.0 then 0.0
               else ((close -. low) -. (high -. close)) /. range in
     let mfv = mfm *. vol in
-    let mr = Ring.copy st.mfv_ring in
-    let vr = Ring.copy st.vol_ring in
-    let sum_mfv, sum_vol =
+    let mr, vr, sum_mfv, sum_vol =
       if Ring.is_full st.mfv_ring then
         let om = Ring.oldest st.mfv_ring in
         let ov = Ring.oldest st.vol_ring in
-        Ring.push mr mfv; Ring.push vr vol;
-        st.sum_mfv -. om +. mfv, st.sum_vol -. ov +. vol
-      else begin
-        Ring.push mr mfv; Ring.push vr vol;
-        st.sum_mfv +. mfv, st.sum_vol +. vol
-      end
+        Ring.push st.mfv_ring mfv,
+        Ring.push st.vol_ring vol,
+        st.sum_mfv -. om +. mfv,
+        st.sum_vol -. ov +. vol
+      else
+        Ring.push st.mfv_ring mfv,
+        Ring.push st.vol_ring vol,
+        st.sum_mfv +. mfv,
+        st.sum_vol +. vol
     in
     let st' = { mfv_ring = mr; vol_ring = vr; sum_mfv; sum_vol } in
     let out =

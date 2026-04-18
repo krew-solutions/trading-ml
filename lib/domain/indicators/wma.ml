@@ -28,8 +28,7 @@ module Make (C : sig val period : int end) : Indicator.S = struct
 
   let update st candle =
     let price = Decimal.to_float candle.Candle.close in
-    let r = Ring.copy st.ring in
-    Ring.push r price;
+    let r = Ring.push st.ring price in
     let st' = { ring = r } in
     let out = if Ring.is_full r then Some (compute r) else None in
     st', out

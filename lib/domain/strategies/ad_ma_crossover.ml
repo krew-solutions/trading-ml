@@ -31,14 +31,12 @@ let scalar ind =
   | _ -> None
 
 let roll ring sum x =
-  let ring' = Indicators.Ring.copy ring in
   let sum' =
     if Indicators.Ring.is_full ring
     then sum -. Indicators.Ring.oldest ring +. x
     else sum +. x
   in
-  Indicators.Ring.push ring' x;
-  ring', sum'
+  Indicators.Ring.push ring x, sum'
 
 let on_candle st instrument (c : Candle.t) =
   let ad = Indicators.Indicator.update st.ad c in

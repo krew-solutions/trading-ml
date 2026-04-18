@@ -36,15 +36,24 @@ let get_orders t = Rest.get_orders t
 let get_order t ~client_order_id = Rest.get_order t ~client_order_id
 let cancel_order t ~client_order_id = Rest.cancel_order t ~client_order_id
 
-(** TODO: wire up the Deals endpoint once [Rest.get_deals] exists.
-    BCS exposes [averagePrice] on [OrderStatus] directly (simpler
-    shape than Finam), but for identical semantics across brokers
-    we project per-execution [Deal] records into
-    {!Order.execution}. Left as failwith until the Rest helper
-    lands. *)
-let get_executions _ ~client_order_id:_ =
-  failwith "Bcs.Bcs_broker.get_executions: not yet implemented \
-            (pending deals-list integration)"
+(** Project account-wide deals into per-execution records for the
+    order identified by [client_order_id]. BCS's deal payload does
+    not carry [clientOrderId] — only [orderNum] (broker-assigned).
+    So we resolve the order first to pick up its [exec_id] (= the
+    [orderNum] kept on [Order.t]), then filter the deals list by
+    string-equality on that id. Returns [] if the order has no
+    [exec_id] yet (still pending) or no fills against it.
+
+    Unverified against a live account — per-call [get_order] is
+    an extra HTTP roundtrip; a cid→exec_id cache (like Finam's)
+    is the obvious follow-up once we see volume. *)
+let get_executions t ~client_order_id =
+  let order = Rest.get_order t ~client_order_id in
+  if order.exec_id = "" then []
+  else
+    Rest.get_deals t
+    |> List.filter_map (fun (order_num, exec) ->
+      if order_num = order.exec_id then Some exec else None)
 
 let as_broker (rest : Rest.t) : Broker.client =
   Broker.make (module struct

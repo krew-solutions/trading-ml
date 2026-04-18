@@ -318,6 +318,66 @@ let edit_order t ~client_order_id
     client_order_id;
   }
 
+(** Decode one record from the BCS Deals payload into a
+    (order_num, execution) pair. Field shape per official BCS docs
+    (paginated retail API):
+
+    - [orderNum] int64       broker order number (correlates with
+                             [exec_id] on the parent [Order.t])
+    - [tradeNum] int64       deal/execution id (informational, unused)
+    - [clientCode] string    client account code (not an order id)
+    - [ticker], [classCode]  instrument identity
+    - [side] string "1"/"2"  BUY/SELL
+    - [tradeDateTime]        execution timestamp (RFC 3339)
+    - [price] double         execution price
+    - [tradeQuantity] double size in shares/contracts
+    - [tradeQuantityLots]    size in lots (ignored — lots↔shares is
+                             instrument-dependent; we keep qty in
+                             shares for domain consistency)
+    - [volume], [go], [contractAmount], [settleDate], [...]
+                             additional fields outside the domain model
+
+    Unlike the tigusigalpa Go client (which exposed a [clientOrderId]
+    field on deals), the real BCS payload carries only [orderNum], so
+    the broker adapter must first resolve [client_order_id → exec_id]
+    via [get_order] before filtering this list.
+
+    No per-fill commission field — [fee] defaults to zero; fees live
+    on the parent [Order] state, not per-execution. *)
+let bcs_execution_of_json (j : Yojson.Safe.t) : string * Order.execution =
+  let open Yojson.Safe.Util in
+  let int_or_str k = match member k j with
+    | `String s -> s
+    | `Int n -> string_of_int n
+    | `Intlit s -> s
+    | _ -> ""
+  in
+  let float_d k = match member k j with
+    | `Float f -> Decimal.of_float f
+    | `Int n -> Decimal.of_int n
+    | `Intlit s -> Decimal.of_float (float_of_string s)
+    | _ -> Decimal.zero in
+  let ts = match member "tradeDateTime" j with
+    | `String s -> Candle_json.parse_iso8601 s | _ -> 0L in
+  int_or_str "orderNum", {
+    Order.ts;
+    quantity = float_d "tradeQuantity";
+    price = float_d "price";
+    fee = Decimal.zero;
+  }
+
+(** GET /trade-api-bff-operations/api/v1/deals — paginated account-wide
+    deals. Response wraps the array in [records] and ships pagination
+    metadata ([totalRecords], [totalPages]). This sketch reads the
+    first page only; pagination can be added once the page/pageSize
+    query parameter names are confirmed against a live response. *)
+let get_deals t : (string * Order.execution) list =
+  let j = get_json t (ops_path ^ "/deals") [] in
+  let open Yojson.Safe.Util in
+  match member "records" j with
+  | `List items -> List.map bcs_execution_of_json items
+  | _ -> []
+
 (** DELETE /trade-api-bff-operations/api/v1/orders/{id} — cancel. *)
 let cancel_order t ~client_order_id : Order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id in

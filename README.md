@@ -6,7 +6,7 @@ own file, and critical bookkeeping (decimal math, portfolio, candle
 invariants) carries [Gospel](https://github.com/ocaml-gospel/gospel) specs
 for formal verification.
 
-**[Architecture & design documentation](docs/README.md)** — layering,
+**[Architecture & design documentation](https://krew-solutions.github.io/trading-ml/)** — layering,
 state machine, streams, reservations ledger, live engine, testing
 strategy, and decision records (ADRs).
 

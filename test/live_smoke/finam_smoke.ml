@@ -84,38 +84,40 @@ let test_limit_order_lifecycle () =
       let last_close = match List.rev bars with
         | c :: _ -> Decimal.to_float c.Candle.close
         | [] -> failwith "no bars to anchor limit price" in
-      (* 5% below market. Far enough to be practically unfillable in a
-         short smoke window, but MOEX's per-instrument price bands can
-         be tighter (API returns 400 with the exact minimum allowed
-         price). If that happens, retry at the stated floor — still
-         unlikely to fill because the market would have to reach the
-         lower band inside our window. SBER quotes in kopecks so we
-         snap to 0.01. *)
+      (* Pricing strategy: pick a BUY-limit price that's safely inside
+         MOEX's per-instrument price bands but far enough below market
+         to stay unfilled for the few seconds this test runs.
+
+         Attempt 1: [last_close * 0.95] — works on liquid names with
+           wide bands (SBER most sessions).
+         Attempt 2: if Finam returns "price can not be less than N",
+           parse N and retry at that band floor. The placed order
+           sits at the extreme of what the exchange accepts.
+         Attempt 3: if the first error has no parseable floor
+           (e.g. a bare "Invalid value for field: Price" during
+           volatile opens), fall back to [last_close * 0.98]. Still
+           below market, still rarely triggers a fill.
+
+         SBER quotes in kopecks so every candidate is snapped to
+         0.01 before sending. *)
       let snap px =
         Decimal.of_float (Float.round (px *. 100.0) /. 100.0) in
       (* Finam's client_order_id filter allows letters, digits and
          spaces only — no dashes or underscores. *)
       let cid = Printf.sprintf "smoke%d" (int_of_float (Unix.gettimeofday ())) in
-      let place_at px =
-        let payload = Finam.Dto.place_order_payload
-          ~instrument:sber ~side:Side.Buy
-          ~quantity:(Decimal.of_int 1) ~kind:(Order.Limit px)
-          ~tif:Order.DAY ~client_order_id:cid () in
-        let path = Printf.sprintf "/v1/accounts/%s/orders" account in
-        let j = Finam.Rest.post_json rest path payload in
-        Printf.printf "  [raw place response] %s\n%!"
-          (Yojson.Safe.pretty_to_string j);
-        Finam.Dto.order_of_json j in
-      Printf.printf "  [info] last H1 close = %.2f\n%!" last_close;
+      let place_at px = Finam.Rest.place_order rest
+          ~account_id:account ~instrument:sber
+          ~side:Side.Buy ~quantity:(Decimal.of_int 1)
+          ~kind:(Order.Limit px) ~tif:Order.DAY
+          ~client_order_id:cid () in
       let try_place px =
-        Printf.printf "  [info] place attempt at %s\n%!"
-          (Decimal.to_string px);
         try Ok (place_at px) with Failure msg -> Error msg in
+      Printf.printf "  [info] last H1 close = %.2f\n%!" last_close;
       let placed =
         match try_place (snap (last_close *. 0.95)) with
         | Ok o -> o
         | Error msg1 ->
-          Printf.printf "  [info] first attempt failed: %s\n%!" msg1;
+          Printf.printf "  [info] 0.95 attempt rejected: %s\n%!" msg1;
           let re = Str.regexp "less than \\([0-9]+\\.?[0-9]*\\)" in
           let band_min =
             try
@@ -125,11 +127,12 @@ let test_limit_order_lifecycle () =
           in
           match band_min with
           | Some floor ->
+            Printf.printf "  [info] retry at band floor %.2f\n%!" floor;
             (match try_place (snap floor) with
              | Ok o -> o
              | Error m -> failwith m)
           | None ->
-            (* No parseable floor — try a gentler offset (-2%). *)
+            Printf.printf "  [info] retry at 0.98 fallback\n%!";
             (match try_place (snap (last_close *. 0.98)) with
              | Ok o -> o
              | Error m -> failwith m)
@@ -137,7 +140,7 @@ let test_limit_order_lifecycle () =
       let server_id = placed.Order.id in
       Printf.printf "  [info] placed cid=%s server=%s status=%s\n%!"
         cid server_id (Order.status_to_string placed.status);
-      (* Always cancel, even if a subsequent assert fails — leaving a
+      (* Always cancel, even if a subsequent assert fails. Leaving a
          live limit hanging against the account is worse than a noisy
          cancel. *)
       Fun.protect
@@ -153,16 +156,8 @@ let test_limit_order_lifecycle () =
         (fun () ->
           Alcotest.(check bool) "server assigned an id"
             true (server_id <> "");
-          (* Raw GET dump: the previous run's PlaceOrder echoed our
-             [client_order_id] correctly, but the subsequent GetOrder
-             returned a different value — probe what shape Finam sends
-             here. *)
-          let get_path = Printf.sprintf
-            "/v1/accounts/%s/orders/%s" account server_id in
-          let raw_get = Finam.Rest.get_json rest get_path [] in
-          Printf.printf "  [raw get response] %s\n%!"
-            (Yojson.Safe.pretty_to_string raw_get);
-          let fetched = Finam.Dto.order_of_json raw_get in
+          let fetched = Finam.Rest.get_order rest
+            ~account_id:account ~order_id:server_id in
           Alcotest.(check string) "round-trip cid"
             cid fetched.client_order_id;
           let trades = Finam.Rest.get_trades rest ~account_id:account in

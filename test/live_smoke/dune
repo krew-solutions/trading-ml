@@ -8,7 +8,7 @@
  (name live_smoke_runner)
  (libraries core finam bcs http_transport
             eio eio_main mirage-crypto-rng.unix
-            alcotest))
+            str alcotest))
 
 (rule
  (alias live_smoke)

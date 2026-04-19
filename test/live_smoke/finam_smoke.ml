@@ -85,40 +85,92 @@ let test_limit_order_lifecycle () =
         | c :: _ -> Decimal.to_float c.Candle.close
         | [] -> failwith "no bars to anchor limit price" in
       (* 5% below market. Far enough to be practically unfillable in a
-         short smoke window, but inside MOEX's per-instrument price
-         bands (a 20% offset trips the "price can not be less than X"
-         guard). SBER quotes in kopecks, so snap to 0.01. *)
-      let limit_px = Decimal.of_float
-        (Float.round (last_close *. 0.95 *. 100.0) /. 100.0) in
+         short smoke window, but MOEX's per-instrument price bands can
+         be tighter (API returns 400 with the exact minimum allowed
+         price). If that happens, retry at the stated floor — still
+         unlikely to fill because the market would have to reach the
+         lower band inside our window. SBER quotes in kopecks so we
+         snap to 0.01. *)
+      let snap px =
+        Decimal.of_float (Float.round (px *. 100.0) /. 100.0) in
       (* Finam's client_order_id filter allows letters, digits and
          spaces only — no dashes or underscores. *)
       let cid = Printf.sprintf "smoke%d" (int_of_float (Unix.gettimeofday ())) in
-      let placed = Finam.Rest.place_order rest
-        ~account_id:account ~instrument:sber
-        ~side:Side.Buy ~quantity:(Decimal.of_int 1)
-        ~kind:(Order.Limit limit_px) ~tif:Order.DAY
-        ~client_order_id:cid () in
+      let place_at px =
+        let payload = Finam.Dto.place_order_payload
+          ~instrument:sber ~side:Side.Buy
+          ~quantity:(Decimal.of_int 1) ~kind:(Order.Limit px)
+          ~tif:Order.DAY ~client_order_id:cid () in
+        let path = Printf.sprintf "/v1/accounts/%s/orders" account in
+        let j = Finam.Rest.post_json rest path payload in
+        Printf.printf "  [raw place response] %s\n%!"
+          (Yojson.Safe.pretty_to_string j);
+        Finam.Dto.order_of_json j in
+      Printf.printf "  [info] last H1 close = %.2f\n%!" last_close;
+      let try_place px =
+        Printf.printf "  [info] place attempt at %s\n%!"
+          (Decimal.to_string px);
+        try Ok (place_at px) with Failure msg -> Error msg in
+      let placed =
+        match try_place (snap (last_close *. 0.95)) with
+        | Ok o -> o
+        | Error msg1 ->
+          Printf.printf "  [info] first attempt failed: %s\n%!" msg1;
+          let re = Str.regexp "less than \\([0-9]+\\.?[0-9]*\\)" in
+          let band_min =
+            try
+              ignore (Str.search_forward re msg1 0);
+              Some (float_of_string (Str.matched_group 1 msg1))
+            with Not_found -> None
+          in
+          match band_min with
+          | Some floor ->
+            (match try_place (snap floor) with
+             | Ok o -> o
+             | Error m -> failwith m)
+          | None ->
+            (* No parseable floor — try a gentler offset (-2%). *)
+            (match try_place (snap (last_close *. 0.98)) with
+             | Ok o -> o
+             | Error m -> failwith m)
+      in
       let server_id = placed.Order.id in
       Printf.printf "  [info] placed cid=%s server=%s status=%s\n%!"
         cid server_id (Order.status_to_string placed.status);
-      Alcotest.(check bool) "server assigned an id"
-        true (server_id <> "");
-      (* Confirm it's retrievable. *)
-      let fetched = Finam.Rest.get_order rest
-        ~account_id:account ~order_id:server_id in
-      Alcotest.(check string) "round-trip cid"
-        cid fetched.client_order_id;
-      (* Expect zero trades for this just-placed order. *)
-      let trades = Finam.Rest.get_trades rest ~account_id:account in
-      let our_trades = List.filter
-        (fun (t : Finam.Dto.account_trade) -> t.order_id = server_id) trades in
-      Alcotest.(check int) "no executions on far-from-market limit"
-        0 (List.length our_trades);
-      (* Clean up. *)
-      let cancelled = Finam.Rest.cancel_order rest
-        ~account_id:account ~order_id:server_id in
-      Printf.printf "  [info] cancelled cid=%s status=%s\n%!"
-        cid (Order.status_to_string cancelled.status)
+      (* Always cancel, even if a subsequent assert fails — leaving a
+         live limit hanging against the account is worse than a noisy
+         cancel. *)
+      Fun.protect
+        ~finally:(fun () ->
+          try
+            let cancelled = Finam.Rest.cancel_order rest
+              ~account_id:account ~order_id:server_id in
+            Printf.printf "  [info] cancelled cid=%s status=%s\n%!"
+              cid (Order.status_to_string cancelled.status)
+          with e ->
+            Printf.printf "  [warn] cancel failed for %s: %s\n%!"
+              server_id (Printexc.to_string e))
+        (fun () ->
+          Alcotest.(check bool) "server assigned an id"
+            true (server_id <> "");
+          (* Raw GET dump: the previous run's PlaceOrder echoed our
+             [client_order_id] correctly, but the subsequent GetOrder
+             returned a different value — probe what shape Finam sends
+             here. *)
+          let get_path = Printf.sprintf
+            "/v1/accounts/%s/orders/%s" account server_id in
+          let raw_get = Finam.Rest.get_json rest get_path [] in
+          Printf.printf "  [raw get response] %s\n%!"
+            (Yojson.Safe.pretty_to_string raw_get);
+          let fetched = Finam.Dto.order_of_json raw_get in
+          Alcotest.(check string) "round-trip cid"
+            cid fetched.client_order_id;
+          let trades = Finam.Rest.get_trades rest ~account_id:account in
+          let our_trades = List.filter
+            (fun (t : Finam.Dto.account_trade) -> t.order_id = server_id)
+            trades in
+          Alcotest.(check int) "no executions on far-from-market limit"
+            0 (List.length our_trades))
   with Exit -> ()
 
 let tests = [

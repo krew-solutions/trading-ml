@@ -173,10 +173,26 @@ let place_order
     history. Caller filters by [order_id] to get the executions
     for one specific order; Finam has no per-order trade endpoint.
     Returns records carrying their parent [order_id] so the
-    filtering is client-side. *)
-let get_trades t ~account_id : Dto.account_trade list =
+    filtering is client-side.
+
+    Finam requires an explicit [interval.start_time] /
+    [interval.end_time] window even though the docs call both
+    optional — a 400 with code 3 is returned otherwise. Default
+    window is the last 24 hours, which is what the live engine's
+    reconcile loop needs; callers wanting historical backfill can
+    pass [from_ts] / [to_ts] explicitly. *)
+let get_trades ?from_ts ?to_ts t ~account_id : Dto.account_trade list =
   let path = Printf.sprintf "/v1/accounts/%s/trades" account_id in
-  Dto.account_trades_of_json (get_json t path [])
+  let now_ts = Int64.of_float (Unix.gettimeofday ()) in
+  let end_ts = Option.value to_ts ~default:now_ts in
+  let start_ts =
+    Option.value from_ts ~default:(Int64.sub end_ts 86_400L)
+  in
+  let q = [
+    "interval.start_time", iso8601_of_ts start_ts;
+    "interval.end_time",   iso8601_of_ts end_ts;
+  ] in
+  Dto.account_trades_of_json (get_json t path q)
 
 (** DELETE /v1/accounts/{account_id}/orders/{order_id} — cancel. *)
 let cancel_order t ~account_id ~order_id : Order.t =

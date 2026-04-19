@@ -84,8 +84,12 @@ let test_limit_order_lifecycle () =
       let last_close = match List.rev bars with
         | c :: _ -> Decimal.to_float c.Candle.close
         | [] -> failwith "no bars to anchor limit price" in
-      (* 20% below market → practically unfillable for a session. *)
-      let limit_px = Decimal.of_float (last_close *. 0.80) in
+      (* 5% below market. Far enough to be practically unfillable in a
+         short smoke window, but inside MOEX's per-instrument price
+         bands (a 20% offset trips the "price can not be less than X"
+         guard). SBER quotes in kopecks, so snap to 0.01. *)
+      let limit_px = Decimal.of_float
+        (Float.round (last_close *. 0.95 *. 100.0) /. 100.0) in
       (* Finam's client_order_id filter allows letters, digits and
          spaces only — no dashes or underscores. *)
       let cid = Printf.sprintf "smoke%d" (int_of_float (Unix.gettimeofday ())) in

@@ -37,8 +37,8 @@
 
 ### Custom plugins ###
 
-[plugins.internal-links]
-  file = "plugins/internal-links.lua"
+[plugins.urls]
+  file = "plugins/urls.lua"
 
 [plugins.footnotes-cleanup]
   file = "plugins/footnotes-cleanup.lua"
@@ -176,7 +176,9 @@
   footnote_link_selector = "a.footnote-ref"
   footnotes_container_selector = "div#footnotes"
 
-# Rewrite *.md links to clean URLs
-[widgets.internal-links]
-  widget = "internal-links"
+# Rewrite all URLs (href, src) so the site works both via HTTP and file://
+# Must run last so it processes links inserted by every other widget.
+[widgets.urls]
+  widget = "urls"
+  after = ["site-nav", "table-of-contents", "footnotes"]
 

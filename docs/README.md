@@ -30,6 +30,8 @@ hype. Three things drove the choice for this system:
   tools that verify cryptographic libraries and proof-oriented
   languages (Lean, F*). If a piece of the risk layer ever needs
   mechanical verification, the path is open and well-trodden.
+  OCaml has a rich ecosystem of [automated formal verification][proof]
+  (Gospel, Cameleer, Ortac, QCheck-STM, CFML, Why3, Coq/Rocq).
 
 The language is developed by [INRIA][inria] (French national
 research institute) and stewarded by the [OCaml Software
@@ -81,6 +83,7 @@ The net effect: the model-level reasoning the type system demands
 nudges LLM output toward well-factored designs, and the compiler's
 fast, specific feedback catches the rest.
 
+[proof]: https://github.com/ocaml-gospel/gospel?tab=readme-ov-file#tools-using-gospel
 [jane-street]: https://blog.janestreet.com/
 [inria]: https://www.inria.fr/
 [osf]: https://ocaml-sf.org/

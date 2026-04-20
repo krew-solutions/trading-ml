@@ -15,15 +15,19 @@ let make ~transport ~cfg ~token_store =
   let auth = Auth.make ~transport ~cfg ~token_store in
   { transport; cfg; auth }
 
-let req_with_token ~meth ~url ~body ~token : Http_transport.request = {
-  meth;
-  url;
-  headers = [
+let req_with_token ~meth ~url ~body ~token : Http_transport.request =
+  (* BCS requires an explicit [Content-Type: application/json] whenever
+     the request carries a body; without it the BFF returns 415 with
+     "Content-Type 'application/octet-stream' is not supported". *)
+  let base = [
     "Authorization", "Bearer " ^ token;
     "Accept", "application/json";
-  ];
-  body;
-}
+  ] in
+  let headers = match body with
+    | Some _ -> ("Content-Type", "application/json") :: base
+    | None -> base
+  in
+  { meth; url; headers; body }
 
 (** Send a request carrying the current access_token; on 401
     invalidate and retry exactly once (shared retry logic with

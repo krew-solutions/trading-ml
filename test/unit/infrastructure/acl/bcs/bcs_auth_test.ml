@@ -68,7 +68,7 @@ let test_initial_call_posts_form_encoded () =
      with Not_found -> false);
   Alcotest.(check bool) "body has client_id" true
     (try let _ = Str.search_forward
-                   (Str.regexp "client_id=trade-api-read") body 0 in
+                   (Str.regexp "client_id=trade-api-write") body 0 in
          true
      with Not_found -> false)
 

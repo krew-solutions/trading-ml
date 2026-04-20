@@ -24,14 +24,27 @@ let usage () =
   serve [--port 8080] [--broker synthetic|finam|bcs] [--paper]
         [--strategy NAME] [--engine-symbol SBER@MISX]
         [--secret SECRET] [--account ACCOUNT_ID]
+        [--client-id CLIENT_ID]
         [--log-level debug|info|warning|error]
       start HTTP API server (bound to localhost).
       --broker selects the data source (default: synthetic).
-      Live brokers require a secret via --secret or the matching
-      <BROKER>_SECRET env var (FINAM_SECRET, BCS_SECRET); account
-      likewise via --account or <BROKER>_ACCOUNT_ID. Synthetic
-      ignores credentials and serves a deterministic random-walk
-      through the same Broker.S port.
+      Credentials (same convention for both live brokers):
+        --secret VALUE  or  <BROKER>_SECRET env var (FINAM_SECRET, BCS_SECRET)
+        --account VALUE or  <BROKER>_ACCOUNT_ID env var
+      BCS-only:
+        --client-id VALUE or BCS_CLIENT_ID env var. Must match the
+        Keycloak client under which your refresh-token was issued —
+        "trade-api-write" for a trading account (default),
+        "trade-api-read" for a data-only account. Sending a token
+        with the wrong client yields a 400 "invalid_grant / Token
+        client and authorized client don't match".
+      For BCS the "secret" is your Keycloak refresh-token from the
+      portal. After the first run it is persisted (with chmod 0600)
+      to $XDG_STATE_HOME/trading/bcs-refresh-token; rotations land
+      there automatically, so subsequent runs don't need --secret or
+      BCS_SECRET. Pass --secret again only to force-overwrite a
+      stale token. Synthetic ignores credentials and serves a
+      deterministic random-walk through the same Broker.S port.
       --paper wraps the selected broker in an in-memory order
       simulator: bars still come from the real source (or synthetic),
       but every order is intercepted and filled against the live
@@ -150,16 +163,30 @@ let bcs_refresh_token_path () =
    with Unix.Unix_error (EEXIST, _, _) -> ());
   Filename.concat dir "bcs-refresh-token"
 
-let open_bcs ~env ~secret:_ ~account : opened =
-  (* Layering: the persistent file wins if it exists (holds the most
-     recently rotated token); the env var is a one-shot bootstrap for
-     first-run setup. The [~secret] argument is kept for CLI symmetry
-     with Finam but ignored — BCS credentials flow through the store. *)
+let open_bcs ~env ~secret ~account ~client_id : opened =
+  (* Credential sources, in precedence order:
+       1. [--secret VALUE] — seeds the persistent file immediately,
+          then reads from it. Use for first-time setup or to force-
+          overwrite a stale rotated token.
+       2. Persistent file — authoritative once populated. Keycloak
+          rotations ([refresh_token] in the /token response) land
+          here automatically.
+       3. [BCS_SECRET] env var — bootstrap fallback when the file
+          is empty. Same env convention as Finam uses.
+
+     [client_id] must match the client under which the refresh-token
+     was issued (BCS portal distinguishes [trade-api-read] for data
+     and [trade-api-write] for orders). *)
+  let file_path = bcs_refresh_token_path () in
+  let file_store = Token_store.file ~path:file_path in
+  (match secret with
+   | Some s -> Token_store.save file_store s
+   | None -> ());
   let token_store = Token_store.fallback
-    (Token_store.file ~path:(bcs_refresh_token_path ()))
-    (Token_store.env ~name:"BCS_REFRESH_TOKEN")
+    file_store
+    (Token_store.env ~name:"BCS_SECRET")
   in
-  let cfg = Bcs.Config.make ?account_id:account () in
+  let cfg = Bcs.Config.make ?account_id:account ?client_id () in
   let transport = Http_transport.make_eio ~env in
   let rest = Bcs.Rest.make ~transport ~cfg ~token_store in
   Opened_bcs { client = Bcs.Bcs_broker.as_broker rest; rest }
@@ -290,6 +317,13 @@ let cmd_serve args =
     | Some v -> Some v
     | None -> Sys.getenv_opt (prefix ^ "_ACCOUNT_ID")
   in
+  (* BCS-only knob; Finam doesn't have a concept of [client_id] (its
+     auth is a single long-lived secret). *)
+  let client_id =
+    match arg_value "--client-id" args with
+    | Some v -> Some v
+    | None -> Sys.getenv_opt "BCS_CLIENT_ID"
+  in
   let log_level = match arg_value "--log-level" args with
     | Some "debug"   -> Logs.Debug
     | Some "warning" -> Logs.Warning
@@ -299,6 +333,10 @@ let cmd_serve args =
   Log.setup ~level:log_level ();
   Eio_main.run @@ fun env ->
   Mirage_crypto_rng_unix.use_default ();
+  (* Finam demands a secret on every boot — it has no persistent store
+     of its own and the secret doesn't rotate. BCS reads from its
+     [Token_store] chain (file → env) so a missing --secret is fine
+     when the file is already populated. *)
   let need_secret () = match secret with
     | Some s -> s
     | None ->
@@ -317,7 +355,7 @@ let cmd_serve args =
   let opened = match broker_id with
     | "synthetic" -> open_synthetic ()
     | "finam" -> open_finam ~env ~secret:(need_secret ()) ~account
-    | "bcs"   -> open_bcs   ~env ~secret:(need_secret ()) ~account
+    | "bcs"   -> open_bcs   ~env ~secret ~account ~client_id
     | other ->
       failwith ("unknown --broker: " ^ other
                 ^ " (expected synthetic|finam|bcs)")

@@ -44,7 +44,14 @@ let make
     ?(token_endpoint = Uri.of_string
         "https://be.broker.ru/trade-api-keycloak/realms/tradeapi\
          /protocol/openid-connect/token")
-    ?(client_id = "trade-api-read")
+    (* Default to the full-trading client. Read-only [trade-api-read]
+       cannot place orders, and this system is a trading engine; the
+       conservative default is the one that doesn't surprise callers
+       with "works for bars, 403 on place_order". Override via
+       [Config.make ~client_id:…] (or [--client-id] / [BCS_CLIENT_ID]
+       at the CLI level) if a refresh-token was issued under a
+       different client. *)
+    ?(client_id = "trade-api-write")
     ?account_id
     ?(default_class_code = "TQBR")
     ?(ws_market_data_url = Uri.of_string

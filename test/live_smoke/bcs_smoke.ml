@@ -5,7 +5,7 @@
     trading session with credentials exported:
 
     {v
-    export BCS_REFRESH_TOKEN=<from BCS portal>    # first run only
+    export BCS_SECRET=<refresh_token from BCS portal>    # first run only
     dune build @live_smoke
     v}
 
@@ -30,13 +30,13 @@ let refresh_token_file = "/tmp/trading-bcs-smoke-refresh"
 let token_store () =
   Token_store.fallback
     (Token_store.file ~path:refresh_token_file)
-    (Token_store.env ~name:"BCS_REFRESH_TOKEN")
+    (Token_store.env ~name:"BCS_SECRET")
 
 let skip_unless_creds () =
   match Token_store.load (token_store ()) with
   | Some _ -> ()
   | None ->
-    Printf.printf "  [SKIP] BCS_REFRESH_TOKEN not set and %s absent\n%!"
+    Printf.printf "  [SKIP] BCS_SECRET not set and %s absent\n%!"
       refresh_token_file;
     raise Exit
 

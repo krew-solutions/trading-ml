@@ -52,7 +52,7 @@ let http_refresh t : jwt =
     | Some s -> s
     | None ->
       failwith "BCS Auth: refresh-token store is empty \
-                (set BCS_REFRESH_TOKEN or persist one in the store)"
+                (set BCS_SECRET or persist one in the store)"
   in
   let body = urlencode_form [
     "grant_type",   "refresh_token";

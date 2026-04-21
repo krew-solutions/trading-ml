@@ -92,8 +92,10 @@ let test_limit_order_lifecycle () =
       (* BCS accepts UUID-style client ids, including dashes. Use a
          stable "smokeN" prefix so partial runs are easy to spot in
          the orders list. *)
-      let cid = Printf.sprintf "smoke-%d"
-        (int_of_float (Unix.gettimeofday ())) in
+      (* BCS validates [clientOrderId] as a UUID (dashed v4 form).
+         A free-form "smoke-NNN" gets 400 INVALID_FORMAT. *)
+      let cid = Uuidm.v4_gen (Random.State.make_self_init ()) ()
+                |> Uuidm.to_string in
       let place_at px = Bcs.Rest.create_order rest
         ~instrument:sber ~side:Side.Buy ~quantity:1
         ~kind:(Order.Limit px) ~client_order_id:cid () in

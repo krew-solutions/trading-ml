@@ -140,25 +140,6 @@ let post_json t path (payload : Yojson.Safe.t) : Yojson.Safe.t =
                 resp.status (Uri.to_string url) resp.body);
   Yojson.Safe.from_string resp.body
 
-let put_json t path (payload : Yojson.Safe.t) : Yojson.Safe.t =
-  let base = t.cfg.Config.rest_base in
-  let url = Uri.with_path base (Uri.path base ^ path) in
-  let resp = send_with_auth_retry t ~meth:`PUT ~url
-    ~body:(Some (Yojson.Safe.to_string payload)) in
-  if resp.status < 200 || resp.status >= 300 then
-    failwith (Printf.sprintf "BCS REST %d on %s: %s"
-                resp.status (Uri.to_string url) resp.body);
-  Yojson.Safe.from_string resp.body
-
-let delete_json t path : Yojson.Safe.t =
-  let base = t.cfg.Config.rest_base in
-  let url = Uri.with_path base (Uri.path base ^ path) in
-  let resp = send_with_auth_retry t ~meth:`DELETE ~url ~body:None in
-  if resp.status < 200 || resp.status >= 300 then
-    failwith (Printf.sprintf "BCS REST %d on %s: %s"
-                resp.status (Uri.to_string url) resp.body);
-  Yojson.Safe.from_string resp.body
-
 (** BCS status strings → domain [Order.status]. BCS sends plain
     strings like ["NEW"], ["FILLED"], ["CANCELED"]. *)
 let bcs_status_of_wire = function
@@ -275,33 +256,79 @@ let create_order t
     client_order_id;
   }
 
-(** GET /trade-api-bff-operations/api/v1/orders — all orders. *)
-let get_orders t : Order.t list =
-  let j = get_json t (ops_path ^ "/orders") [] in
+(** POST /trade-api-bff-order-details/api/v1/orders/search —
+    list/query orders. BCS splits reads from writes across two BFFs
+    (CQRS-style): creation/edit/cancel live in
+    [trade-api-bff-operations], but historical queries go through
+    [trade-api-bff-order-details] with a POST body carrying filters:
+    required [startDateTime]/[endDateTime] plus optional
+    [side]/[orderStatus]/[orderTypes]/[tickers]/[classCodes]. Empty
+    filter arrays match all.
+
+    Optional [from_ts]/[to_ts] override the default window. The
+    default covers 30 days ending "now" — enough for reconcile
+    (which wants live orders) but short enough to keep payloads
+    small on accounts with years of history. *)
+let get_orders ?from_ts ?to_ts t : Order.t list =
+  let base = t.cfg.Config.rest_base in
+  let path = "/trade-api-bff-order-details/api/v1/orders/search" in
+  let url = Uri.with_path base (Uri.path base ^ path) in
+  let now_ts = Int64.of_float (Unix.gettimeofday ()) in
+  let end_ts = Option.value to_ts ~default:now_ts in
+  let start_ts = Option.value from_ts
+    ~default:(Int64.sub end_ts (Int64.mul 30L 86_400L)) in
+  let body : Yojson.Safe.t = `Assoc [
+    "startDateTime", `String (iso8601_of_ts start_ts);
+    "endDateTime",   `String (iso8601_of_ts end_ts);
+    "orderStatus",   `List [];
+    "orderTypes",    `List [];
+    "tickers",       `List [];
+    "classCodes",    `List [];
+  ] in
+  let resp = send_with_auth_retry t ~meth:`POST ~url
+    ~body:(Some (Yojson.Safe.to_string body)) in
+  if resp.status < 200 || resp.status >= 300 then
+    failwith (Printf.sprintf "BCS REST %d on %s: %s"
+                resp.status (Uri.to_string url) resp.body);
+  let j = Yojson.Safe.from_string resp.body in
   let open Yojson.Safe.Util in
-  match member "orders" j with
-  | `List items -> List.map (bcs_order_of_json t.cfg) items
-  | _ -> []
+  (* Response shape unconfirmed. Try paginated [records] first (same
+     wrapper as /deals), then legacy [orders], then bare array. *)
+  let items =
+    match member "records" j with
+    | `List l -> l
+    | _ -> match member "orders" j with
+      | `List l -> l
+      | _ -> match j with `List l -> l | _ -> []
+  in
+  List.map (bcs_order_of_json t.cfg) items
 
 (** GET /trade-api-bff-operations/api/v1/orders/{id} — single order status. *)
 let get_order t ~client_order_id : Order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id in
   bcs_order_of_json t.cfg (get_json t path [])
 
-(** PUT /trade-api-bff-operations/api/v1/orders/{id} — edit qty/price. *)
+(** POST /trade-api-bff-operations/api/v1/orders/{cid} — edit qty/price.
+    Same pattern as cancel: URL path names the order being modified,
+    body carries a fresh [clientOrderId] that BCS uses to dedupe
+    retries of this edit operation. *)
 let edit_order t ~client_order_id
     ?quantity ?price () : Order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id in
-  let fields =
-    (match quantity with
-     | Some q -> [ "orderQuantity", `Int q ]
-     | None -> [])
-    @
-    (match price with
-     | Some p -> [ "price", `Float (Decimal.to_float p) ]
-     | None -> [])
+  let edit_cid =
+    Uuidm.v4_gen (Random.State.make_self_init ()) ()
+    |> Uuidm.to_string
   in
-  let j = put_json t path (`Assoc fields) in
+  let fields =
+    [ "clientOrderId", `String edit_cid ]
+    @ (match quantity with
+       | Some q -> [ "orderQuantity", `Int q ]
+       | None -> [])
+    @ (match price with
+       | Some p -> [ "price", `Float (Decimal.to_float p) ]
+       | None -> [])
+  in
+  let j = post_json t path (`Assoc fields) in
   let open Yojson.Safe.Util in
   let status_str = match member "status" j with
     | `String s -> s | _ -> "NEW" in
@@ -370,22 +397,64 @@ let bcs_execution_of_json (j : Yojson.Safe.t) : string * Order.execution =
     fee = Decimal.zero;
   }
 
-(** GET /trade-api-bff-operations/api/v1/deals — paginated account-wide
-    deals. Response wraps the array in [records] and ships pagination
-    metadata ([totalRecords], [totalPages]). This sketch reads the
-    first page only; pagination can be added once the page/pageSize
-    query parameter names are confirmed against a live response. *)
-let get_deals t : (string * Order.execution) list =
-  let j = get_json t (ops_path ^ "/deals") [] in
-  let open Yojson.Safe.Util in
-  match member "records" j with
-  | `List items -> List.map bcs_execution_of_json items
-  | _ -> []
+(** POST /trade-api-bff-trade-details/api/v1/trades/search —
+    paginated account-wide executions ("deals" in Russian broker
+    parlance, "trades" in BCS's URL). Yet another BFF — reads live
+    under [trade-api-bff-trade-details], separate from both
+    [-operations] and [-order-details]. Filters in the body mirror
+    the orders-search shape: required [startDateTime]/[endDateTime]
+    plus optional [side]/[tradeNums]/[tickers]/[classCodes]. Empty
+    arrays match all.
 
-(** DELETE /trade-api-bff-operations/api/v1/orders/{id} — cancel. *)
+    Default window = 30 days ending "now", same rationale as
+    [get_orders]. *)
+let get_deals ?from_ts ?to_ts t : (string * Order.execution) list =
+  let base = t.cfg.Config.rest_base in
+  let path = "/trade-api-bff-trade-details/api/v1/trades/search" in
+  let url = Uri.with_path base (Uri.path base ^ path) in
+  let now_ts = Int64.of_float (Unix.gettimeofday ()) in
+  let end_ts = Option.value to_ts ~default:now_ts in
+  let start_ts = Option.value from_ts
+    ~default:(Int64.sub end_ts (Int64.mul 30L 86_400L)) in
+  let body : Yojson.Safe.t = `Assoc [
+    "startDateTime", `String (iso8601_of_ts start_ts);
+    "endDateTime",   `String (iso8601_of_ts end_ts);
+    "tradeNums",     `List [];
+    "tickers",       `List [];
+    "classCodes",    `List [];
+  ] in
+  let resp = send_with_auth_retry t ~meth:`POST ~url
+    ~body:(Some (Yojson.Safe.to_string body)) in
+  if resp.status < 200 || resp.status >= 300 then
+    failwith (Printf.sprintf "BCS REST %d on %s: %s"
+                resp.status (Uri.to_string url) resp.body);
+  let j = Yojson.Safe.from_string resp.body in
+  let open Yojson.Safe.Util in
+  let items = match member "records" j with
+    | `List l -> l
+    | _ -> match j with `List l -> l | _ -> []
+  in
+  List.map bcs_execution_of_json items
+
+(** POST /trade-api-bff-operations/api/v1/orders/{cid}/cancel — cancel.
+    BCS models cancellation as its own idempotent POST: the URL path
+    names the order being cancelled (its original [clientOrderId]),
+    and the body carries a fresh [clientOrderId] identifying *this
+    cancel operation* (so BCS can dedupe retries of a cancel the
+    same way it dedupes retries of a create). We generate that UUID
+    per call — it's opaque to callers and not surfaced on [Order.t];
+    stable-across-retries idempotency is a higher-layer concern and
+    we don't retry POSTs at the HTTP transport level. *)
 let cancel_order t ~client_order_id : Order.t =
-  let path = ops_path ^ "/orders/" ^ client_order_id in
-  let j = delete_json t path in
+  let path = ops_path ^ "/orders/" ^ client_order_id ^ "/cancel" in
+  let cancel_cid =
+    Uuidm.v4_gen (Random.State.make_self_init ()) ()
+    |> Uuidm.to_string
+  in
+  let payload : Yojson.Safe.t = `Assoc [
+    "clientOrderId", `String cancel_cid;
+  ] in
+  let j = post_json t path payload in
   let open Yojson.Safe.Util in
   let status_str = match member "status" j with
     | `String s -> s | _ -> "CANCELLED" in

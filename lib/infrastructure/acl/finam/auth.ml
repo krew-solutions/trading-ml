@@ -57,22 +57,35 @@ let now () = Unix.gettimeofday ()
     avoid races with in-flight requests. *)
 let margin = 30.0
 
+(** /v1/sessions is idempotent — every call returns a fresh JWT for
+    the same secret. The global [Http_transport] layer does not
+    retry [`POST] on stale-keepalive errors because a generic POST
+    may have mutated server state; sessions is one of the few POSTs
+    where a retry is unambiguously safe, so Auth handles it
+    locally (see also the symmetric wrapper in [Bcs.Auth]). *)
+let is_stale_keepalive : exn -> bool = function
+  | End_of_file -> true
+  | Eio.Io (Eio.Net.E (Connection_reset _), _) -> true
+  | _ -> false
+
 (** Pure HTTP refresh — does NOT touch [t.state] or the mutex. Returns
     the fresh JWT; the caller publishes it under the lock. *)
 let http_refresh t : jwt =
   let path = Uri.path t.base ^ "/v1/sessions" in
   let url = Uri.with_path t.base path in
   let body = `Assoc [ "secret", `String t.secret ] in
+  let req : Http_transport.request = {
+    meth = `POST;
+    url;
+    headers = [
+      "Content-Type", "application/json";
+      "Accept", "application/json";
+    ];
+    body = Some (Yojson.Safe.to_string body);
+  } in
   let resp =
-    t.transport {
-      meth = `POST;
-      url;
-      headers = [
-        "Content-Type", "application/json";
-        "Accept", "application/json";
-      ];
-      body = Some (Yojson.Safe.to_string body);
-    }
+    try t.transport req
+    with e when is_stale_keepalive e -> t.transport req
   in
   if resp.status < 200 || resp.status >= 300 then
     failwith (Printf.sprintf

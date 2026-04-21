@@ -46,19 +46,6 @@ let urlencode_form fields =
     ^ Uri.pct_encode ~component:`Userinfo v)
   |> String.concat "&"
 
-(** /token is idempotent — every successful call just issues a
-    fresh access_token, so a failed attempt we never saw a response
-    for can be safely retried. The global [Http_transport] layer
-    declines to retry [`POST] on stale-keepalive errors because a
-    generic POST might have already mutated server state (e.g. a
-    placed order); [/token] is one of the few POSTs where a retry
-    is unambiguously safe, so Auth handles it here rather than
-    broadening the transport-level policy. *)
-let is_stale_keepalive : exn -> bool = function
-  | End_of_file -> true
-  | Eio.Io (Eio.Net.E (Connection_reset _), _) -> true
-  | _ -> false
-
 let http_refresh t : jwt =
   let current_refresh =
     match Token_store.load t.token_store with
@@ -72,18 +59,16 @@ let http_refresh t : jwt =
     "refresh_token", current_refresh;
     "client_id",    t.cfg.client_id;
   ] in
-  let req : Http_transport.request = {
-    meth = `POST;
-    url = t.cfg.token_endpoint;
-    headers = [
-      "Content-Type", "application/x-www-form-urlencoded";
-      "Accept",       "application/json";
-    ];
-    body = Some body;
-  } in
   let resp =
-    try t.transport req
-    with e when is_stale_keepalive e -> t.transport req
+    t.transport {
+      meth = `POST;
+      url = t.cfg.token_endpoint;
+      headers = [
+        "Content-Type", "application/x-www-form-urlencoded";
+        "Accept",       "application/json";
+      ];
+      body = Some body;
+    }
   in
   if resp.status < 200 || resp.status >= 300 then
     failwith (Printf.sprintf

@@ -144,23 +144,25 @@ let make_eio ~env : t =
      Connection_reset] (abortive RST). Retry once on those — a fresh
      pool entry skips the dead connection.
 
-     Retry only on idempotent methods. A POST that fails after its
-     request bytes hit the wire could already have landed on the
-     broker (e.g. a placed order whose response we never saw); a
-     blind retry would risk duplicate orders. The auth POST endpoint
-     [/v1/sessions] is idempotent for our purposes (issuing another
-     JWT is fine), but filtering by URL here would be brittle, so we
-     don't retry any POST at this layer. *)
+     Retry applies to every method, including POST / PUT. The safety
+     argument rests on idempotency keys:
+       - GET / DELETE: idempotent by HTTP semantics.
+       - Auth POSTs ([/token], [/v1/sessions]): issuing another JWT
+         for the same secret is safe; also retried locally in the
+         [Auth] modules, this is a belt-and-braces backup.
+       - Order-writing POSTs carry a [clientOrderId] (UUID):
+         [Bcs.Rest.create_order]/[cancel_order]/[edit_order] and
+         [Finam.Rest.place_order] all pass one. Both brokers dedupe
+         by it — a retry with the same cid either lands once or
+         returns the existing order; it never creates a duplicate.
+     If a future caller adds a mutating POST without an idempotency
+     key, it must either tolerate the retry or switch to a non-
+     retrying path. *)
   let is_stale_keepalive : exn -> bool = function
     | End_of_file -> true
     | Eio.Io (Eio.Net.E (Connection_reset _), _) -> true
     | _ -> false
   in
-  let retryable_method = function
-    | `GET | `DELETE -> true
-    | `POST | `PUT -> false
-  in
   fun (req : request) : response ->
     try send_once req
-    with e when is_stale_keepalive e && retryable_method req.meth ->
-      send_once req
+    with e when is_stale_keepalive e -> send_once req

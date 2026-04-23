@@ -115,6 +115,9 @@ order for a tour; read individually for a specific concern.
 8. [Gradient-boosted trees](architecture/ml/gbt.md) — pure-OCaml
    inference over LightGBM text-dump models; training pipeline;
    how `Gbt_strategy` plugs into the engine.
+9. [Logistic regression](architecture/ml/logistic_regression.md) —
+   lightweight classifier as a gating function for the
+   `Composite.Learned` policy; SGD + L2 in ~70 lines.
 
 ## How-to guides
 
@@ -124,6 +127,9 @@ concrete commands, expected output, troubleshooting.
 
 - [Train and deploy a GBT strategy](howto/ml/gbt.md) — end-to-end
   pipeline from historical bars to a live-running model.
+- [Train and deploy a logistic gate](howto/ml/logistic_regression.md) —
+  in-process OCaml training for the `Composite.Learned` policy;
+  no Python, weights are a 10-scalar array.
 
 ## Decision records (ADR)
 

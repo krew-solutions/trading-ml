@@ -193,6 +193,7 @@ let strategies_catalog () : Yojson.Safe.t =
           | Strategies.Registry.Int n -> "int", `Int n
           | Float f -> "float", `Float f
           | Bool b -> "bool", `Bool b
+          | String s -> "string", `String s
         in
         `Assoc ["name", `String k; "type", `String kind; "default", default])
         s.Strategies.Registry.params);

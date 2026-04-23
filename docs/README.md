@@ -112,6 +112,18 @@ order for a tour; read individually for a specific concern.
    become orders; Paper wiring; reconciliation with the broker.
 7. [Testing strategy](architecture/testing.md) — unit, component,
    differential; mirroring `lib/` in `test/unit/`.
+8. [Gradient-boosted trees](architecture/ml/gbt.md) — pure-OCaml
+   inference over LightGBM text-dump models; training pipeline;
+   how `Gbt_strategy` plugs into the engine.
+
+## How-to guides
+
+Step-by-step walkthroughs for common tasks. Unlike the
+architecture docs (which explain *why*), these focus on *how*:
+concrete commands, expected output, troubleshooting.
+
+- [Train and deploy a GBT strategy](howto/ml/gbt.md) — end-to-end
+  pipeline from historical bars to a live-running model.
 
 ## Decision records (ADR)
 

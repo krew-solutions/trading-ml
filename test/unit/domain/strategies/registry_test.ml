@@ -11,7 +11,33 @@ let test_all_strategies_listed () =
       (* Volume-based strategies *)
       "MFI_MeanReversion"; "OBV_MA_Crossover";
       "Chaikin_Momentum"; "AD_MA_Crossover";
+      (* ML-driven *)
+      "GBT";
     ]
+
+let test_gbt_spec_exposes_string_param () =
+  (* [Gbt_strategy] needs a [model_path] string — verify the new
+     [String] variant made it through the registry's catalog shape. *)
+  match Strategies.Registry.find "GBT" with
+  | None -> Alcotest.fail "GBT missing from registry"
+  | Some spec ->
+    let has_string_param =
+      List.exists (fun (_k, p) -> match p with
+        | Strategies.Registry.String _ -> true
+        | _ -> false) spec.params
+    in
+    Alcotest.(check bool) "GBT spec carries a String param"
+      true has_string_param
+
+let test_gbt_build_fails_without_model_path () =
+  (* Default params have [model_path = ""]; Gbt_strategy.init
+     rejects that loudly rather than trying to load a bogus file. *)
+  match Strategies.Registry.find "GBT" with
+  | None -> Alcotest.fail "GBT missing"
+  | Some spec ->
+    Alcotest.check_raises "empty model_path → Invalid_argument"
+      (Invalid_argument "Gbt_strategy: model_path must be set")
+      (fun () -> ignore (spec.build []))
 
 let test_find_returns_some () =
   match Strategies.Registry.find "SMA_Crossover" with
@@ -33,8 +59,10 @@ let test_build_respects_default_params () =
     Alcotest.(check bool) "builds without params" true true
 
 let tests = [
-  "catalog has all strategies",  `Quick, test_all_strategies_listed;
-  "find known",                  `Quick, test_find_returns_some;
-  "find unknown → None",         `Quick, test_find_unknown_returns_none;
-  "build with empty params",     `Quick, test_build_respects_default_params;
+  "catalog has all strategies",   `Quick, test_all_strategies_listed;
+  "find known",                   `Quick, test_find_returns_some;
+  "find unknown → None",          `Quick, test_find_unknown_returns_none;
+  "build with empty params",      `Quick, test_build_respects_default_params;
+  "GBT spec has String param",    `Quick, test_gbt_spec_exposes_string_param;
+  "GBT rejects empty model_path", `Quick, test_gbt_build_fails_without_model_path;
 ]

@@ -1,0 +1,10 @@
+# Python dependencies for the GBT training pipeline.
+# Install into a venv:
+#   python -m venv ~/.venvs/trading-ml
+#   source ~/.venvs/trading-ml/bin/activate
+#   pip install -r requirements.txt
+
+lightgbm>=4.3,<5
+numpy>=1.26,<3
+pandas>=2.2,<3
+scikit-learn>=1.4,<2

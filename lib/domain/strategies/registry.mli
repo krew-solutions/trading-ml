@@ -6,6 +6,7 @@ type param =
   | Int of int
   | Float of float
   | Bool of bool
+  | String of string
 
 type spec = {
   name : string;
@@ -16,6 +17,7 @@ type spec = {
 val get_int : (string * param) list -> string -> int -> int
 val get_float : (string * param) list -> string -> float -> float
 val get_bool : (string * param) list -> string -> bool -> bool
+val get_string : (string * param) list -> string -> string -> string
 
 val specs : spec list
 val composite_specs : spec list

@@ -1,6 +1,10 @@
-(executable
- (name main)
- (public_name trading)
+; Two executables sharing [broker_boot.ml] — dune's single stanza
+; puts them in the same source namespace so both pick up the
+; helper module automatically.
+
+(executables
+ (names main export_training_data)
+ (public_names trading trading_export_training_data)
  (package trading)
  (libraries core broker indicators strategies engine live_engine
             http_transport finam bcs token_store synthetic paper server log logs

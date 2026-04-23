@@ -66,6 +66,7 @@ let strategy_params_of_json j =
       | `Int n -> Some (k, Strategies.Registry.Int n)
       | `Float f -> Some (k, Strategies.Registry.Float f)
       | `Bool b -> Some (k, Strategies.Registry.Bool b)
+      | `String s -> Some (k, Strategies.Registry.String s)
       | _ -> None) fields
   | _ -> []
 

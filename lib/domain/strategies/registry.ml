@@ -6,6 +6,7 @@ type param =
   | Int of int
   | Float of float
   | Bool of bool
+  | String of string
 
 type spec = {
   name : string;
@@ -19,6 +20,8 @@ let get_float p k d = match List.assoc_opt k p with
   | Some (Float f) -> f | Some (Int n) -> float_of_int n | _ -> d
 let get_bool p k d = match List.assoc_opt k p with
   | Some (Bool b) -> b | _ -> d
+let get_string p k d = match List.assoc_opt k p with
+  | Some (String s) -> s | _ -> d
 
 let specs : spec list = [
   { name = Sma_crossover.name;
@@ -124,6 +127,32 @@ let specs : spec list = [
         allow_short = get_bool p "allow_short" false;
       } in
       Strategy.make (module Ad_ma_crossover) params };
+
+  { name = Gbt_strategy.name;
+    (* [model_path] must be supplied by the caller — default "" fails
+       fast at [init] with a clear error rather than trying to load a
+       nonexistent file. Callers routing through the UI should prompt
+       for the path; CLI users pass it via [--param model_path=…]. *)
+    params = [
+      "model_path",      String "";
+      "enter_threshold", Float 0.55;
+      "allow_short",     Bool false;
+      "rsi_period",      Int 14;
+      "mfi_period",      Int 14;
+      "bb_period",       Int 20;
+      "bb_k",            Float 2.0;
+    ];
+    build = fun p ->
+      let params = Gbt_strategy.{
+        model_path      = get_string p "model_path" "";
+        enter_threshold = get_float p "enter_threshold" 0.55;
+        allow_short     = get_bool p "allow_short" false;
+        rsi_period      = get_int p "rsi_period" 14;
+        mfi_period      = get_int p "mfi_period" 14;
+        bb_period       = get_int p "bb_period" 20;
+        bb_k            = get_float p "bb_k" 2.0;
+      } in
+      Strategy.make (module Gbt_strategy) params };
 ]
 
 (** Build a composite strategy from registry entries. Used by the

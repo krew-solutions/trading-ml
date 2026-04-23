@@ -1,4 +1,4 @@
 (library
  (name strategies)
  (public_name trading.strategies)
- (libraries core indicators))
+ (libraries core indicators gbt))

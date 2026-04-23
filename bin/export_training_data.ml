@@ -23,8 +23,18 @@ let usage () =
   [--timeframe M1|M5|M15|M30|H1|H4|D1] (default H1)
   [--from YYYY-MM-DD]    (default: --to minus 365 days)
   [--to   YYYY-MM-DD]    (default: now)
-  [--horizon N]          (default 5 — bars ahead for label)
-  [--threshold F]        (default 0.005 — ±band for 3-class label)
+  [--label-mode threshold|triple-barrier]   (default threshold)
+
+  threshold mode:
+    [--horizon N]        (default 5 — bars ahead for label)
+    [--threshold F]      (default 0.005 — ±band for 3-class label)
+
+  triple-barrier mode (per de Prado):
+    [--tp-mult F]        (default 1.5 — take-profit at close + tp_mult × ATR)
+    [--sl-mult F]        (default 1.0 — stop-loss at close - sl_mult × ATR)
+    [--timeout N]        (default 20 — bars to walk forward)
+    ATR period is fixed at 14.
+
   [--secret S] [--account A] [--client-id C]  (or matching env vars)|};
   exit 2
 
@@ -146,16 +156,44 @@ let compute_features (arr : Candle.t array) : feature_row option array =
   done;
   out
 
-let write_csv
+(** Separate pass for ATR — only used by the triple-barrier labeler.
+    Period hard-coded to 14 (the Wilder default and the industry
+    convention; exposing it as a CLI flag would force callers to
+    keep training and labeler in lockstep, more rope than value). *)
+let compute_atr (arr : Candle.t array) : float option array =
+  let n = Array.length arr in
+  let out = Array.make n None in
+  let atr_ = ref (Indicators.Atr.make ~period:14) in
+  for i = 0 to n - 1 do
+    atr_ := Indicators.Indicator.update !atr_ arr.(i);
+    out.(i) <- scalar_1 !atr_
+  done;
+  out
+
+let csv_header =
+  "ts,rsi,mfi,bb_pct_b,macd_hist,volume_ratio,lag_return_5,\
+   chaikin_osc,ad_slope_10,label\n"
+
+let write_row oc (arr : Candle.t array) i (f : feature_row) label =
+  Out_channel.output_string oc
+    (Printf.sprintf "%Ld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%d\n"
+       arr.(i).Candle.ts
+       f.rsi f.mfi f.bb_pct_b
+       f.macd_hist f.volume_ratio f.lag_return_5
+       f.chaikin_osc f.ad_slope_10
+       label)
+
+(** Threshold label: compare [close[i + horizon]] against
+    [close[i]], bucket into 3 classes by a symmetric ±threshold
+    band. Path-insensitive. *)
+let write_csv_threshold
     ~path
     ~horizon ~threshold
     (arr : Candle.t array)
     (feats : feature_row option array) =
   let n = Array.length arr in
   let oc = Out_channel.open_text path in
-  Out_channel.output_string oc
-    "ts,rsi,mfi,bb_pct_b,macd_hist,volume_ratio,lag_return_5,\
-     chaikin_osc,ad_slope_10,label\n";
+  Out_channel.output_string oc csv_header;
   let written = ref 0 in
   let skipped_warmup = ref 0 in
   for i = 0 to n - 1 - horizon do
@@ -170,16 +208,42 @@ let write_csv
         else if ret < -. threshold then 0
         else 1
       in
-      Out_channel.output_string oc
-        (Printf.sprintf "%Ld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%d\n"
-           arr.(i).Candle.ts
-           f.rsi f.mfi f.bb_pct_b
-           f.macd_hist f.volume_ratio f.lag_return_5
-           f.chaikin_osc f.ad_slope_10
-           label);
+      write_row oc arr i f label;
       incr written
   done;
   Out_channel.close oc;
+  !written, !skipped_warmup
+
+(** Triple-barrier label: see {!triple_barrier_label}. Drops rows
+    where ATR is still warming up OR the forward walk would go
+    past the array end. *)
+let write_csv_triple_barrier
+    ~path
+    ~tp_mult ~sl_mult ~timeout
+    (arr : Candle.t array)
+    (feats : feature_row option array) =
+  let atr = compute_atr arr in
+  let n = Array.length arr in
+  let oc = Out_channel.open_text path in
+  Out_channel.output_string oc csv_header;
+  let written = ref 0 in
+  let skipped_warmup = ref 0 in
+  let class_counts = [| 0; 0; 0 |] in
+  for i = 0 to n - 1 - timeout do
+    match feats.(i) with
+    | None -> incr skipped_warmup
+    | Some f ->
+      match Triple_barrier.label
+              ~arr ~atr ~i ~tp_mult ~sl_mult ~timeout with
+      | None -> incr skipped_warmup   (* ATR not ready *)
+      | Some label ->
+        class_counts.(label) <- class_counts.(label) + 1;
+        write_row oc arr i f label;
+        incr written
+  done;
+  Out_channel.close oc;
+  Printf.printf "Triple-barrier class distribution: 0(down)=%d 1(flat)=%d 2(up)=%d\n%!"
+    class_counts.(0) class_counts.(1) class_counts.(2);
   !written, !skipped_warmup
 
 let () =
@@ -209,11 +273,29 @@ let () =
     | Some s -> parse_date s
     | None -> Int64.sub to_ts (Int64.of_int (365 * 86400))
   in
+  let label_mode =
+    match arg_value "--label-mode" args with
+    | Some "threshold" | None -> `Threshold
+    | Some "triple-barrier" -> `Triple_barrier
+    | Some other ->
+      Printf.eprintf "unknown --label-mode: %s (expected threshold|triple-barrier)\n"
+        other;
+      exit 2
+  in
   let horizon = match arg_value "--horizon" args with
     | Some v -> int_of_string v | None -> 5
   in
   let threshold = match arg_value "--threshold" args with
     | Some v -> float_of_string v | None -> 0.005
+  in
+  let tp_mult = match arg_value "--tp-mult" args with
+    | Some v -> float_of_string v | None -> 1.5
+  in
+  let sl_mult = match arg_value "--sl-mult" args with
+    | Some v -> float_of_string v | None -> 1.0
+  in
+  let timeout = match arg_value "--timeout" args with
+    | Some v -> int_of_string v | None -> 20
   in
   let prefix = broker_env_prefix broker_id in
   let secret = match arg_value "--secret" args with
@@ -260,8 +342,17 @@ let () =
   if candles = [] then exit 0;
   let arr = Array.of_list candles in
   let feats = compute_features arr in
-  let written, skipped_warmup =
-    write_csv ~path:output ~horizon ~threshold arr feats in
+  let written, skipped_warmup, tail_bars =
+    match label_mode with
+    | `Threshold ->
+      let w, s = write_csv_threshold
+        ~path:output ~horizon ~threshold arr feats in
+      w, s, horizon
+    | `Triple_barrier ->
+      let w, s = write_csv_triple_barrier
+        ~path:output ~tp_mult ~sl_mult ~timeout arr feats in
+      w, s, timeout
+  in
   Printf.printf
     "Wrote %d rows to %s (skipped %d warmup, %d tail bars w/o future)\n%!"
-    written output skipped_warmup horizon
+    written output skipped_warmup tail_bars

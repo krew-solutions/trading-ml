@@ -54,6 +54,7 @@ let () =
     "trainer",         Trainer_test.tests;
     "learned policy",  Learned_policy_test.tests;
     "gbt model",       Gbt_model_test.tests;
+    "triple barrier",  Triple_barrier_test.tests;
     (* ACL: Finam *)
     "finam dto",       Finam_dto_test.tests;
     "finam auth",      Finam_auth_test.tests;

@@ -52,11 +52,34 @@ Options:
 - `--timeframe` — `M1 | M5 | M15 | M30 | H1 | H4 | D1` (default `H1`).
 - `--from` / `--to` — ISO date (`YYYY-MM-DD`) or full RFC 3339.
   Default window is the last 365 days.
+- `--label-mode` — `threshold` (default) or `triple-barrier`.
+- `--output`     — CSV path.
+
+**Threshold mode** (default, simple):
+
 - `--horizon`   — lookahead in bars for the label (default 5).
 - `--threshold` — symmetric return band: `ret > +θ` → class `2`
   (up), `ret < -θ` → class `0` (down), otherwise `1` (flat).
   Default `0.005` (0.5%).
-- `--output`    — CSV path.
+
+**Triple-barrier mode** (per de Prado, path-sensitive):
+
+- `--tp-mult`  — take-profit barrier at `close + tp_mult × ATR(14)`;
+  default `1.5`.
+- `--sl-mult`  — stop-loss barrier at `close - sl_mult × ATR(14)`;
+  default `1.0`.
+- `--timeout`  — bars to walk forward; default `20`.
+
+The labeler walks forward bar-by-bar; the first barrier to
+trigger (TP hit → class 2, SL hit → class 0) wins. If neither
+fires within `--timeout`, class 1 (flat). Bars whose `[low, high]`
+range straddles both barriers in one shot (gap bars) get class 0
+as a conservative tie-break.
+
+The triple-barrier label is the one to use when your downstream
+strategy will trade with actual TP/SL brackets — it matches
+what your trade outcome actually will be, unlike the threshold
+label which only looks at one future close.
 
 The tool paginates through the broker's per-call cap (BCS
 hard-limits at 1440 bars) and dedups on the chunk boundary. On

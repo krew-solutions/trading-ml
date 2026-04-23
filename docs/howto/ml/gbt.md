@@ -215,10 +215,11 @@ let params : (string * Strategies.Registry.param) list = [
 let strat = (Strategies.Registry.find "GBT" |> Option.get).build params
 ```
 
-The UI `/api/strategies` catalog surfaces `model_path` as a
-`"string"`-typed field, so a frontend form can render an input
-for it next to the numeric / bool knobs. POST body to
-`/api/backtest` accepts the same shape:
+The UI strategy picker renders a param form beneath the
+strategy dropdown — numeric fields for int/float, checkboxes for
+bool, text inputs for string (like `model_path`). Default values
+come from the registry spec; user edits are sent as-is in the
+`/api/backtest` POST body:
 
 ```json
 {

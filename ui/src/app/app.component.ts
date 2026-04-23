@@ -90,6 +90,36 @@ let nextSlotId = 1;
         </div>
       </header>
 
+      @if (currentStrategy(); as spec) {
+        @if (spec.params.length) {
+          <section class="strategy-params">
+            @for (p of spec.params; track p.name) {
+              <label class="param" [title]="p.name">
+                <span class="param-name">{{p.name}}</span>
+                @switch (p.type) {
+                  @case ('bool') {
+                    <input type="checkbox"
+                           [ngModel]="$any(strategyParams()[p.name])"
+                           (ngModelChange)="patchStrategyParam(p.name, $event)">
+                  }
+                  @case ('string') {
+                    <input type="text"
+                           [ngModel]="$any(strategyParams()[p.name])"
+                           (ngModelChange)="patchStrategyParam(p.name, $event)">
+                  }
+                  @default {
+                    <input type="number"
+                           [ngModel]="$any(strategyParams()[p.name])"
+                           (ngModelChange)="patchStrategyParam(
+                             p.name, p.type === 'int' ? +$event : +$event)">
+                  }
+                }
+              </label>
+            }
+          </section>
+        }
+      }
+
       <section class="indicators">
         <div class="ind-header">
           <h3>Indicators</h3>
@@ -196,6 +226,15 @@ let nextSlotId = 1;
     .slot .opacity span { font-size: 12px; opacity: 0.7; min-width: 36px; text-align: right; }
     .slot .param { display: flex; align-items: center; gap: 4px; opacity: 0.85; flex: 0 0 auto; }
     .slot .param input { width: 60px; }
+    .strategy-params {
+      display: flex; flex-wrap: wrap; gap: 10px 16px;
+      margin: 8px 0 16px; padding: 10px 12px;
+      background: #15181f; border: 1px solid #232731; border-radius: 4px;
+    }
+    .strategy-params .param { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .strategy-params .param-name { opacity: 0.75; min-width: 88px; }
+    .strategy-params input[type=number] { width: 72px; }
+    .strategy-params input[type=text] { width: 280px; }
     .slot .remove {
       margin-left: auto; background: none; border: 1px solid #3a2e38;
       color: #ef5350; padding: 2px 8px; cursor: pointer;
@@ -236,6 +275,13 @@ export class AppComponent {
     `${this.symbol()}/${this.timeframe()}/${this.n()}`);
   readonly strategyName = signal('');
   readonly strategies = signal<StrategySpec[]>([]);
+  /** Current values of the selected strategy's tunable params. Keyed
+   *  by param name; shape depends on the spec (number / boolean /
+   *  string). Reset from the spec's defaults whenever the user picks
+   *  a different strategy — see the [effect] in the constructor. */
+  readonly strategyParams = signal<Record<string, unknown>>({});
+  readonly currentStrategy = computed(() =>
+    this.strategies().find(s => s.name === this.strategyName()));
   readonly catalog = signal<IndicatorSpec[]>([]);
   readonly slots = signal<IndicatorSlot[]>([]);
   readonly candles = signal<Candle[]>([]);
@@ -268,6 +314,16 @@ export class AppComponent {
           this.strategyName.set(list[0].name);
         }
       });
+
+    /* Reset the param form whenever the picked strategy changes.
+       Defaults come straight from the spec — user edits live in
+       the signal only until [runBacktest] serialises them. */
+    effect(() => {
+      const spec = this.currentStrategy();
+      if (!spec) return;
+      this.strategyParams.set(
+        Object.fromEntries(spec.params.map(p => [p.name, p.default])));
+    });
 
     this.api.exchanges()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -409,12 +465,16 @@ export class AppComponent {
     }
   }
 
+  patchStrategyParam(name: string, value: unknown): void {
+    this.strategyParams.update(p => ({ ...p, [name]: value }));
+  }
+
   runBacktest(): void {
     this.api.backtest({
       symbol: this.symbol(),
       strategy: this.strategyName(),
       timeframe: this.timeframe(),
-      params: {},
+      params: this.strategyParams() as Record<string, number | boolean | string>,
       n: this.n(),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))

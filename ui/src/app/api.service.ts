@@ -134,7 +134,12 @@ export class Api {
   }
   backtest(body: {
     symbol: string; strategy: string; timeframe?: Timeframe;
-    params: Record<string, number | boolean>; n: number;
+    /** Param values by name. The allowed JSON types mirror
+     *  [Strategies.Registry.param]: int/float become [number],
+     *  bool becomes [boolean], and string (e.g. GBT's
+     *  [model_path]) becomes [string]. */
+    params: Record<string, number | boolean | string>;
+    n: number;
   }): Observable<BacktestResult> {
     return this.http.post<BacktestResult>('/api/backtest', body);
   }

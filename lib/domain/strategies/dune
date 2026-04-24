@@ -13,5 +13,6 @@
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../core -L ../indicators -P alt-ergo \"$f\" >/dev/null
+  why3 prove -L . -L ../core -L ../indicators -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../core -L ../indicators -P z3 \"$f\" >/dev/null
 done")))

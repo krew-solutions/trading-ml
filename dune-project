@@ -22,4 +22,7 @@
   digestif
   (alcotest :with-test)
   (qcheck :with-test)
-  (gospel (>= 0.3.1))))
+  (gospel (>= 0.3.1))
+  (why3 (>= 1.8))
+  (alt-ergo (>= 2.6))
+  (z3 (>= 4.13))))

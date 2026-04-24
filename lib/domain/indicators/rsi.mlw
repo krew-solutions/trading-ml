@@ -29,4 +29,8 @@ module Rsi
 
   lemma rsi_equals_50_at_rs_1 : rsi 1.0 = 50.0
   (** Equal gains and losses → neutral 50 *)
+
+  (** Monotonicity: higher RS → higher RSI. *)
+  lemma rsi_monotone : forall rs1 rs2: real.
+    0.0 <=. rs1 -> rs1 <=. rs2 -> rsi rs1 <=. rsi rs2
 end

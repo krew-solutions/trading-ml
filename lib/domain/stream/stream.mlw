@@ -29,6 +29,10 @@ module Stream
     forall n: int, x: 'a, xs: list 'a.
       n > 0 -> take n (Cons x xs) = Cons x (take (n - 1) xs)
 
+  (* take_length_bounded would require induction on the list — neither
+     Alt-Ergo nor Z3 closes it automatically. Left as future hand-proof
+     via a `let rec lemma` with explicit variant. *)
+
   lemma take_empty_is_empty : forall n: int.
     take n (Nil: t 'a) = Nil
 

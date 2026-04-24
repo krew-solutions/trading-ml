@@ -8,5 +8,6 @@
  (action
   (bash "set -eu
 for f in %{deps}; do
-  why3 prove -L . -P alt-ergo \"$f\" >/dev/null
+  why3 prove -L . -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -P z3 \"$f\" >/dev/null
 done")))

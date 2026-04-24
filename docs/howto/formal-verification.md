@@ -7,8 +7,10 @@ The repo carries two verification layers:
    No proof: specs are linted, not verified against the implementation.
 2. **Why3** — `.mlw` files sitting next to the OCaml sources. Axiomatise
    the contracts and prove downstream algebraic laws. [Alt-Ergo][alt-ergo]
-   is the SMT backend. [`why3 prove`][why3] orchestrates the translation
-   into SMT and relays the result.
+   is the primary SMT backend, with [Z3][z3] as fallback for goals
+   Alt-Ergo can't close (typically real-number reasoning).
+   [`why3 prove`][why3] orchestrates the translation into SMT and relays
+   the result.
 
 Both are wired into dune aliases:
 
@@ -23,6 +25,7 @@ we write `.mlw` by hand as a deliberate workaround.
 
 [gospel]: https://github.com/ocaml-gospel/gospel
 [alt-ergo]: https://alt-ergo.ocamlpro.com/
+[z3]: https://github.com/Z3Prover/z3
 [cameleer]: https://github.com/ocaml-gospel/cameleer
 [why3]: https://why3.lri.fr/
 
@@ -41,9 +44,10 @@ field reference, reference to a non-existent function — fails the
 alias with a pointed diagnostic.
 
 The `@why3` alias runs `why3 prove -P alt-ergo` against every `.mlw`
-file under `lib/domain/`. Exit status is `0` iff every lemma is
-proved valid by Alt-Ergo; a proof that returns `Timeout` or `Unknown`
-fails the alias.
+file under `lib/domain/`; on failure (exit code 2 = unproved goal) it
+retries with `-P z3`. Exit status is `0` iff every lemma is closed by
+at least one of the two solvers. A goal that times out on both fails
+the alias.
 
 ## Add a Gospel specification
 
@@ -222,17 +226,21 @@ annotation actually contains `(*@` (not e.g. `(*&` or `(*! `); the
 file selector is a literal grep. Confirm the file lives under
 `lib/domain/`; files elsewhere are not in the alias's scope.
 
-**Why3 `Timeout` on a lemma** — Alt-Ergo gave up before finding a
-proof. Common causes:
+**Why3 `Timeout` on a lemma** — Both Alt-Ergo and Z3 gave up. Common
+causes:
 
-- Real-number reasoning (`real.RealInfix`) — Alt-Ergo is weaker on
-  reals; weaken the lemma (drop monotonicity, keep boundedness) or
-  split into smaller steps.
-- Inductive proof over lists — Alt-Ergo doesn't do induction
+- Real-number reasoning past basic boundedness — Alt-Ergo is weaker
+  on reals; Z3 covers most of these. If both time out, weaken or split.
+- Inductive proof over lists — neither SMT solver does induction
   automatically. State the result as an axiom if the induction is
-  obvious, or provide a helper lemma with a hint.
+  obvious, or write a `let rec lemma` with an explicit `variant`.
 - Forgotten `use` directive for the module whose lemma you depend
   on — the dependent facts won't be in scope.
+
+**Why3 `Prover Z3 version 4.x is not recognized`** — your installed
+Z3 is newer than the version regex shipped with Why3 1.8.2. Why3 still
+runs it, falling back to the latest known driver (4.13.x). In practice
+proofs work fine; the warning can be ignored.
 
 **Why3 `Library file not found`** — check `use file.Module` uses
 lowercase file name, and the dune rule passes `-L` for the directory

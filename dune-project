@@ -22,4 +22,4 @@
   digestif
   (alcotest :with-test)
   (qcheck :with-test)
-  gospel))
+  (gospel (>= 0.3.1))))

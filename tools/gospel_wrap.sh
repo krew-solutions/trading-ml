@@ -6,24 +6,33 @@
 # pointing `--load-path` at the library directory. This script produces a
 # single <libname>.mli that inlines each submodule's signature as
 #   module <Cap> : sig
-#     <contents of <cap>.mli, with gospel-unsafe lines stripped>
+#     <contents of <cap>.mli>
 #   end
 # in topological order (gospel has no `module rec` support, so a module must
 # appear before any other module that references it).
 #
-# Stripped: lines referring to Format.formatter (Format is absent from
-# gospel's stdlib; any occurrence crashes the type-checker).
+# Usage: gospel_wrap.sh [--strip-format] <mli-files...>
 #
-# Usage: gospel_wrap.sh <mli-files...>
+# With `--strip-format`, lines referring to Format.formatter are dropped —
+# useful when the load path doesn't carry a Format stub and the default
+# gospel 0.3.1 stdlib lacks Format (which otherwise crashes the
+# type-checker).
 
 set -eu
 
-exec python3 - "$@" <<'PY'
+strip_format=0
+case "${1:-}" in
+  --strip-format) strip_format=1; shift ;;
+esac
+
+exec python3 - "$strip_format" "$@" <<'PY'
 import os
 import re
 import sys
 
-files = sys.argv[1:]
+strip_format = sys.argv[1] == "1"
+files = sys.argv[2:]
+
 modules = {}
 for f in files:
     base = os.path.basename(f)
@@ -62,7 +71,7 @@ for cap in order:
     _, body = modules[cap]
     print(f"module {cap} : sig")
     for line in body.splitlines():
-        if format_re.search(line):
+        if strip_format and format_re.search(line):
             continue
         print(line)
     print("end\n")

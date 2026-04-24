@@ -3,14 +3,18 @@
  (public_name trading.core))
 
 ; Gospel type-checks only .mli files carrying (*@ ... *) annotations.
-; Non-annotated files are skipped to sidestep a gospel 0.3.1 crash on
-; Format.formatter (absent from gospel's stdlib).
+; The shared ../gospel_stubs/ directory provides a Format stub so .mli
+; files exporting [pp : Format.formatter -> t -> unit] don't crash the
+; type-checker (see docs/howto/formal-verification.md).
 (rule
  (alias gospel)
- (deps (glob_files *.mli))
+ (deps
+  (glob_files *.mli)
+  (glob_files ../gospel_stubs/*.mli))
  (action
   (bash "set -eu
 for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L . \"$f\"
+  gospel check -L ../gospel_stubs -L . \"$f\"
 done")))

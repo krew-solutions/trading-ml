@@ -60,13 +60,8 @@ The alias picks up every `.mli` containing a `(*@ ... *)` annotation under
 by `tools/gospel_wrap.sh` (Gospel 0.3.1 doesn't understand dune's implicit
 library wrapping on its own).
 
-Specifications carried today:
-
-| File                              | Spec kind                                                    |
-| --------------------------------- | ------------------------------------------------------------ |
-| `lib/domain/core/decimal.mli`     | `div` raises `Division_by_zero`                              |
-| `lib/domain/core/candle.mli`      | `make` invariants: `low ≤ open,close ≤ high`, `volume ≥ 0`   |
-| `lib/domain/engine/portfolio.mli` | `empty` postconditions; `fill` raises `Invalid_argument`     |
+See [docs/howto/formal-verification.md](docs/howto/formal-verification.md)
+for the full spec catalog, gotchas, and roadmap.
 
 JSON encodings live in `*_json.ml` companion files to keep the verified
 `.mli` free of Yojson dependencies.

@@ -17,6 +17,11 @@
     Gospel preconditions on the transition operations document
     the safety obligations callers must satisfy. *)
 
+(*@ function dec_raw (d : Core.Decimal.t) : integer *)
+(** Local alias for [Decimal.t]'s scaled-integer projection. See the
+    matching note in [core/candle.mli] — Gospel 0.3.1 doesn't carry
+    [model] declarations across files, so each consumer restates it. *)
+
 (** Snapshot of an open trading position. *)
 type position = {
   instrument : Core.Instrument.t;
@@ -49,6 +54,11 @@ val reserved_qty : reservation -> Core.Decimal.t
 (** [quantity] for a Sell reservation, [0] for a Buy. Earmarked
     position qty locking out further sells on the same
     instrument. *)
+(*@ q = reserved_qty r
+    ensures dec_raw q =
+            (match r.side with
+             | Core.Side.Buy -> 0
+             | Core.Side.Sell -> dec_raw r.quantity) *)
 
 type t = private {
   cash : Core.Decimal.t;
@@ -59,8 +69,10 @@ type t = private {
 
 val empty : cash:Core.Decimal.t -> t
 (*@ p = empty ~cash
+    ensures p.cash = cash
     ensures p.positions = []
-    ensures p.reservations = [] *)
+    ensures p.reservations = []
+    ensures dec_raw p.realized_pnl = 0 *)
 
 (** {1 Domain events}
 
@@ -101,6 +113,18 @@ val try_reserve :
     delegates to {!reserve}. Returns new state together with the
     [Amount_reserved] event that reflects the transition, or a
     typed [reservation_error] if the invariant is violated. *)
+(*@ r = try_reserve p ~id ~side ~instrument ~quantity ~price
+                    ~slippage_buffer ~fee_rate
+    ensures match r with
+            | Ok (p', ev) ->
+                ev.reservation_id = id
+                /\ ev.side = side
+                /\ ev.instrument = instrument
+                /\ ev.quantity = quantity
+                /\ ev.price = price
+                /\ List.length p'.reservations
+                     = List.length p.reservations + 1
+            | Error _ -> true *)
 
 type reservation_released = {
   reservation_id : int;
@@ -120,6 +144,15 @@ val try_release :
     event. Returns [Reservation_not_found] if no reservation
     with that id exists — callers that want idempotent behaviour
     can treat this as a no-op. *)
+(*@ r = try_release p ~id
+    ensures match r with
+            | Ok (p', ev) ->
+                ev.reservation_id = id
+                /\ List.length p'.reservations
+                     = List.length p.reservations - 1
+            | Error (Reservation_not_found n) ->
+                n = id
+                /\ List.for_all (fun res -> res.id <> id) p.reservations *)
 
 val position : t -> Core.Instrument.t -> position option
 
@@ -138,7 +171,7 @@ val fill :
 
     Raises [Invalid_argument] on non-positive quantity. *)
 (*@ r = fill t ~instrument ~side ~quantity ~price ~fee
-    raises Invalid_argument _ -> true *)
+    raises Invalid_argument _ -> dec_raw quantity <= 0 *)
 
 val reserve :
   t ->

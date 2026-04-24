@@ -1,8 +1,8 @@
 # How to work with Gospel specifications
 
-End-to-end walkthrough: run the existing Gospel type-checker over the
-annotated domain `.mli` files, add a new specification, and understand
-what the current build actually proves (and what it doesn't).
+How to run the Gospel type-checker over annotated `.mli` files, add a
+new specification, and work around the limitations of the current
+Gospel release.
 
 [Gospel][gospel] is a tool-agnostic specification language for OCaml.
 You write contracts — `requires`, `ensures`, `raises`, `modifies` — in
@@ -10,15 +10,15 @@ You write contracts — `requires`, `ensures`, `raises`, `modifies` — in
 consume them: `gospel check` validates them syntactically and
 name-resolves them against the OCaml types; [Ortac][ortac] translates
 them into runtime assertions for property tests; [Cameleer][cameleer]
-maps a subset into [Why3][why3] for proof. This repo currently uses
-only `gospel check`; Ortac/Why3 integration is on the roadmap.
+maps a subset into [Why3][why3] for proof. This repo currently wires
+only `gospel check`.
 
 [gospel]: https://github.com/ocaml-gospel/gospel
 [ortac]: https://github.com/ocaml-gospel/ortac
 [cameleer]: https://github.com/ocaml-gospel/cameleer
 [why3]: https://why3.lri.fr/
 
-## What the build checks today
+## Run the checker
 
 ```bash
 dune build @gospel
@@ -31,18 +31,6 @@ it resolves. A malformed annotation — misspelled exception, typo in a
 field reference, reference to a non-existent function — fails the
 alias with a pointed diagnostic.
 
-Current specs (as of Phase 0 wiring):
-
-| File                              | Spec kind                                                  |
-| --------------------------------- | ---------------------------------------------------------- |
-| `lib/domain/core/decimal.mli`     | `div` raises `Division_by_zero`                            |
-| `lib/domain/core/candle.mli`      | `make` invariants: `low ≤ open,close ≤ high`, `volume ≥ 0` |
-| `lib/domain/engine/portfolio.mli` | `empty` postconditions; `fill` raises `Invalid_argument`   |
-
-These are minimal by design. Phase 0 wiring is about *not letting
-specs rot silently* — every time `dune build @gospel` runs, broken
-annotations surface immediately. Expanding the catalogue is Phase 1.
-
 ## Add a new specification
 
 1. Pick an `.mli` file under `lib/domain/`.
@@ -52,7 +40,7 @@ annotations surface immediately. Expanding the catalogue is Phase 1.
    val div : t -> t -> t
    (** Raises [Division_by_zero] if [b] is [zero]. *)
    (*@ r = div a b
-       raises Division_by_zero -> true *)
+       raises Division_by_zero -> b.raw = 0 *)
    ```
 
    Shape: `<result_var> = <fn_name> <arg_vars>` on the first line,
@@ -72,9 +60,6 @@ annotations surface immediately. Expanding the catalogue is Phase 1.
 
 ## Known limitations of Gospel 0.3.1
 
-Hit these in practice while wiring Phase 0 — expect to hit them again
-when writing new specs.
-
 ### `Format.formatter` crashes the type-checker
 
 Gospel's internal stdlib stub doesn't include `Format`. Any `.mli`
@@ -82,10 +67,11 @@ referencing `Format.formatter` crashes `gospel check` with
 `File "src/typing.ml", line 721, … Assertion failed`.
 
 **Mitigation.** The `@gospel` alias skips `.mli` files that have no
-`(*@` annotation, so `pp`-only modules (`Ticker`, `Mic`, `Isin`,
-`Board`, `Instrument`) don't block the build today. If you want to
-annotate one of them, first move the `pp` signature into a separate
-`<module>_pp.mli` or accept a workaround (e.g. phantom type stub).
+`(*@` annotation, so `pp`-only modules don't block the build. If you
+want to annotate one of them, first strip `Format.formatter` from
+the signature (replace `pp : Format.formatter -> t -> unit` with
+`pp : t -> string` at the boundary, or move it to a companion
+`*_pp.mli`).
 
 ### No understanding of dune-wrapped libraries
 
@@ -103,13 +89,32 @@ stripped. The rule in `lib/domain/engine/gospel_stubs/dune` runs it
 before `gospel check`, and the engine alias passes
 `-L gospel_stubs` so the synthesized file is on the load path.
 
+### `model` declarations don't cross files
+
+A `(*@ model raw : integer *)` declaration on `Decimal.t` in
+`decimal.mli` isn't visible when another file references
+`Decimal.t`. The sibling file sees the OCaml type but not its
+logical projection — `c.high.raw` fails with *Symbol raw not found
+in scope*.
+
+**Mitigation.** Each consumer declares a local logical abstraction:
+
+```ocaml
+(*@ function dec_raw (d : Decimal.t) : integer *)
+```
+
+`candle.mli` and `engine/portfolio.mli` carry such a declaration.
+The two logical functions are disconnected from each other and from
+Decimal's own `raw` — they're just abstract handles. Adequate for
+`gospel check` (which only resolves names) but insufficient for
+Ortac-generated runtime checks.
+
 ### No `module rec`
 
 Gospel rejects mutually recursive module declarations
 (`module rec A … and B …`), so the wrapper generator topologically
 sorts modules by intra-library references. Circular references
-between two modules in the same library would currently be
-unsupported; we don't have any today.
+between two modules in the same library are unsupported.
 
 ### Dune ignores subdirs starting with `_`
 
@@ -142,32 +147,6 @@ Adding a new library under `lib/domain/` that wants specs:
   intra-library types.
 - Copy the `engine/` pattern (including a `gospel_stubs/` subdir) if
   specs reference types from another dune-wrapped library.
-
-## Roadmap
-
-Phase 0 — **done**: `dune build @gospel` enforces that annotations
-parse and name-resolve.
-
-Phase 1 — **next**: expand specifications across the domain core.
-Good candidates in decreasing order of payoff:
-
-- `Portfolio.try_reserve` / `try_release` — the reservation
-  invariants (non-negative `available_cash`, monotone `reservations`
-  list) are the safety-critical logic.
-- `Instrument.equal` / `compare` — total order laws, symmetry.
-- `Decimal.add` / `mul` / `div` — associativity / commutativity
-  where they hold; rescaling bounds for `mul`.
-
-Phase 2 — **Ortac runtime checks**: `opam install ortac-qcheck-stm`,
-generate runtime-checked wrappers from the Gospel annotations,
-integrate with the existing QCheck property tests. The aggregates
-(`Portfolio`) are the natural first target — they are state
-machines, which `qcheck-stm` is built for.
-
-Phase 3 — **Cameleer/Why3 proofs** for pure numeric code. Requires
-an SMT solver stack (Alt-Ergo, Z3, CVC) and currently needs
-Cameleer pinned from git (not in opam). Targets: `Decimal`
-arithmetic laws, indicator invariants on fixed-length windows.
 
 ## Troubleshooting
 

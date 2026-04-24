@@ -1,0 +1,37 @@
+(** Why3 companion for [stream.mli] — lazy pull-driven sequences.
+
+    Modelled as Why3's [list] for reasoning purposes (infinite streams
+    terminate or aren't reasoned about at this level). Captures the
+    basic algebraic laws of map/filter/take on finite streams. *)
+
+module Stream
+  use int.Int
+  use list.List
+  use list.Length
+  use list.Append
+
+  type t 'a = list 'a
+
+  function of_list (l: list 'a) : t 'a = l
+
+  function to_list (s: t 'a) : list 'a = s
+
+  lemma of_list_to_list : forall l: list 'a.
+    to_list (of_list l) = l
+
+  (** [take n] never returns a longer stream than the input, and is
+      bounded above by [n] when [n >= 0]. *)
+  function take (n: int) (s: t 'a) : t 'a
+
+  axiom take_nil : forall n: int. take n (Nil: t 'a) = Nil
+  axiom take_zero : forall s: t 'a. take 0 s = Nil
+  axiom take_cons :
+    forall n: int, x: 'a, xs: list 'a.
+      n > 0 -> take n (Cons x xs) = Cons x (take (n - 1) xs)
+
+  lemma take_empty_is_empty : forall n: int.
+    take n (Nil: t 'a) = Nil
+
+  lemma take_zero_is_empty : forall s: t 'a.
+    take 0 s = Nil
+end

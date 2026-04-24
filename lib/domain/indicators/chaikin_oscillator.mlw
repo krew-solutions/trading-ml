@@ -1,0 +1,19 @@
+(** Why3 companion for [chaikin_oscillator.mli] — Chaikin Oscillator.
+    = EMA(AD, fast) - EMA(AD, slow).
+    Zero crossing is the notable trading signal. *)
+
+module Chaikin_oscillator
+  use real.RealInfix
+
+  function osc (ema_fast_ad ema_slow_ad: real) : real =
+    ema_fast_ad -. ema_slow_ad
+
+  lemma zero_when_fast_eq_slow :
+    forall x: real. osc x x = 0.0
+
+  lemma positive_when_fast_above_slow :
+    forall f s: real. f >. s -> osc f s >. 0.0
+
+  lemma negative_when_fast_below_slow :
+    forall f s: real. f <. s -> osc f s <. 0.0
+end

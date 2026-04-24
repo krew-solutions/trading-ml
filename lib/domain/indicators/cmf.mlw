@@ -1,0 +1,27 @@
+(** Why3 companion for [cmf.mli] — Chaikin Money Flow.
+
+    CMF = sum(MFV over N) / sum(volume over N), bounded in [-1, +1]
+    when volumes are non-negative and at least one is positive. *)
+
+module Cmf
+  use real.RealInfix
+
+  (** Normalised CMF value given aggregate MFV and volume sums. *)
+  function cmf (mfv_sum vol_sum: real) : real = mfv_sum /. vol_sum
+
+  lemma cmf_bounded_above :
+    forall mfv_sum vol_sum: real.
+      vol_sum >. 0.0 ->
+      mfv_sum <=. vol_sum ->
+      cmf mfv_sum vol_sum <=. 1.0
+
+  lemma cmf_bounded_below :
+    forall mfv_sum vol_sum: real.
+      vol_sum >. 0.0 ->
+      mfv_sum >=. -. vol_sum ->
+      cmf mfv_sum vol_sum >=. -. 1.0
+
+  lemma cmf_zero_when_mfv_zero :
+    forall vol_sum: real.
+      vol_sum >. 0.0 -> cmf 0.0 vol_sum = 0.0
+end

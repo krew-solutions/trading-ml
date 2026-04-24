@@ -1,0 +1,27 @@
+(** Why3 companion for [chaikin_momentum.mli] — Chaikin Oscillator
+    zero-cross trades, structurally identical to MACD momentum. *)
+
+module Chaikin_momentum
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (osc prev_osc: real) : action =
+    if osc >. 0.0 && prev_osc <=. 0.0 then Enter_long
+    else if osc <. 0.0 && prev_osc >=. 0.0 then Enter_short
+    else Hold
+
+  lemma hold_same_sign_positive :
+    forall o po: real.
+      o >. 0.0 -> po >. 0.0 ->
+      decide o po = Hold
+
+  lemma long_on_bullish_cross :
+    forall o po: real.
+      o >. 0.0 -> po <=. 0.0 ->
+      decide o po = Enter_long
+
+  lemma short_on_bearish_cross :
+    forall o po: real.
+      o <. 0.0 -> po >=. 0.0 ->
+      decide o po = Enter_short
+end

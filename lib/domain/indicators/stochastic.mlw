@@ -1,0 +1,32 @@
+(** Why3 companion for [stochastic.mli] — Stochastic Oscillator.
+
+    %K = (close - low_N) / (high_N - low_N) * 100
+    %D = SMA of %K over smoothing window.
+
+    Both are bounded in [0, 100] when high_N > low_N. *)
+
+module Stochastic
+  use real.RealInfix
+
+  function k_value (close low_n high_n: real) : real =
+    (close -. low_n) /. (high_n -. low_n) *. 100.0
+
+  lemma k_at_low  : forall low_n high_n: real.
+    high_n >. low_n -> k_value low_n low_n high_n = 0.0
+
+  lemma k_at_high : forall low_n high_n: real.
+    high_n >. low_n -> k_value high_n low_n high_n = 100.0
+
+  (** For a close inside the N-bar range, K is in [0, 100]. *)
+  lemma k_bounded_below : forall close low_n high_n: real.
+    high_n >. low_n ->
+    close >=. low_n ->
+    close <=. high_n ->
+    k_value close low_n high_n >=. 0.0
+
+  lemma k_bounded_above : forall close low_n high_n: real.
+    high_n >. low_n ->
+    close >=. low_n ->
+    close <=. high_n ->
+    k_value close low_n high_n <=. 100.0
+end

@@ -1,0 +1,29 @@
+(** Why3 companion for [side.mli] — variant type with two cases,
+    involution and sign laws. *)
+
+module Side
+  use int.Int
+
+  type t = Buy | Sell
+
+  function opposite (s: t) : t =
+    match s with Buy -> Sell | Sell -> Buy end
+
+  function sign (s: t) : int =
+    match s with Buy -> 1 | Sell -> -1 end
+
+  lemma opposite_involution : forall s: t.
+    opposite (opposite s) = s
+
+  lemma opposite_distinct : forall s: t.
+    opposite s <> s
+
+  lemma sign_nonzero : forall s: t.
+    sign s <> 0
+
+  lemma sign_opposite : forall s: t.
+    sign (opposite s) = - sign s
+
+  lemma sign_abs : forall s: t.
+    sign s = 1 \/ sign s = -1
+end

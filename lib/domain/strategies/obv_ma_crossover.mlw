@@ -1,0 +1,20 @@
+(** Why3 companion for [obv_ma_crossover.mli] — same crossover shape
+    as AD-MA, applied to OBV-MA line. *)
+
+module Obv_ma_crossover
+  use int.Int
+  use signal.Signal
+
+  function decide (ma prev_ma: int) : action =
+    if ma > 0 && prev_ma <= 0 then Enter_long
+    else if ma < 0 && prev_ma >= 0 then Enter_short
+    else Hold
+
+  lemma hold_same_sign_positive :
+    forall m pm: int.
+      m > 0 -> pm > 0 -> decide m pm = Hold
+
+  lemma short_on_bearish_cross :
+    forall m pm: int.
+      m < 0 -> pm >= 0 -> decide m pm = Enter_short
+end

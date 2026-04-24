@@ -1,0 +1,27 @@
+(** Why3 companion for [ring_im.mli] — immutable ring buffer.
+    Same capacity-bounded invariants as Ring, but each push produces
+    a new value rather than mutating. *)
+
+module Ring_im
+  use int.Int
+  use list.List
+  use list.Length
+
+  type t 'a = {
+    capacity : int;
+    contents : list 'a;
+  }
+
+  predicate valid (r: t 'a) =
+    r.capacity > 0 /\ 0 <= length r.contents <= r.capacity
+
+  predicate full (r: t 'a) = length r.contents = r.capacity
+
+  function create (cap: int) : t 'a = { capacity = cap; contents = Nil }
+
+  lemma create_valid : forall cap: int.
+    cap > 0 -> valid (create cap: t int)
+
+  lemma create_empty : forall cap: int.
+    length (create cap: t int).contents = 0
+end

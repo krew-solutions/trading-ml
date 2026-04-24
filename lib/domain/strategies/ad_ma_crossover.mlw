@@ -1,0 +1,21 @@
+(** Why3 companion for [ad_ma_crossover.mli] — crossover of an MA
+    applied to the Accumulation/Distribution line. Structurally
+    identical to plain SMA crossover. *)
+
+module Ad_ma_crossover
+  use int.Int
+  use signal.Signal
+
+  function decide (ma prev_ma: int) : action =
+    if ma > 0 && prev_ma <= 0 then Enter_long
+    else if ma < 0 && prev_ma >= 0 then Enter_short
+    else Hold
+
+  lemma hold_when_no_zero_cross_positive :
+    forall ma pma: int.
+      ma > 0 -> pma > 0 -> decide ma pma = Hold
+
+  lemma long_on_bullish_cross :
+    forall ma pma: int.
+      ma > 0 -> pma <= 0 -> decide ma pma = Enter_long
+end

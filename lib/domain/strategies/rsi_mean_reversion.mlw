@@ -1,0 +1,32 @@
+(** Why3 companion for [rsi_mean_reversion.mli] — oversold/overbought entries.
+
+    Rule:
+      Enter_long  when RSI < oversold_threshold (e.g., 30)
+      Enter_short when RSI > overbought_threshold (e.g., 70)
+      Hold        otherwise. *)
+
+module Rsi_mean_reversion
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (rsi oversold overbought: real) : action =
+    if rsi <. oversold then Enter_long
+    else if rsi >. overbought then Enter_short
+    else Hold
+
+  lemma hold_in_neutral_zone :
+    forall rsi oversold overbought: real.
+      rsi >=. oversold -> rsi <=. overbought ->
+      decide rsi oversold overbought = Hold
+
+  lemma long_triggered_by_oversold :
+    forall rsi oversold overbought: real.
+      rsi <. oversold ->
+      decide rsi oversold overbought = Enter_long
+
+  lemma short_triggered_by_overbought :
+    forall rsi oversold overbought: real.
+      rsi >. overbought ->
+      oversold <=. overbought ->
+      decide rsi oversold overbought = Enter_short
+end

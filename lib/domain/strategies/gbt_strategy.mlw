@@ -1,0 +1,23 @@
+(** Why3 companion for [gbt_strategy.mli] — gradient-boosted-trees
+    gate. Takes a probability p in [0,1] and thresholds it. *)
+
+module Gbt_strategy
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (p threshold: real) : action =
+    if p >. threshold then Enter_long
+    else Hold
+
+  lemma never_short_or_exit :
+    forall p t: real.
+      decide p t <> Enter_short /\
+      decide p t <> Exit_long   /\
+      decide p t <> Exit_short
+
+  lemma enter_when_above_threshold :
+    forall p t: real. p >. t -> decide p t = Enter_long
+
+  lemma hold_when_at_or_below_threshold :
+    forall p t: real. p <=. t -> decide p t = Hold
+end

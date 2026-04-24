@@ -1,3 +1,12 @@
 (library
  (name stream)
  (public_name trading.stream))
+
+(rule
+ (alias why3)
+ (deps (glob_files *.mlw))
+ (action
+  (bash "set -eu
+for f in %{deps}; do
+  why3 prove -L . -P alt-ergo \"$f\" >/dev/null
+done")))

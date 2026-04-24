@@ -1,0 +1,35 @@
+(** Why3 companion for [ema.mli] — Exponential Moving Average.
+
+    EMA(t) = alpha * price(t) + (1 - alpha) * EMA(t-1)
+    where alpha = 2 / (period + 1).
+
+    We verify in integer form (prices in Decimal.raw view) that
+    the smoothing preserves bounds and that alpha lies in (0, 1)
+    for period > 0. *)
+
+module Ema
+  use int.Int
+
+  (** Smoothing coefficient: [alpha = 2 / (period + 1)]. We reason about
+      [alpha_num / alpha_den] where [alpha_num = 2] and [alpha_den = period + 1]
+      to keep integer arithmetic (no real numbers required). *)
+  function alpha_num : int = 2
+
+  function alpha_den (period: int) : int = period + 1
+
+  lemma alpha_den_positive : forall period: int.
+    period > 0 -> alpha_den period > 0
+
+  lemma alpha_num_positive : alpha_num > 0
+
+  lemma alpha_den_dominates_num : forall period: int.
+    period >= 2 -> alpha_den period > alpha_num
+  (** For period >= 2, alpha = 2/(p+1) < 1 — bounded-output EMA *)
+
+  lemma alpha_equals_one_at_period_one : alpha_den 1 = alpha_num
+  (** Degenerate: EMA with period=1 is pass-through (alpha=1) *)
+
+  lemma alpha_between_zero_and_one : forall period: int.
+    period >= 2 ->
+    0 < alpha_num /\ alpha_num < alpha_den period
+end

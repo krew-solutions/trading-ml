@@ -1,0 +1,62 @@
+(** Why3 companion for [candle.mli] — OHLCV invariants and derived
+    price aggregates (typical/median/range). Depends on [Decimal.mlw]
+    via the shared [raw] projection axiom. *)
+
+module Candle
+  use int.Int
+  use decimal.Decimal
+
+  (** A valid candle carries the OHLCV invariants enforced by [make].
+      Exposed as a record of [Decimal.t]s with the invariant as an
+      explicit predicate — Why3 reasons about it structurally. *)
+  type t = {
+    ts : int;
+    open_ : Decimal.t;
+    high : Decimal.t;
+    low : Decimal.t;
+    close : Decimal.t;
+    volume : Decimal.t;
+  }
+
+  predicate valid (c: t) =
+       raw c.low <= raw c.open_ <= raw c.high
+    /\ raw c.low <= raw c.close <= raw c.high
+    /\ raw c.volume >= 0
+
+  (** Smart constructor: if preconditions hold, result is valid and
+      echoes the inputs. *)
+  function make (ts: int) (o h l cl v: Decimal.t) : t =
+    { ts = ts; open_ = o; high = h; low = l; close = cl; volume = v }
+
+  lemma make_valid_preserves : forall ts: int, o h l cl v: Decimal.t.
+    raw l <= raw o <= raw h ->
+    raw l <= raw cl <= raw h ->
+    raw v >= 0 ->
+    valid (make ts o h l cl v)
+
+  (** [range = high - low] — non-negative by construction (from valid). *)
+  function range (c: t) : Decimal.t = Decimal.sub c.high c.low
+
+  lemma range_nonnegative : forall c: t.
+    valid c -> raw (range c) >= 0
+
+  lemma range_zero_iff_high_eq_low : forall c: t.
+    valid c -> (raw (range c) = 0 <-> raw c.high = raw c.low)
+
+  predicate is_bull (c: t) = raw c.close > raw c.open_
+  predicate is_bear (c: t) = raw c.close < raw c.open_
+
+  lemma bull_and_bear_exclusive : forall c: t.
+    not (is_bull c /\ is_bear c)
+
+  (** Within a valid candle, close sits in the [low..high] band — so
+      if the candle is bullish, close > open, but both are bounded by
+      [low, high]. *)
+  lemma bull_bounded : forall c: t.
+    valid c -> is_bull c ->
+    raw c.low <= raw c.open_ /\ raw c.close <= raw c.high
+
+  lemma bear_bounded : forall c: t.
+    valid c -> is_bear c ->
+    raw c.low <= raw c.close /\ raw c.open_ <= raw c.high
+end

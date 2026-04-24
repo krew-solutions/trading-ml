@@ -1,0 +1,21 @@
+(** Why3 companion for [mfi_mean_reversion.mli] — same shape as
+    RSI mean reversion but on Money Flow Index. *)
+
+module Mfi_mean_reversion
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (mfi oversold overbought: real) : action =
+    if mfi <. oversold then Enter_long
+    else if mfi >. overbought then Enter_short
+    else Hold
+
+  lemma hold_in_neutral_zone :
+    forall mfi ov ob: real.
+      mfi >=. ov -> mfi <=. ob ->
+      decide mfi ov ob = Hold
+
+  lemma long_triggered_by_oversold :
+    forall mfi ov ob: real.
+      mfi <. ov -> decide mfi ov ob = Enter_long
+end

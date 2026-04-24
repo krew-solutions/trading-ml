@@ -1,0 +1,29 @@
+(** Why3 companion for [bollinger_breakout.mli] — price-band breakout.
+
+    Rule:
+      Enter_long  when price > upper (breakout up)
+      Enter_short when price < lower (breakout down)
+      Hold        inside the band. *)
+
+module Bollinger_breakout
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (price upper lower: real) : action =
+    if price >. upper then Enter_long
+    else if price <. lower then Enter_short
+    else Hold
+
+  lemma hold_inside_band :
+    forall p u l: real.
+      p >=. l -> p <=. u ->
+      decide p u l = Hold
+
+  lemma long_above_upper :
+    forall p u l: real.
+      p >. u -> decide p u l = Enter_long
+
+  lemma short_below_lower :
+    forall p u l: real.
+      p <. l -> u >=. l -> decide p u l = Enter_short
+end

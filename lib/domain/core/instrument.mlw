@@ -1,0 +1,74 @@
+(** Why3 companion for [instrument.mli] — identity semantics:
+    [equal] uses ISIN+MIC when ISIN is present, else Ticker+MIC.
+    [board] is deliberately NOT part of identity. *)
+
+module Instrument
+  use int.Int
+  use option.Option
+
+  (** Abstract identifiers — all four are opaque [private string]
+      in OCaml. We axiomatise only their equality via their logical
+      projection. *)
+  type ticker
+  type mic
+  type isin
+  type board
+
+  function ticker_str (t: ticker) : int  (** Some total ordering key *)
+  function mic_str    (m: mic) : int
+  function isin_str   (i: isin) : int
+  function board_str  (b: board) : int
+
+  axiom ticker_inj : forall a b: ticker. ticker_str a = ticker_str b -> a = b
+  axiom mic_inj    : forall a b: mic.    mic_str a = mic_str b -> a = b
+  axiom isin_inj   : forall a b: isin.   isin_str a = isin_str b -> a = b
+  axiom board_inj  : forall a b: board.  board_str a = board_str b -> a = b
+
+  type t = {
+    ticker : ticker;
+    venue  : mic;
+    isin   : option isin;
+    board  : option board;
+  }
+
+  (** [equal] per the .mli contract: matches on ISIN+MIC if ISIN is
+      present, otherwise Ticker+MIC. Board is NEVER compared. *)
+  predicate equal (a b: t) =
+    a.venue = b.venue /\
+    match a.isin, b.isin with
+    | Some ia, Some ib -> ia = ib
+    | None, None       -> a.ticker = b.ticker
+    | _                -> false
+    end
+
+  (** Identity laws. *)
+
+  lemma equal_refl : forall a: t. equal a a
+
+  lemma equal_sym : forall a b: t. equal a b -> equal b a
+
+  lemma equal_trans : forall a b c: t.
+    equal a b -> equal b c -> equal a c
+
+  (** Board is NOT part of identity — two otherwise-equal instruments
+      remain equal under any board value. This is the distinguishing
+      property vs. simpler equality. *)
+  lemma equal_ignores_board : forall a b: t.
+    a.ticker = b.ticker ->
+    a.venue = b.venue ->
+    a.isin = b.isin ->
+    equal a b
+
+  (** Two instruments with different MIC are never equal. *)
+  lemma different_venue_not_equal : forall a b: t.
+    a.venue <> b.venue -> not (equal a b)
+
+  (** When ISIN is present on both sides, it dominates Ticker —
+      same ISIN + same MIC implies equal regardless of Ticker. *)
+  lemma isin_dominates : forall a b: t, ia ib: isin.
+    a.isin = Some ia ->
+    b.isin = Some ib ->
+    ia = ib ->
+    a.venue = b.venue ->
+    equal a b
+end

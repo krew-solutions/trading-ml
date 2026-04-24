@@ -1,0 +1,50 @@
+(** Why3 companion for [signal.mli] — strategy-action classification. *)
+
+module Signal
+  use int.Int
+
+  type action =
+    | Enter_long
+    | Enter_short
+    | Exit_long
+    | Exit_short
+    | Hold
+
+  predicate is_entry (a: action) =
+    match a with Enter_long | Enter_short -> true | _ -> false end
+
+  predicate is_exit (a: action) =
+    match a with Exit_long | Exit_short -> true | _ -> false end
+
+  predicate is_active (a: action) =
+    match a with Hold -> false | _ -> true end
+
+  lemma entry_exit_exclusive : forall a: action.
+    not (is_entry a /\ is_exit a)
+
+  lemma hold_is_inactive : not (is_active Hold)
+
+  lemma active_is_entry_or_exit : forall a: action.
+    is_active a -> is_entry a \/ is_exit a
+
+  (** Opposite side pairing: Enter_long is the counterpart of Exit_long, etc. *)
+  function opposite (a: action) : action =
+    match a with
+    | Enter_long  -> Exit_long
+    | Enter_short -> Exit_short
+    | Exit_long   -> Enter_long
+    | Exit_short  -> Enter_short
+    | Hold        -> Hold
+    end
+
+  lemma opposite_involution : forall a: action.
+    opposite (opposite a) = a
+
+  lemma opposite_preserves_hold : opposite Hold = Hold
+
+  lemma opposite_flips_entry_exit : forall a: action.
+    is_entry a -> is_exit (opposite a)
+
+  lemma opposite_flips_exit_entry : forall a: action.
+    is_exit a -> is_entry (opposite a)
+end

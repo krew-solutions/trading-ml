@@ -1,0 +1,57 @@
+(** Why3 companion for [order.mli] — order status lifecycle predicates
+    and [remaining_qty] invariants. *)
+
+module Order
+  use int.Int
+  use decimal.Decimal
+
+  type status =
+    | New | Partially_filled | Filled | Cancelled | Rejected
+    | Expired | Pending_cancel | Pending_new | Suspended | Failed
+
+  (** A terminal status — no further fills or state transitions. *)
+  predicate is_terminal (s: status) =
+    match s with
+    | Filled | Cancelled | Rejected | Expired | Failed -> true
+    | New | Partially_filled | Pending_cancel | Pending_new | Suspended -> false
+    end
+
+  (** An active status — order is live with the broker, more events possible. *)
+  predicate is_active (s: status) =
+    match s with
+    | New | Partially_filled | Pending_cancel | Pending_new | Suspended -> true
+    | Filled | Cancelled | Rejected | Expired | Failed -> false
+    end
+
+  lemma terminal_active_partition : forall s: status.
+    is_terminal s <-> not (is_active s)
+
+  lemma terminal_active_exhaustive : forall s: status.
+    is_terminal s \/ is_active s
+
+  lemma terminal_active_exclusive : forall s: status.
+    not (is_terminal s /\ is_active s)
+
+  (** [remaining_qty] = quantity − filled (delegated to [Decimal.sub]). *)
+  function remaining_qty (quantity filled: Decimal.t) : Decimal.t =
+    Decimal.sub quantity filled
+
+  (** If filled ≤ quantity, remaining is non-negative — the natural
+      well-formedness invariant of an order. *)
+  lemma remaining_nonnegative :
+    forall quantity filled: Decimal.t.
+      raw filled <= raw quantity ->
+      raw (remaining_qty quantity filled) >= 0
+
+  (** Once filled equals quantity, remaining is zero — "fully filled". *)
+  lemma remaining_zero_when_fully_filled :
+    forall quantity filled: Decimal.t.
+      raw filled = raw quantity ->
+      raw (remaining_qty quantity filled) = 0
+
+  (** remaining_qty is linear in [filled]: more filled, less remaining. *)
+  lemma remaining_monotone :
+    forall quantity f1 f2: Decimal.t.
+      raw f1 <= raw f2 ->
+      raw (remaining_qty quantity f1) >= raw (remaining_qty quantity f2)
+end

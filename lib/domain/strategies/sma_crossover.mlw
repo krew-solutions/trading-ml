@@ -1,0 +1,37 @@
+(** Why3 companion for [sma_crossover.mli] — classic MA crossover.
+
+    Rule:
+      Enter_long  when fast crosses above slow (fast > slow, prev fast <= prev slow)
+      Enter_short when fast crosses below slow
+      Hold        otherwise. *)
+
+module Sma_crossover
+  use int.Int
+  use signal.Signal
+
+  function decide
+    (fast prev_fast slow prev_slow: int) : action =
+    if fast > slow && prev_fast <= prev_slow then Enter_long
+    else if fast < slow && prev_fast >= prev_slow then Enter_short
+    else Hold
+
+  lemma decide_is_hold_when_no_cross :
+    forall fast slow: int.
+      decide fast fast slow slow = Hold
+  (** When nothing changes between ticks, no trade triggered *)
+
+  lemma decide_long_requires_cross :
+    forall f pf s ps: int.
+      decide f pf s ps = Enter_long ->
+      f > s /\ pf <= ps
+
+  lemma decide_short_requires_cross :
+    forall f pf s ps: int.
+      decide f pf s ps = Enter_short ->
+      f < s /\ pf >= ps
+
+  lemma entry_and_hold_exclusive :
+    forall f pf s ps: int.
+      let d = decide f pf s ps in
+      not (d = Enter_long /\ d = Enter_short)
+end

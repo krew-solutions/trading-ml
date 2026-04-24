@@ -1,0 +1,44 @@
+(** Why3 companion for [timeframe.mli] — 9-way variant, [to_seconds]
+    always positive and monotone across the natural time ordering. *)
+
+module Timeframe
+  use int.Int
+
+  type t = M1 | M5 | M15 | M30 | H1 | H4 | D1 | W1 | MN1
+
+  function to_seconds (t: t) : int =
+    match t with
+    | M1  -> 60
+    | M5  -> 300
+    | M15 -> 900
+    | M30 -> 1800
+    | H1  -> 3600
+    | H4  -> 14400
+    | D1  -> 86400
+    | W1  -> 604800
+    | MN1 -> 2592000
+    end
+
+  lemma to_seconds_positive : forall t: t.
+    to_seconds t > 0
+
+  (** Natural minute-based ordering is strictly monotone in [to_seconds]. *)
+  lemma monotone_M1_M5     : to_seconds M1  < to_seconds M5
+  lemma monotone_M5_M15    : to_seconds M5  < to_seconds M15
+  lemma monotone_M15_M30   : to_seconds M15 < to_seconds M30
+  lemma monotone_M30_H1    : to_seconds M30 < to_seconds H1
+  lemma monotone_H1_H4     : to_seconds H1  < to_seconds H4
+  lemma monotone_H4_D1     : to_seconds H4  < to_seconds D1
+  lemma monotone_D1_W1     : to_seconds D1  < to_seconds W1
+  lemma monotone_W1_MN1    : to_seconds W1  < to_seconds MN1
+
+  (** Coarser frames are exact multiples of finer ones — useful invariant
+      for bar aggregation correctness. *)
+  lemma M5_is_5_M1   : to_seconds M5  = 5  * to_seconds M1
+  lemma M15_is_3_M5  : to_seconds M15 = 3  * to_seconds M5
+  lemma M30_is_2_M15 : to_seconds M30 = 2  * to_seconds M15
+  lemma H1_is_2_M30  : to_seconds H1  = 2  * to_seconds M30
+  lemma H4_is_4_H1   : to_seconds H4  = 4  * to_seconds H1
+  lemma D1_is_6_H4   : to_seconds D1  = 6  * to_seconds H4
+  lemma W1_is_7_D1   : to_seconds W1  = 7  * to_seconds D1
+end

@@ -1,0 +1,13 @@
+(** Why3 companion for [registry.mli] — strategy-by-name registry.
+    Deterministic lookup. *)
+
+module Registry
+  type key = int
+  type entry = int
+  type t
+
+  function lookup (r: t) (k: key) : entry
+
+  lemma lookup_deterministic : forall r: t, k: key.
+    lookup r k = lookup r k
+end

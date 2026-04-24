@@ -1,0 +1,32 @@
+(** Why3 companion for [rsi.mli] — Relative Strength Index.
+
+    RSI = 100 - 100 / (1 + RS),  where RS = avg_gain / avg_loss.
+
+    The defining property is [0 <= RSI <= 100]. We verify this
+    boundedness algebraically, assuming RS >= 0 (implementations
+    must ensure that). *)
+
+module Rsi
+  use int.Int
+  use real.RealInfix
+  use real.FromInt
+
+  (** RSI as a real-valued function of [rs >= 0]. *)
+  function rsi (rs: real) : real = 100.0 -. 100.0 /. (1.0 +. rs)
+
+  lemma rsi_at_zero : rsi 0.0 = 0.0
+  (** If all recent bars are losses, RS=0 and RSI = 0 — lowest bound *)
+
+  lemma rsi_limit_infinity : forall rs: real.
+    rs >. 0.0 -> rsi rs <. 100.0
+  (** RSI approaches but never reaches 100 *)
+
+  lemma rsi_bounded_below : forall rs: real.
+    rs >=. 0.0 -> rsi rs >=. 0.0
+
+  lemma rsi_bounded_above : forall rs: real.
+    rs >=. 0.0 -> rsi rs <=. 100.0
+
+  lemma rsi_equals_50_at_rs_1 : rsi 1.0 = 50.0
+  (** Equal gains and losses → neutral 50 *)
+end

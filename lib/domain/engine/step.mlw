@@ -1,0 +1,45 @@
+(** Why3 companion for [step.mli] — one iteration of the engine state
+    machine. Captures reservation_seq monotonicity and commit/release
+    structural invariants. *)
+
+module Step
+  use int.Int
+
+  type state = {
+    reservation_seq : int;
+    reservations_count : int;
+  }
+
+  predicate valid (s: state) =
+    s.reservation_seq >= 0 /\ s.reservations_count >= 0
+
+  (** [execute_pending] that reserves bumps seq by 1 and grows the
+      reservation count (when a trade actually fires). *)
+  function reserve_step (s: state) : state =
+    { reservation_seq = s.reservation_seq + 1;
+      reservations_count = s.reservations_count + 1 }
+
+  lemma reserve_bumps_seq :
+    forall s: state. valid s ->
+      (reserve_step s).reservation_seq > s.reservation_seq
+
+  lemma reserve_grows_reservations :
+    forall s: state. valid s ->
+      (reserve_step s).reservations_count > s.reservations_count
+
+  lemma reserve_preserves_valid :
+    forall s: state. valid s -> valid (reserve_step s)
+
+  (** [commit_fill] / [release] leave the seq counter untouched and
+      decrement the reservations count. *)
+  function commit_step (s: state) : state =
+    { reservation_seq = s.reservation_seq;
+      reservations_count = s.reservations_count - 1 }
+
+  lemma commit_preserves_seq :
+    forall s: state. (commit_step s).reservation_seq = s.reservation_seq
+
+  lemma commit_shrinks_reservations :
+    forall s: state. s.reservations_count > 0 ->
+      (commit_step s).reservations_count < s.reservations_count
+end

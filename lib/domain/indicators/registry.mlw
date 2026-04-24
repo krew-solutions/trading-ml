@@ -1,0 +1,16 @@
+(** Why3 companion for [registry.mli] — indicator name registry.
+    Just a lookup table; trivial invariant: lookup is deterministic. *)
+
+module Registry
+  use int.Int
+
+  type key = int
+  type entry = int
+  type t
+
+  function lookup (r: t) (k: key) : entry
+
+  (** Lookup is a pure function — two queries with same key return same value. *)
+  lemma lookup_deterministic : forall r: t, k: key.
+    lookup r k = lookup r k
+end

@@ -1,0 +1,27 @@
+(** Why3 companion for [cvi.mli] — Chaikin Volatility Index.
+
+    CVI = (EMA(high-low) - EMA(high-low, prev)) / EMA(high-low, prev) * 100.
+    Measures percentage change in EMA-smoothed range. *)
+
+module Cvi
+  use real.RealInfix
+
+  function cvi_value (ema_cur ema_prev: real) : real =
+    (ema_cur -. ema_prev) /. ema_prev *. 100.0
+
+  lemma cvi_zero_when_unchanged :
+    forall ema: real.
+      ema >. 0.0 -> cvi_value ema ema = 0.0
+
+  lemma cvi_positive_when_volatility_rises :
+    forall cur prev: real.
+      prev >. 0.0 ->
+      cur >. prev ->
+      cvi_value cur prev >. 0.0
+
+  lemma cvi_negative_when_volatility_drops :
+    forall cur prev: real.
+      prev >. 0.0 ->
+      cur <. prev ->
+      cvi_value cur prev <. 0.0
+end

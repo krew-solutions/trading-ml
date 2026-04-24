@@ -1,0 +1,23 @@
+(** Why3 companion for [cvd.mli] — Cumulative Volume Delta.
+
+    Like OBV but weighted by price move rather than discrete sign:
+    CVD(t) = CVD(t-1) + volume * sign(close - prev_close) (approx).
+    Cumulative, unbounded. *)
+
+module Cvd
+  use real.RealInfix
+
+  function delta (close prev_close volume: real) : real =
+    if close >. prev_close then volume
+    else if close <. prev_close then -. volume
+    else 0.0
+
+  lemma delta_zero_at_equal :
+    forall c v: real. delta c c v = 0.0
+
+  lemma delta_sign_mirrors_price :
+    forall c pc v: real.
+      v >. 0.0 ->
+      c <> pc ->
+      (c >. pc <-> delta c pc v >. 0.0)
+end

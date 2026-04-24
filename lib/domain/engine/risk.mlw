@@ -1,0 +1,37 @@
+(** Why3 companion for [risk.mli] — pre-trade risk gate.
+
+    Outcome is binary: Accept with positive quantity, or Reject.
+    Invariant: [check] is a pure function — same inputs yield same
+    decision; accepted quantities are positive. *)
+
+module Risk
+  use int.Int
+  use decimal.Decimal
+
+  type decision =
+    | Accept Decimal.t
+    | Reject
+
+  predicate accepted (d: decision) =
+    match d with Accept _ -> true | Reject -> false end
+
+  predicate rejected (d: decision) =
+    match d with Reject -> true | Accept _ -> false end
+
+  lemma accept_reject_exclusive : forall d: decision.
+    not (accepted d /\ rejected d)
+
+  lemma accept_reject_exhaustive : forall d: decision.
+    accepted d \/ rejected d
+
+  (** An Accept carries a quantity; the business invariant is that
+      it's positive (risk never accepts zero or negative qty). *)
+  function accepted_qty (d: decision) : Decimal.t =
+    match d with Accept q -> q | Reject -> Decimal.zero end
+
+  predicate well_formed_accept (d: decision) =
+    match d with
+    | Accept q -> raw q > 0
+    | Reject -> true
+    end
+end

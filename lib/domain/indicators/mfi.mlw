@@ -1,0 +1,24 @@
+(** Why3 companion for [mfi.mli] — Money Flow Index.
+
+    Volume-weighted RSI: MFI = 100 - 100 / (1 + MR),
+    MR = positive_money_flow / negative_money_flow.
+
+    Bounded in [0, 100] like RSI. *)
+
+module Mfi
+  use real.RealInfix
+
+  function mfi (mr: real) : real = 100.0 -. 100.0 /. (1.0 +. mr)
+
+  lemma mfi_at_zero : mfi 0.0 = 0.0
+  lemma mfi_equals_50_at_mr_1 : mfi 1.0 = 50.0
+
+  lemma mfi_bounded_below : forall mr: real.
+    mr >=. 0.0 -> mfi mr >=. 0.0
+
+  lemma mfi_bounded_above : forall mr: real.
+    mr >=. 0.0 -> mfi mr <=. 100.0
+
+  lemma mfi_strictly_below_100 : forall mr: real.
+    mr >. 0.0 -> mfi mr <. 100.0
+end

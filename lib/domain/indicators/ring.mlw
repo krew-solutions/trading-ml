@@ -1,0 +1,30 @@
+(** Why3 companion for [ring.mli] — fixed-capacity FIFO ring buffer.
+    Captures the central invariant [length ≤ capacity] and queue-like
+    push semantics. *)
+
+module Ring
+  use int.Int
+  use list.List
+  use list.Length
+
+  type t 'a = {
+    capacity : int;
+    contents : list 'a;
+  }
+
+  predicate valid (r: t 'a) =
+    r.capacity > 0 /\ 0 <= length r.contents <= r.capacity
+
+  predicate full (r: t 'a) = length r.contents = r.capacity
+
+  predicate empty (r: t 'a) = length r.contents = 0
+
+  function create (cap: int) : t 'a = { capacity = cap; contents = Nil }
+
+  lemma create_valid : forall cap: int. cap > 0 -> valid (create cap: t int)
+  lemma create_empty : forall cap: int. empty (create cap: t int)
+  lemma create_not_full : forall cap: int. cap > 0 -> not full (create cap: t int)
+
+  lemma empty_not_full : forall r: t 'a. valid r -> r.capacity > 0 -> empty r -> not full r
+  lemma full_not_empty : forall r: t 'a. valid r -> full r -> not empty r
+end

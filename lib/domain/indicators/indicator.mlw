@@ -1,0 +1,28 @@
+(** Why3 companion for [indicator.mli] — common state lifecycle of
+    incremental indicators.
+
+    Abstract invariant: every indicator is either WARM (emits None)
+    or HOT (emits Some output). Once hot, updates stay hot. *)
+
+module Indicator
+  use option.Option
+
+  (** Abstract state of an indicator at a given point. *)
+  type state
+
+  (** Predicate: the indicator has seen enough bars to emit. *)
+  predicate hot (s: state)
+
+  (** Output when hot is Some, None otherwise — specification of
+      the universal [value] contract. *)
+  function value (s: state) : option int
+
+  axiom value_hot_is_some :
+    forall s: state. hot s -> exists x: int. value s = Some x
+
+  axiom value_not_hot_is_none :
+    forall s: state. not hot s -> value s = None
+
+  lemma hot_iff_some :
+    forall s: state. hot s <-> (exists x: int. value s = Some x)
+end

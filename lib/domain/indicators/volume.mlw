@@ -1,0 +1,12 @@
+(** Why3 companion for [volume.mli] — raw volume passthrough. *)
+
+module Volume
+  use real.RealInfix
+
+  function value (volume: real) : real = volume
+
+  lemma value_nonneg_for_nonneg_input :
+    forall v: real. v >=. 0.0 -> value v >=. 0.0
+
+  lemma value_is_identity : forall v: real. value v = v
+end

@@ -1,0 +1,51 @@
+(** Why3 companion for [sma.mli] — Simple Moving Average.
+
+    Inputs are integer-encoded close prices (Decimal.raw view).
+    We capture the defining property — output = [sum window / period]
+    when the window is full — and prove a handful of forward
+    consequences. Inductive proofs that Alt-Ergo times out on
+    (proving the property from incremental ring-buffer updates) are
+    out of scope here; the value carried is the algebraic spec. *)
+
+module Sma
+  use int.Int
+  use int.EuclideanDivision
+  use list.List
+  use list.Length
+  use list.Sum
+
+  predicate warm (period: int) (window: list int) =
+    length window < period
+
+  predicate hot (period: int) (window: list int) =
+    length window = period
+
+  function sma (period: int) (window: list int) : int =
+    div (sum window) period
+
+  (** Warm and hot partition the state space. *)
+  lemma warm_hot_exclusive : forall p: int, w: list int.
+    not (warm p w /\ hot p w)
+
+  (** Output of a full window is sum divided by period, by definition. *)
+  lemma sma_def : forall p: int, w: list int.
+    hot p w -> sma p w = div (sum w) p
+  (* This is literally the function body — acts as a sanity check
+     that the definition is well-formed and visible outside. *)
+
+  (** When the window is [Nil] (sum is 0), SMA is 0 regardless of
+      period — trivial but useful as base case for more complex specs. *)
+  lemma sma_nil_is_zero : forall p: int.
+    p > 0 -> sma p Nil = 0
+
+  (** Sum is additive over cons — rebuilt from stdlib so Alt-Ergo doesn't
+      have to rediscover it each time. *)
+  lemma sum_cons : forall x: int, xs: list int.
+    sum (Cons x xs) = x + sum xs
+
+  lemma sum_nil : sum Nil = 0
+
+  (** If period is 1, SMA of any singleton list is its element. *)
+  lemma sma_period_one_singleton : forall x: int.
+    sma 1 (Cons x Nil) = x
+end

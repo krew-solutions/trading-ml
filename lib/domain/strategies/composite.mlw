@@ -1,0 +1,26 @@
+(** Why3 companion for [composite.mli] — aggregates multiple child
+    strategies under a combination policy (majority/unanimous/learned). *)
+
+module Composite
+  use int.Int
+  use signal.Signal
+
+  (** Unanimous agreement among children — if all agree, return that decision,
+      else Hold. *)
+  function unanimous (a b: action) : action =
+    if a = b then a else Hold
+
+  lemma unanimous_of_same_is_same :
+    forall a: action. unanimous a a = a
+
+  lemma unanimous_of_differ_is_hold :
+    forall a b: action.
+      a <> b -> unanimous a b = Hold
+
+  lemma unanimous_commutative :
+    forall a b: action. unanimous a b = unanimous b a
+
+  lemma unanimous_hold_absorbing_differ :
+    forall a: action.
+      a <> Hold -> unanimous a Hold = Hold
+end

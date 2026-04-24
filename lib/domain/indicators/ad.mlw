@@ -1,0 +1,30 @@
+(** Why3 companion for [ad.mli] — Accumulation/Distribution line.
+
+    MFM = ((close - low) - (high - close)) / (high - low)
+    MFV = MFM * volume
+    AD  = cumulative sum of MFV.
+
+    MFM is bounded in [-1, +1] when high > low. *)
+
+module Ad
+  use real.RealInfix
+
+  function mfm (close low high: real) : real =
+    ((close -. low) -. (high -. close)) /. (high -. low)
+
+  lemma mfm_at_close_eq_high :
+    forall low high: real.
+      high >. low -> mfm high low high = 1.0
+  (** Close at high → maximum accumulation (+1) *)
+
+  lemma mfm_at_close_eq_low :
+    forall low high: real.
+      high >. low -> mfm low low high = -1.0
+  (** Close at low → maximum distribution (-1) *)
+
+  lemma mfm_zero_at_midpoint :
+    forall low high: real.
+      high >. low ->
+      mfm ((high +. low) /. 2.0) low high = 0.0
+  (** Close at midpoint → neutral zero *)
+end

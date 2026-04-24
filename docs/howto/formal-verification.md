@@ -1,27 +1,36 @@
-# How to work with Gospel specifications
+# How to work with Gospel and Why3 specifications
 
-How to run the Gospel type-checker over annotated `.mli` files, add a
-new specification, and work around the limitations of the current
-Gospel release.
+The repo carries two verification layers:
 
-[Gospel][gospel] is a tool-agnostic specification language for OCaml.
-You write contracts — `requires`, `ensures`, `raises`, `modifies` — in
-`(*@ … *)` comments inside `.mli` signatures, and downstream tools
-consume them: `gospel check` validates them syntactically and
-name-resolves them against the OCaml types; [Ortac][ortac] translates
-them into runtime assertions for property tests; [Cameleer][cameleer]
-maps a subset into [Why3][why3] for proof. This repo currently wires
-only `gospel check`.
+1. **Gospel** — `(*@ … *)` contracts in `.mli` signatures. Type-checked
+   by [`gospel check`][gospel] — parses, resolves names, rejects typos.
+   No proof: specs are linted, not verified against the implementation.
+2. **Why3** — `.mlw` files sitting next to the OCaml sources. Axiomatise
+   the contracts and prove downstream algebraic laws. [Alt-Ergo][alt-ergo]
+   is the SMT backend. [`why3 prove`][why3] orchestrates the translation
+   into SMT and relays the result.
+
+Both are wired into dune aliases:
+
+```bash
+dune build @gospel   # lint all Gospel annotations
+dune build @why3     # prove all .mlw theorems
+```
+
+[Cameleer][cameleer] (the OCaml+Gospel → Why3 bridge) is pinned to a
+four-year-old dev branch of Gospel and does not compile on OCaml 5.3;
+we write `.mlw` by hand as a deliberate workaround.
 
 [gospel]: https://github.com/ocaml-gospel/gospel
-[ortac]: https://github.com/ocaml-gospel/ortac
+[alt-ergo]: https://alt-ergo.ocamlpro.com/
 [cameleer]: https://github.com/ocaml-gospel/cameleer
 [why3]: https://why3.lri.fr/
 
-## Run the checker
+## Run the checkers
 
 ```bash
-dune build @gospel
+dune build @gospel   # Gospel contracts in .mli — name resolution + typing
+dune build @why3     # Why3 lemmas in .mlw — SMT-backed deductive proof
 ```
 
 The `@gospel` alias walks every `.mli` under `lib/domain/` and runs
@@ -31,7 +40,12 @@ it resolves. A malformed annotation — misspelled exception, typo in a
 field reference, reference to a non-existent function — fails the
 alias with a pointed diagnostic.
 
-## Add a new specification
+The `@why3` alias runs `why3 prove -P alt-ergo` against every `.mlw`
+file under `lib/domain/`. Exit status is `0` iff every lemma is
+proved valid by Alt-Ergo; a proof that returns `Timeout` or `Unknown`
+fails the alias.
+
+## Add a Gospel specification
 
 1. Pick an `.mli` file under `lib/domain/`.
 2. Below the `val` declaration, open a `(*@ … *)` block:
@@ -55,6 +69,33 @@ alias with a pointed diagnostic.
    `Error: Symbol Foo not found in scope`, you likely referenced an
    OCaml identifier Gospel can't resolve — either a typo, or one of
    the known limitations below.
+
+## Add a Why3 lemma
+
+1. Find or create `<module>.mlw` next to the `.ml`/`.mli` pair.
+2. Open a `module Foo` block with the `use` directives you need
+   (`int.Int`, `real.RealInfix`, `list.List`, etc.), axiomatise the
+   relevant contracts as `function` / `predicate` declarations, then
+   state lemmas:
+
+   ```why3
+   module Decimal
+     use int.Int
+     type t
+     function raw (x: t) : int
+     function add (a b: t) : t
+     axiom add_raw : forall a b: t. raw (add a b) = raw a + raw b
+     lemma add_comm : forall a b: t. add a b = add b a
+   end
+   ```
+
+3. `dune build @why3` — runs Alt-Ergo on each lemma. Lemmas that come
+   back `Timeout` (Alt-Ergo couldn't find a proof in 5 s) fail the
+   build; weaken the lemma or split it into smaller steps.
+
+4. To depend on a sibling module (e.g., `decimal.mlw` from
+   `candle.mlw`), use `use decimal.Decimal` — lowercase file name,
+   capitalised module name.
 
 [gospel-lang]: https://ocaml-gospel.github.io/gospel/language/syntax
 
@@ -128,17 +169,19 @@ wrapper therefore lives in `gospel_stubs/` (no leading underscore).
 dune-project
   └── (depends … (gospel (>= 0.3.1)))
 
-lib/domain/core/dune
-  └── (rule (alias gospel) …)        ; checks *.mli with (*@ annotations
-
-lib/domain/engine/dune
-  └── (rule (alias gospel) …)        ; depends on gospel_stubs/core.mli
+lib/domain/<sub>/dune
+  ├── (rule (alias gospel) …)        ; checks *.mli with (*@ annotations
+  └── (rule (alias why3) …)          ; runs why3 prove on *.mlw
 
 lib/domain/engine/gospel_stubs/dune
   └── (rule (target core.mli) …)     ; invokes tools/gospel_wrap.sh
 
+lib/domain/gospel_stubs/format.mli
+  └── `type formatter`               ; stub so .mli files referencing
+                                       Format.formatter don't crash Gospel
+
 tools/gospel_wrap.sh
-  └── python3 generator: topo-sort + strip Format.formatter
+  └── python3 generator: topo-sort core/ .mli into one wrapper
 ```
 
 Adding a new library under `lib/domain/` that wants specs:
@@ -147,6 +190,9 @@ Adding a new library under `lib/domain/` that wants specs:
   intra-library types.
 - Copy the `engine/` pattern (including a `gospel_stubs/` subdir) if
   specs reference types from another dune-wrapped library.
+- For Why3: add `.mlw` files next to the OCaml sources and an
+  `@why3` alias rule in the dune file. Use `-L . -L ../core` (or
+  similar) to let `.mlw` files `use` sibling modules.
 
 ## Troubleshooting
 
@@ -175,5 +221,21 @@ gospel check -L lib/domain/engine/gospel_stubs -L lib/domain/engine \
 annotation actually contains `(*@` (not e.g. `(*&` or `(*! `); the
 file selector is a literal grep. Confirm the file lives under
 `lib/domain/`; files elsewhere are not in the alias's scope.
+
+**Why3 `Timeout` on a lemma** — Alt-Ergo gave up before finding a
+proof. Common causes:
+
+- Real-number reasoning (`real.RealInfix`) — Alt-Ergo is weaker on
+  reals; weaken the lemma (drop monotonicity, keep boundedness) or
+  split into smaller steps.
+- Inductive proof over lists — Alt-Ergo doesn't do induction
+  automatically. State the result as an axiom if the induction is
+  obvious, or provide a helper lemma with a hint.
+- Forgotten `use` directive for the module whose lemma you depend
+  on — the dependent facts won't be in scope.
+
+**Why3 `Library file not found`** — check `use file.Module` uses
+lowercase file name, and the dune rule passes `-L` for the directory
+containing the referenced `.mlw`.
 
 [gospel-scope]: https://ocaml-gospel.github.io/gospel/language/scope

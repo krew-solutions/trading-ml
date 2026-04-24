@@ -1,0 +1,41 @@
+(** Why3 companion for [macd.mli] — Moving Average Convergence Divergence.
+
+    MACD = EMA(fast) - EMA(slow)
+    Signal = EMA(MACD, signal_period)
+    Histogram = MACD - Signal
+
+    Structural invariant: histogram = macd - signal (identity). *)
+
+module Macd
+  use real.RealInfix
+
+  type triple = {
+    macd : real;
+    signal : real;
+    histogram : real;
+  }
+
+  function make (ema_fast ema_slow signal_value: real) : triple = {
+    macd = ema_fast -. ema_slow;
+    signal = signal_value;
+    histogram = (ema_fast -. ema_slow) -. signal_value;
+  }
+
+  predicate consistent (t: triple) = t.histogram = t.macd -. t.signal
+
+  lemma make_consistent : forall f s sig: real.
+    consistent (make f s sig)
+
+  lemma histogram_zero_when_macd_equals_signal :
+    forall t: triple. consistent t -> t.macd = t.signal -> t.histogram = 0.0
+
+  lemma histogram_positive_when_macd_above_signal :
+    forall t: triple. consistent t ->
+      t.macd >. t.signal -> t.histogram >. 0.0
+  (** Bullish: MACD above signal, histogram positive *)
+
+  lemma histogram_negative_when_macd_below_signal :
+    forall t: triple. consistent t ->
+      t.macd <. t.signal -> t.histogram <. 0.0
+  (** Bearish: MACD below signal, histogram negative *)
+end

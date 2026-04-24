@@ -1,0 +1,31 @@
+(** Why3 companion for [macd_momentum.mli] — MACD-based trend follow.
+
+    Rule:
+      Enter_long  on positive histogram crossing (histogram > 0, prev <= 0)
+      Enter_short on negative histogram crossing (histogram < 0, prev >= 0)
+      Hold        when histogram hasn't crossed zero. *)
+
+module Macd_momentum
+  use real.RealInfix
+  use signal.Signal
+
+  function decide (hist prev_hist: real) : action =
+    if hist >. 0.0 && prev_hist <=. 0.0 then Enter_long
+    else if hist <. 0.0 && prev_hist >=. 0.0 then Enter_short
+    else Hold
+
+  lemma hold_when_same_sign_positive :
+    forall h ph: real.
+      h >. 0.0 -> ph >. 0.0 ->
+      decide h ph = Hold
+
+  lemma hold_when_same_sign_negative :
+    forall h ph: real.
+      h <. 0.0 -> ph <. 0.0 ->
+      decide h ph = Hold
+
+  lemma long_on_bullish_cross :
+    forall h ph: real.
+      h >. 0.0 -> ph <=. 0.0 ->
+      decide h ph = Enter_long
+end

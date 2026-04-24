@@ -1,0 +1,45 @@
+(** Why3 companion for [bollinger.mli] — Bollinger Bands.
+
+    { mid; upper; lower } = { mean; mean + k*stdev; mean - k*stdev }
+
+    Structural invariant: upper >= mid >= lower, symmetric around mid. *)
+
+module Bollinger
+  use real.RealInfix
+
+  type bands = {
+    mid : real;
+    upper : real;
+    lower : real;
+  }
+
+  function make_bands (mean stdev k: real) : bands = {
+    mid = mean;
+    upper = mean +. k *. stdev;
+    lower = mean -. k *. stdev;
+  }
+
+  predicate valid (b: bands) =
+    b.upper >=. b.mid /\ b.mid >=. b.lower
+
+  lemma make_valid_when_nonneg :
+    forall mean stdev k: real.
+      stdev >=. 0.0 -> k >=. 0.0 ->
+      valid (make_bands mean stdev k)
+
+  lemma symmetry :
+    forall mean stdev k: real.
+      let b = make_bands mean stdev k in
+      b.upper -. b.mid = b.mid -. b.lower
+
+  lemma collapse_at_zero_stdev :
+    forall mean k: real.
+      let b = make_bands mean 0.0 k in
+      b.upper = b.mid /\ b.lower = b.mid
+  (** Bands collapse to the midline when stdev is zero — no volatility *)
+
+  lemma collapse_at_zero_k :
+    forall mean stdev: real.
+      let b = make_bands mean stdev 0.0 in
+      b.upper = b.mid /\ b.lower = b.mid
+end

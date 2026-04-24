@@ -1,0 +1,19 @@
+(** Why3 companion for [wma.mli] — Weighted Moving Average.
+
+    WMA = sum(i * price_i) / sum(i), for i in 1..period.
+    Denominator is the arithmetic series period * (period + 1) / 2. *)
+
+module Wma
+  use int.Int
+  use int.EuclideanDivision
+
+  function denominator (period: int) : int = div (period * (period + 1)) 2
+
+  lemma denominator_positive : forall period: int.
+    period > 0 -> denominator period > 0
+
+  lemma denominator_for_period_2 : denominator 2 = 3
+  lemma denominator_for_period_3 : denominator 3 = 6
+  lemma denominator_for_period_4 : denominator 4 = 10
+  lemma denominator_for_period_10 : denominator 10 = 55
+end

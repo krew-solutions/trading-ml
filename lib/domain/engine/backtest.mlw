@@ -1,0 +1,20 @@
+(** Why3 companion for [backtest.mli] — historical replay semantics.
+    Backtest is a deterministic fold over bars (no live clock, no RNG).
+    The only invariant relevant at this level: given the same initial
+    state and the same bar sequence, results are identical. *)
+
+module Backtest
+  use int.Int
+  use list.List
+
+  type result = { final_cash : int; trade_count : int }
+
+  function run (init_cash: int) (bars: list int) : result
+
+  (** Determinism: same inputs, same output. Trivially true for a
+      pure function, but worth stating explicitly since backtests
+      are the differential-testing baseline against live engine. *)
+  lemma determinism :
+    forall cash: int, bars: list int.
+      run cash bars = run cash bars
+end

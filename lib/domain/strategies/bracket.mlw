@@ -1,0 +1,34 @@
+(** Why3 companion for [bracket.mli] — stop-loss / take-profit
+    bracket attached to an entry signal.
+
+    Invariants:
+      For Enter_long:  stop_loss < entry_price < take_profit
+      For Enter_short: take_profit < entry_price < stop_loss *)
+
+module Bracket
+  use real.RealInfix
+
+  type bracket = {
+    entry_price : real;
+    stop_loss   : real;
+    take_profit : real;
+  }
+
+  predicate long_valid (b: bracket) =
+    b.stop_loss <. b.entry_price /\ b.entry_price <. b.take_profit
+
+  predicate short_valid (b: bracket) =
+    b.take_profit <. b.entry_price /\ b.entry_price <. b.stop_loss
+
+  lemma long_risk_nonzero : forall b: bracket.
+    long_valid b -> b.entry_price -. b.stop_loss >. 0.0
+
+  lemma long_reward_nonzero : forall b: bracket.
+    long_valid b -> b.take_profit -. b.entry_price >. 0.0
+
+  lemma short_risk_nonzero : forall b: bracket.
+    short_valid b -> b.stop_loss -. b.entry_price >. 0.0
+
+  lemma short_reward_nonzero : forall b: bracket.
+    short_valid b -> b.entry_price -. b.take_profit >. 0.0
+end

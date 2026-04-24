@@ -1,0 +1,17 @@
+(** Why3 companion for [isin.mli] — ordered-key laws for the
+    ISIN identifier. *)
+
+module Isin
+  use int.Int
+
+  type t
+  function key (x: t) : int
+
+  axiom key_inj : forall a b: t. key a = key b -> a = b
+
+  predicate eq (a b: t) = key a = key b
+
+  lemma eq_refl  : forall a: t. eq a a
+  lemma eq_sym   : forall a b: t. eq a b -> eq b a
+  lemma eq_trans : forall a b c: t. eq a b -> eq b c -> eq a c
+end

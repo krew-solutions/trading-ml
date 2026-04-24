@@ -1,0 +1,20 @@
+(** Why3 companion for [volume_ma.mli] — SMA of volume. Inherits
+    SMA's averaging semantics. *)
+
+module Volume_ma
+  use int.Int
+  use int.EuclideanDivision
+
+  function volume_ma (sum_volume period: int) : int =
+    div sum_volume period
+
+  lemma nonneg_when_inputs_nonneg :
+    forall sum_volume period: int.
+      period > 0 ->
+      sum_volume >= 0 ->
+      volume_ma sum_volume period >= 0
+
+  lemma zero_when_no_volume :
+    forall period: int.
+      period > 0 -> volume_ma 0 period = 0
+end

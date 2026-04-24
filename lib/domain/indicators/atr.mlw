@@ -1,0 +1,27 @@
+(** Why3 companion for [atr.mli] — Average True Range.
+
+    TR = max(high - low, abs(high - prev_close), abs(low - prev_close))
+    ATR = smoothed average of TR.
+
+    Always non-negative (TR itself is a max of non-negative terms). *)
+
+module Atr
+  use real.RealInfix
+  use real.Abs
+
+  function true_range (high low prev_close: real) : real =
+    let hl = high -. low in
+    let hc = abs (high -. prev_close) in
+    let lc = abs (low  -. prev_close) in
+    if hl >=. hc then (if hl >=. lc then hl else lc)
+    else (if hc >=. lc then hc else lc)
+
+  lemma hl_nonneg_when_valid_candle :
+    forall high low: real.
+      high >=. low -> high -. low >=. 0.0
+
+  lemma tr_nonneg :
+    forall high low prev_close: real.
+      high >=. low ->
+      true_range high low prev_close >=. 0.0
+end

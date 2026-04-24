@@ -1,0 +1,18 @@
+(** Why3 companion for [strategy.mli] — abstract strategy contract:
+    given indicator state, emit an Enter/Exit/Hold action. *)
+
+module Strategy
+  use signal.Signal
+
+  type decision = action
+
+  (** A strategy is a pure function from its [input] to a decision. *)
+  function decide (input: int) : decision
+
+  (** Any decision is one of the five Signal.action variants —
+      the type system ensures coverage. *)
+  lemma decision_exhaustive : forall d: decision.
+       d = Enter_long \/ d = Enter_short
+    \/ d = Exit_long  \/ d = Exit_short
+    \/ d = Hold
+end

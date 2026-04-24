@@ -1,0 +1,32 @@
+(** Why3 companion for [obv.mli] — On-Balance Volume.
+
+    OBV(t) = OBV(t-1) + signed_volume, where sign = +1 if close > prev_close,
+    -1 if close < prev_close, 0 if equal.
+
+    Running sum; no boundedness constraint. Key property: unchanged bars
+    don't shift OBV. *)
+
+module Obv
+  use real.RealInfix
+
+  function delta (close prev_close volume: real) : real =
+    if close >. prev_close then volume
+    else if close <. prev_close then -. volume
+    else 0.0
+
+  lemma delta_zero_when_unchanged :
+    forall prev_close volume: real.
+      delta prev_close prev_close volume = 0.0
+
+  lemma delta_positive_when_close_up :
+    forall close prev_close volume: real.
+      volume >. 0.0 ->
+      close >. prev_close ->
+      delta close prev_close volume >. 0.0
+
+  lemma delta_negative_when_close_down :
+    forall close prev_close volume: real.
+      volume >. 0.0 ->
+      close <. prev_close ->
+      delta close prev_close volume <. 0.0
+end

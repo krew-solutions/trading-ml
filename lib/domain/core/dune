@@ -18,3 +18,16 @@ for f in %{deps}; do
   grep -q '(\\*@' \"$f\" || continue
   gospel check -L ../gospel_stubs -L . \"$f\"
 done")))
+
+; Why3 deductive verification. .mlw files carry proofs of algebraic
+; laws derived from the contracts in the matching .mli. Runs alt-ergo
+; as the SMT backend (see docs/howto/formal-verification.md).
+; -L . lets sibling .mlw files resolve via `use Module`.
+(rule
+ (alias why3)
+ (deps (glob_files *.mlw))
+ (action
+  (bash "set -eu
+for f in %{deps}; do
+  why3 prove -L . -P alt-ergo \"$f\" >/dev/null
+done")))

@@ -1,0 +1,31 @@
+(** Why3 companion for [macd_weighted.mli] — MACD with WMA smoothing
+    instead of EMA. Same algebraic structure as standard MACD. *)
+
+module Macd_weighted
+  use real.RealInfix
+
+  type triple = {
+    macd : real;
+    signal : real;
+    histogram : real;
+  }
+
+  function make (wma_fast wma_slow signal_value: real) : triple = {
+    macd = wma_fast -. wma_slow;
+    signal = signal_value;
+    histogram = (wma_fast -. wma_slow) -. signal_value;
+  }
+
+  predicate consistent (t: triple) = t.histogram = t.macd -. t.signal
+
+  lemma make_consistent : forall f s sig: real.
+    consistent (make f s sig)
+
+  lemma histogram_positive_when_macd_above_signal :
+    forall t: triple. consistent t ->
+      t.macd >. t.signal -> t.histogram >. 0.0
+
+  lemma histogram_negative_when_macd_below_signal :
+    forall t: triple. consistent t ->
+      t.macd <. t.signal -> t.histogram <. 0.0
+end

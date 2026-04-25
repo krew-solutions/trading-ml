@@ -31,3 +31,7 @@ for f in %{deps}; do
   why3 prove -L . -L ../core -P alt-ergo \"$f\" >/dev/null 2>&1 \\
     || why3 prove -L . -L ../core -P z3 \"$f\" >/dev/null
 done")))
+
+(alias
+ (name runtest)
+ (deps (alias gospel) (alias why3)))

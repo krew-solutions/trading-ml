@@ -32,3 +32,10 @@ for f in %{deps}; do
   why3 prove -L . -P alt-ergo \"$f\" >/dev/null 2>&1 \\
     || why3 prove -L . -P z3 \"$f\" >/dev/null
 done")))
+
+; Bind formal verification into `dune runtest` so CI runs both alongside
+; the unit-test suite. Keep `dune build` lean — proofs run only when
+; tests do.
+(alias
+ (name runtest)
+ (deps (alias gospel) (alias why3)))

@@ -31,6 +31,21 @@ we write `.mlw` by hand as a deliberate workaround.
 
 ## Run the checkers
 
+Both checkers are wired into `dune runtest`, so the standard test
+command verifies them alongside the unit suite:
+
+```bash
+dune runtest         # 324 tests + @gospel + @why3, ~12 s clean
+```
+
+`dune build` stays lean — only OCaml compilation, no proofs:
+
+```bash
+dune build           # OCaml only, ~4 s clean
+```
+
+To run either checker in isolation:
+
 ```bash
 dune build @gospel   # Gospel contracts in .mli — name resolution + typing
 dune build @why3     # Why3 lemmas in .mlw — SMT-backed deductive proof

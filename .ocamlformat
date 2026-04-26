@@ -9,9 +9,12 @@ profile = default
 # Slightly wider than the historical 80 — modern editors handle it fine.
 margin = 90
 
-# Keep doc comments (`(** ... *)`) on their own lines and lint Odoc
-# markup; report broken `{!ref}`s.
-parse-docstrings = true
+# Do NOT touch the contents of `(** ... *)` docstrings. The codebase
+# uses hand-aligned CLI help, ASCII tables and outcome matrices that
+# `parse-docstrings = true` would reflow to a single prose block.
+# We give up the {!ref}-link linter — broken refs surface at odoc
+# build time anyway, that's a fair trade.
+parse-docstrings = false
 
 # Do NOT reflow inline comment text — preserve hand-written line breaks
 # in `(* ... *)` blocks so Gospel-style `(*@ ... *)` annotations and

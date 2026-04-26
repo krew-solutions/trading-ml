@@ -3,6 +3,7 @@
 type t = Buy | Sell
 
 val to_string : t -> string
+
 val of_string : string -> t
 (** Accepts [BUY|buy|Buy|SELL|sell|Sell]; raises [Invalid_argument]
     on any other input. *)

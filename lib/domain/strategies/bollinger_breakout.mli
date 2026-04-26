@@ -3,11 +3,7 @@
 
 open Core
 
-type params = {
-  period : int;
-  k : float;
-  allow_short : bool;
-}
+type params = { period : int; k : float; allow_short : bool }
 
 type state
 

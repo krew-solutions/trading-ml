@@ -12,6 +12,7 @@ module type S = sig
   val init : unit -> state
   val update : state -> Candle.t -> state * output option
   val value : state -> output option
+
   val output_to_float : output -> float list
   (** Flattened numeric output -- used by the server/UI. For scalar
       indicators, a single-element list; for MACD, three; for Bollinger,
@@ -21,8 +22,7 @@ end
 type t
 (** Existential wrapper: heterogeneous indicators live in a single list. *)
 
-val make :
-  (module S with type state = 's and type output = 'o) -> t
+val make : (module S with type state = 's and type output = 'o) -> t
 val update : t -> Candle.t -> t
 val value : t -> (string * float list) option
 val name : t -> string

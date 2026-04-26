@@ -26,7 +26,7 @@ type config = {
   instrument : Instrument.t;
   fee_rate : float;
   auto_commit : bool;
-  (** When [true], {!execute_pending} applies the fill to the
+      (** When [true], {!execute_pending} applies the fill to the
       portfolio immediately after reserving (atomic reserve+commit
       in one step). Backtest uses this — it has no broker latency.
 
@@ -41,7 +41,7 @@ type settled = {
   price : Decimal.t;
   fee : Decimal.t;
   reservation_id : int;
-  (** Handle into [state.portfolio.reservations] — consumers call
+      (** Handle into [state.portfolio.reservations] — consumers call
       {!Portfolio.commit_fill} or {!Portfolio.release} with this id
       when the broker reports the corresponding fill or rejection.
       In Backtest the commit is immediate (same tick); in live mode
@@ -54,16 +54,14 @@ type state = private {
   pending_signal : Signal.t option;
   last_bar_ts : int64;
   reservation_seq : int;
-  (** Monotonic counter; every {!execute_pending} that produces a
+      (** Monotonic counter; every {!execute_pending} that produces a
       settled trade consumes one slot for the new
       [reservation_id]. *)
 }
 
-val make_state :
-  strategy:Strategies.Strategy.t -> cash:Decimal.t -> state
+val make_state : strategy:Strategies.Strategy.t -> cash:Decimal.t -> state
 
-val execute_pending :
-  config -> state -> Candle.t -> state * (Signal.t * settled) option
+val execute_pending : config -> state -> Candle.t -> state * (Signal.t * settled) option
 (** Fire any pending signal at [c.open_]. Sizes via
     {!Risk.size_from_strength} (entries) or existing position
     (exits), gates through {!Risk.check}, applies
@@ -110,7 +108,6 @@ val commit_partial_fill :
     executions). Raises [Not_found] / [Invalid_argument] per
     {!Portfolio.commit_partial_fill}. *)
 
-val release :
-  state -> reservation_id:int -> state
+val release : state -> reservation_id:int -> state
 (** Drop a reservation without a fill — used on broker reject /
     cancel. No-op when the id is unknown. *)

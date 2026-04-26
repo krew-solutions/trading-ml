@@ -37,7 +37,7 @@ open Core
 type params = {
   model_path : string;
   enter_threshold : float;
-  (** Minimum winning-class probability required to fire an entry
+      (** Minimum winning-class probability required to fire an entry
       signal. Sensible range [0.5, 0.8]; lower = more trades, more
       noise; higher = fewer but higher-confidence. *)
   allow_short : bool;

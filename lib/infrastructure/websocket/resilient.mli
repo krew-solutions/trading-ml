@@ -21,11 +21,7 @@ type config = {
 
 type t
 
-val create :
-  env:Eio_unix.Stdenv.base ->
-  sw:Eio.Switch.t ->
-  config:config ->
-  t
+val create : env:Eio_unix.Stdenv.base -> sw:Eio.Switch.t -> config:config -> t
 
 val send : t -> string -> unit
 val close : t -> unit

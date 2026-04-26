@@ -10,7 +10,8 @@ type t = {
   realized_pnl : float;
   positions : Position_view_model.t list;
   reservations : Reservation_view_model.t list;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Engine.Portfolio.t
 

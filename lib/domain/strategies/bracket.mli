@@ -26,19 +26,18 @@ open Core
 
 type params = {
   tp_mult : float;
-  (** Take-profit distance as a multiple of ATR at entry.
+      (** Take-profit distance as a multiple of ATR at entry.
       Sensible range [0.5, 3.0]. *)
   sl_mult : float;
-  (** Stop-loss distance as a multiple of ATR at entry.
+      (** Stop-loss distance as a multiple of ATR at entry.
       Sensible range [0.5, 2.0]. *)
   max_hold_bars : int;
-  (** Force-exit after this many bars in position, regardless of
+      (** Force-exit after this many bars in position, regardless of
       TP/SL. Matches the [timeout] barrier in triple-barrier
       labelling. *)
-  atr_period : int;
-  (** Wilder ATR period for volatility sizing. Default 14. *)
+  atr_period : int;  (** Wilder ATR period for volatility sizing. Default 14. *)
   inner : Strategy.t;
-  (** The wrapped entry-signal source. Any {!Strategy.S}
+      (** The wrapped entry-signal source. Any {!Strategy.S}
       instance — a leaf strategy, a composite, anything. *)
 }
 

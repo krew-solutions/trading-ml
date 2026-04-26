@@ -17,27 +17,22 @@
 
 type t = private {
   ticker : Ticker.t;
-  venue  : Mic.t;
-  isin   : Isin.t option;
-  board  : Board.t option;
+  venue : Mic.t;
+  isin : Isin.t option;
+  board : Board.t option;
 }
 
-val make :
-  ticker:Ticker.t ->
-  venue:Mic.t ->
-  ?isin:Isin.t ->
-  ?board:Board.t ->
-  unit -> t
+val make : ticker:Ticker.t -> venue:Mic.t -> ?isin:Isin.t -> ?board:Board.t -> unit -> t
 
 val ticker : t -> Ticker.t
-val venue  : t -> Mic.t
-val isin   : t -> Isin.t option
-val board  : t -> Board.t option
+val venue : t -> Mic.t
+val isin : t -> Isin.t option
+val board : t -> Board.t option
 
-val equal   : t -> t -> bool
+val equal : t -> t -> bool
 val compare : t -> t -> int
-val hash    : t -> int
-val pp      : Format.formatter -> t -> unit
+val hash : t -> int
+val pp : Format.formatter -> t -> unit
 
 val to_qualified : t -> string
 (** Compact textual form: ["TICKER@MIC"] when there is no board,

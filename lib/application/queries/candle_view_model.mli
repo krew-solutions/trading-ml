@@ -12,7 +12,8 @@ type t = {
   low : float;
   close : float;
   volume : float;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Core.Candle.t
 

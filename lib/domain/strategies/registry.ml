@@ -2,11 +2,7 @@
     to the UI/CLI pickers. Each entry knows how to build a default instance
     and how to describe its tunable parameters. *)
 
-type param =
-  | Int of int
-  | Float of float
-  | Bool of bool
-  | String of string
+type param = Int of int | Float of float | Bool of bool | String of string
 
 type spec = {
   name : string;
@@ -14,146 +10,206 @@ type spec = {
   build : (string * param) list -> Strategy.t;
 }
 
-let get_int p k d = match List.assoc_opt k p with
-  | Some (Int n) -> n | _ -> d
-let get_float p k d = match List.assoc_opt k p with
-  | Some (Float f) -> f | Some (Int n) -> float_of_int n | _ -> d
-let get_bool p k d = match List.assoc_opt k p with
-  | Some (Bool b) -> b | _ -> d
-let get_string p k d = match List.assoc_opt k p with
-  | Some (String s) -> s | _ -> d
+let get_int p k d =
+  match List.assoc_opt k p with
+  | Some (Int n) -> n
+  | _ -> d
+let get_float p k d =
+  match List.assoc_opt k p with
+  | Some (Float f) -> f
+  | Some (Int n) -> float_of_int n
+  | _ -> d
+let get_bool p k d =
+  match List.assoc_opt k p with
+  | Some (Bool b) -> b
+  | _ -> d
+let get_string p k d =
+  match List.assoc_opt k p with
+  | Some (String s) -> s
+  | _ -> d
 
-let specs : spec list = [
-  { name = Sma_crossover.name;
-    params = [
-      "fast", Int 10; "slow", Int 30; "allow_short", Bool false;
-    ];
-    build = fun p ->
-      let params = Sma_crossover.{
-        fast = get_int p "fast" 10;
-        slow = get_int p "slow" 30;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Sma_crossover) params };
-
-  { name = Rsi_mean_reversion.name;
-    params = [
-      "period", Int 14;
-      "lower", Float 30.0; "upper", Float 70.0;
-      "exit_long", Float 50.0; "exit_short", Float 50.0;
-      "allow_short", Bool false;
-    ];
-    build = fun p ->
-      let params = Rsi_mean_reversion.{
-        period = get_int p "period" 14;
-        lower = get_float p "lower" 30.0;
-        upper = get_float p "upper" 70.0;
-        exit_long = get_float p "exit_long" 50.0;
-        exit_short = get_float p "exit_short" 50.0;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Rsi_mean_reversion) params };
-
-  { name = Macd_momentum.name;
-    params = [
-      "fast", Int 12; "slow", Int 26; "signal", Int 9;
-      "allow_short", Bool false;
-    ];
-    build = fun p ->
-      let params = Macd_momentum.{
-        fast = get_int p "fast" 12;
-        slow = get_int p "slow" 26;
-        signal = get_int p "signal" 9;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Macd_momentum) params };
-
-  { name = Bollinger_breakout.name;
-    params = [
-      "period", Int 20; "k", Float 2.0; "allow_short", Bool true;
-    ];
-    build = fun p ->
-      let params = Bollinger_breakout.{
-        period = get_int p "period" 20;
-        k = get_float p "k" 2.0;
-        allow_short = get_bool p "allow_short" true;
-      } in
-      Strategy.make (module Bollinger_breakout) params };
-
-  { name = Mfi_mean_reversion.name;
-    params = [
-      "period", Int 14;
-      "lower", Float 20.0; "upper", Float 80.0;
-      "exit_long", Float 50.0; "exit_short", Float 50.0;
-      "allow_short", Bool false;
-    ];
-    build = fun p ->
-      let params = Mfi_mean_reversion.{
-        period = get_int p "period" 14;
-        lower = get_float p "lower" 20.0;
-        upper = get_float p "upper" 80.0;
-        exit_long = get_float p "exit_long" 50.0;
-        exit_short = get_float p "exit_short" 50.0;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Mfi_mean_reversion) params };
-
-  { name = Obv_ma_crossover.name;
-    params = [ "period", Int 20; "allow_short", Bool false ];
-    build = fun p ->
-      let params = Obv_ma_crossover.{
-        period = get_int p "period" 20;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Obv_ma_crossover) params };
-
-  { name = Chaikin_momentum.name;
-    params = [
-      "fast", Int 3; "slow", Int 10; "allow_short", Bool false;
-    ];
-    build = fun p ->
-      let params = Chaikin_momentum.{
-        fast = get_int p "fast" 3;
-        slow = get_int p "slow" 10;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Chaikin_momentum) params };
-
-  { name = Ad_ma_crossover.name;
-    params = [ "period", Int 20; "allow_short", Bool false ];
-    build = fun p ->
-      let params = Ad_ma_crossover.{
-        period = get_int p "period" 20;
-        allow_short = get_bool p "allow_short" false;
-      } in
-      Strategy.make (module Ad_ma_crossover) params };
-
-  { name = Gbt_strategy.name;
-    (* [model_path] must be supplied by the caller — default "" fails
+let specs : spec list =
+  [
+    {
+      name = Sma_crossover.name;
+      params = [ ("fast", Int 10); ("slow", Int 30); ("allow_short", Bool false) ];
+      build =
+        (fun p ->
+          let params =
+            Sma_crossover.
+              {
+                fast = get_int p "fast" 10;
+                slow = get_int p "slow" 30;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Sma_crossover) params);
+    };
+    {
+      name = Rsi_mean_reversion.name;
+      params =
+        [
+          ("period", Int 14);
+          ("lower", Float 30.0);
+          ("upper", Float 70.0);
+          ("exit_long", Float 50.0);
+          ("exit_short", Float 50.0);
+          ("allow_short", Bool false);
+        ];
+      build =
+        (fun p ->
+          let params =
+            Rsi_mean_reversion.
+              {
+                period = get_int p "period" 14;
+                lower = get_float p "lower" 30.0;
+                upper = get_float p "upper" 70.0;
+                exit_long = get_float p "exit_long" 50.0;
+                exit_short = get_float p "exit_short" 50.0;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Rsi_mean_reversion) params);
+    };
+    {
+      name = Macd_momentum.name;
+      params =
+        [
+          ("fast", Int 12);
+          ("slow", Int 26);
+          ("signal", Int 9);
+          ("allow_short", Bool false);
+        ];
+      build =
+        (fun p ->
+          let params =
+            Macd_momentum.
+              {
+                fast = get_int p "fast" 12;
+                slow = get_int p "slow" 26;
+                signal = get_int p "signal" 9;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Macd_momentum) params);
+    };
+    {
+      name = Bollinger_breakout.name;
+      params = [ ("period", Int 20); ("k", Float 2.0); ("allow_short", Bool true) ];
+      build =
+        (fun p ->
+          let params =
+            Bollinger_breakout.
+              {
+                period = get_int p "period" 20;
+                k = get_float p "k" 2.0;
+                allow_short = get_bool p "allow_short" true;
+              }
+          in
+          Strategy.make (module Bollinger_breakout) params);
+    };
+    {
+      name = Mfi_mean_reversion.name;
+      params =
+        [
+          ("period", Int 14);
+          ("lower", Float 20.0);
+          ("upper", Float 80.0);
+          ("exit_long", Float 50.0);
+          ("exit_short", Float 50.0);
+          ("allow_short", Bool false);
+        ];
+      build =
+        (fun p ->
+          let params =
+            Mfi_mean_reversion.
+              {
+                period = get_int p "period" 14;
+                lower = get_float p "lower" 20.0;
+                upper = get_float p "upper" 80.0;
+                exit_long = get_float p "exit_long" 50.0;
+                exit_short = get_float p "exit_short" 50.0;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Mfi_mean_reversion) params);
+    };
+    {
+      name = Obv_ma_crossover.name;
+      params = [ ("period", Int 20); ("allow_short", Bool false) ];
+      build =
+        (fun p ->
+          let params =
+            Obv_ma_crossover.
+              {
+                period = get_int p "period" 20;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Obv_ma_crossover) params);
+    };
+    {
+      name = Chaikin_momentum.name;
+      params = [ ("fast", Int 3); ("slow", Int 10); ("allow_short", Bool false) ];
+      build =
+        (fun p ->
+          let params =
+            Chaikin_momentum.
+              {
+                fast = get_int p "fast" 3;
+                slow = get_int p "slow" 10;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Chaikin_momentum) params);
+    };
+    {
+      name = Ad_ma_crossover.name;
+      params = [ ("period", Int 20); ("allow_short", Bool false) ];
+      build =
+        (fun p ->
+          let params =
+            Ad_ma_crossover.
+              {
+                period = get_int p "period" 20;
+                allow_short = get_bool p "allow_short" false;
+              }
+          in
+          Strategy.make (module Ad_ma_crossover) params);
+    };
+    {
+      name = Gbt_strategy.name;
+      (* [model_path] must be supplied by the caller — default "" fails
        fast at [init] with a clear error rather than trying to load a
        nonexistent file. Callers routing through the UI should prompt
        for the path; CLI users pass it via [--param model_path=…]. *)
-    params = [
-      "model_path",      String "";
-      "enter_threshold", Float 0.55;
-      "allow_short",     Bool false;
-      "rsi_period",      Int 14;
-      "mfi_period",      Int 14;
-      "bb_period",       Int 20;
-      "bb_k",            Float 2.0;
-    ];
-    build = fun p ->
-      let params = Gbt_strategy.{
-        model_path      = get_string p "model_path" "";
-        enter_threshold = get_float p "enter_threshold" 0.55;
-        allow_short     = get_bool p "allow_short" false;
-        rsi_period      = get_int p "rsi_period" 14;
-        mfi_period      = get_int p "mfi_period" 14;
-        bb_period       = get_int p "bb_period" 20;
-        bb_k            = get_float p "bb_k" 2.0;
-      } in
-      Strategy.make (module Gbt_strategy) params };
-]
+      params =
+        [
+          ("model_path", String "");
+          ("enter_threshold", Float 0.55);
+          ("allow_short", Bool false);
+          ("rsi_period", Int 14);
+          ("mfi_period", Int 14);
+          ("bb_period", Int 20);
+          ("bb_k", Float 2.0);
+        ];
+      build =
+        (fun p ->
+          let params =
+            Gbt_strategy.
+              {
+                model_path = get_string p "model_path" "";
+                enter_threshold = get_float p "enter_threshold" 0.55;
+                allow_short = get_bool p "allow_short" false;
+                rsi_period = get_int p "rsi_period" 14;
+                mfi_period = get_int p "mfi_period" 14;
+                bb_period = get_int p "bb_period" 20;
+                bb_k = get_float p "bb_k" 2.0;
+              }
+          in
+          Strategy.make (module Gbt_strategy) params);
+    };
+  ]
 
 (** Build a composite strategy from registry entries. Used by the
     composite spec builder below and available for programmatic use. *)
@@ -162,69 +218,82 @@ let build_child name params =
   | Some s -> s.build params
   | None -> invalid_arg ("Registry: unknown child strategy " ^ name)
 
-let composite_specs : spec list = [
-  { name = "Composite_SMA_RSI";
-    params = [ "policy", Int 1 ];
-    build = fun p ->
-      let policy = match get_int p "policy" 1 with
-        | 0 -> Composite.Unanimous
-        | 2 -> Composite.Any
-        | _ -> Majority
-      in
-      let children = [
-        build_child Sma_crossover.name [];
-        build_child Rsi_mean_reversion.name [];
-      ] in
-      Strategy.make (module Composite)
-        Composite.{ policy; children } };
-
-  { name = "Composite_SMA_MACD";
-    params = [ "policy", Int 1 ];
-    build = fun p ->
-      let policy = match get_int p "policy" 1 with
-        | 0 -> Composite.Unanimous
-        | 2 -> Composite.Any
-        | _ -> Majority
-      in
-      let children = [
-        build_child Sma_crossover.name [];
-        build_child Macd_momentum.name [];
-      ] in
-      Strategy.make (module Composite)
-        Composite.{ policy; children } };
-
-  { name = "Composite_All";
-    params = [ "policy", Int 1 ];
-    build = fun p ->
-      let policy = match get_int p "policy" 1 with
-        | 0 -> Composite.Unanimous
-        | 2 -> Composite.Any
-        | _ -> Majority
-      in
-      let children = [
-        build_child Sma_crossover.name [];
-        build_child Rsi_mean_reversion.name [];
-        build_child Macd_momentum.name [];
-        build_child Bollinger_breakout.name [];
-      ] in
-      Strategy.make (module Composite)
-        Composite.{ policy; children } };
-
-  { name = "Adaptive_All";
-    params = [ "window", Int 50 ];
-    build = fun p ->
-      let window = get_int p "window" 50 in
-      let children = [
-        build_child Sma_crossover.name [];
-        build_child Rsi_mean_reversion.name [];
-        build_child Macd_momentum.name [];
-        build_child Bollinger_breakout.name [];
-      ] in
-      Strategy.make (module Composite)
-        Composite.{ policy = Adaptive { window }; children } };
-
-  { name = "Bracket_GBT";
-    (* GBT entries wrapped in the {!Bracket} decorator — the
+let composite_specs : spec list =
+  [
+    {
+      name = "Composite_SMA_RSI";
+      params = [ ("policy", Int 1) ];
+      build =
+        (fun p ->
+          let policy =
+            match get_int p "policy" 1 with
+            | 0 -> Composite.Unanimous
+            | 2 -> Composite.Any
+            | _ -> Majority
+          in
+          let children =
+            [ build_child Sma_crossover.name []; build_child Rsi_mean_reversion.name [] ]
+          in
+          Strategy.make (module Composite) Composite.{ policy; children });
+    };
+    {
+      name = "Composite_SMA_MACD";
+      params = [ ("policy", Int 1) ];
+      build =
+        (fun p ->
+          let policy =
+            match get_int p "policy" 1 with
+            | 0 -> Composite.Unanimous
+            | 2 -> Composite.Any
+            | _ -> Majority
+          in
+          let children =
+            [ build_child Sma_crossover.name []; build_child Macd_momentum.name [] ]
+          in
+          Strategy.make (module Composite) Composite.{ policy; children });
+    };
+    {
+      name = "Composite_All";
+      params = [ ("policy", Int 1) ];
+      build =
+        (fun p ->
+          let policy =
+            match get_int p "policy" 1 with
+            | 0 -> Composite.Unanimous
+            | 2 -> Composite.Any
+            | _ -> Majority
+          in
+          let children =
+            [
+              build_child Sma_crossover.name [];
+              build_child Rsi_mean_reversion.name [];
+              build_child Macd_momentum.name [];
+              build_child Bollinger_breakout.name [];
+            ]
+          in
+          Strategy.make (module Composite) Composite.{ policy; children });
+    };
+    {
+      name = "Adaptive_All";
+      params = [ ("window", Int 50) ];
+      build =
+        (fun p ->
+          let window = get_int p "window" 50 in
+          let children =
+            [
+              build_child Sma_crossover.name [];
+              build_child Rsi_mean_reversion.name [];
+              build_child Macd_momentum.name [];
+              build_child Bollinger_breakout.name [];
+            ]
+          in
+          Strategy.make
+            (module Composite)
+            Composite.{ policy = Adaptive { window }; children });
+    };
+    {
+      name = "Bracket_GBT";
+      (* GBT entries wrapped in the {!Bracket} decorator — the
        preferred pairing for models trained with triple-barrier
        labels. The bracket parameters ([tp_mult] / [sl_mult] /
        [max_hold_bars]) must match the ones used at labelling
@@ -232,30 +301,39 @@ let composite_specs : spec list = [
        from trade-time PnL. Defaults align with the canonical
        1.5 / 1.0 / 20 used by [export_training_data]'s
        [triple-barrier] mode. *)
-    params = [
-      "model_path",      String "";
-      "enter_threshold", Float 0.55;
-      "allow_short",     Bool false;
-      "tp_mult",         Float 1.5;
-      "sl_mult",         Float 1.0;
-      "max_hold_bars",   Int 20;
-      "atr_period",      Int 14;
-    ];
-    build = fun p ->
-      let inner = build_child Gbt_strategy.name [
-        "model_path",      String (get_string p "model_path" "");
-        "enter_threshold", Float (get_float p "enter_threshold" 0.55);
-        "allow_short",     Bool (get_bool p "allow_short" false);
-      ] in
-      let params = Bracket.{
-        tp_mult       = get_float p "tp_mult" 1.5;
-        sl_mult       = get_float p "sl_mult" 1.0;
-        max_hold_bars = get_int p "max_hold_bars" 20;
-        atr_period    = get_int p "atr_period" 14;
-        inner;
-      } in
-      Strategy.make (module Bracket) params };
-]
+      params =
+        [
+          ("model_path", String "");
+          ("enter_threshold", Float 0.55);
+          ("allow_short", Bool false);
+          ("tp_mult", Float 1.5);
+          ("sl_mult", Float 1.0);
+          ("max_hold_bars", Int 20);
+          ("atr_period", Int 14);
+        ];
+      build =
+        (fun p ->
+          let inner =
+            build_child Gbt_strategy.name
+              [
+                ("model_path", String (get_string p "model_path" ""));
+                ("enter_threshold", Float (get_float p "enter_threshold" 0.55));
+                ("allow_short", Bool (get_bool p "allow_short" false));
+              ]
+          in
+          let params =
+            Bracket.
+              {
+                tp_mult = get_float p "tp_mult" 1.5;
+                sl_mult = get_float p "sl_mult" 1.0;
+                max_hold_bars = get_int p "max_hold_bars" 20;
+                atr_period = get_int p "atr_period" 14;
+                inner;
+              }
+          in
+          Strategy.make (module Bracket) params);
+    };
+  ]
 
 let all_specs = specs @ composite_specs
 

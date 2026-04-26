@@ -10,11 +10,11 @@ open Core
     per process) so a single failing request makes the real payload
     visible without guessing. *)
 let debug_sample_logged = ref false
+
 let debug_log_sample ?(label = "bar") (j : Yojson.Safe.t) : unit =
   if not !debug_sample_logged then begin
     debug_sample_logged := true;
-    Log.debug "[finam dto] sample %s: %s"
-      label (Yojson.Safe.to_string j)
+    Log.debug "[finam dto] sample %s: %s" label (Yojson.Safe.to_string j)
   end
 
 (** Decode a decimal-ish field tolerantly.
@@ -33,19 +33,20 @@ let rec decimal_of_json : Yojson.Safe.t -> Decimal.t = function
   | `Int n -> Decimal.of_int n
   | `Float f -> Decimal.of_float f
   | `Intlit s -> Decimal.of_string s
-  | `Assoc fields as j ->
-    (match List.assoc_opt "value" fields with
-     | Some v ->
-       let base = decimal_of_json v in
-       (* Optional proto-style { value, scale }: divide by 10^scale. *)
-       (match List.assoc_opt "scale" fields with
-        | Some (`Int 0) | None -> base
-        | Some (`Int k) when k > 0 ->
-          let rec pow10 n = if n <= 0 then 1 else 10 * pow10 (n - 1) in
-          Decimal.div base (Decimal.of_int (pow10 k))
-        | _ -> base)
-     | None -> invalid_arg ("Finam DTO: decimal object without value: "
-                            ^ Yojson.Safe.to_string j))
+  | `Assoc fields as j -> (
+      match List.assoc_opt "value" fields with
+      | Some v -> (
+          let base = decimal_of_json v in
+          (* Optional proto-style { value, scale }: divide by 10^scale. *)
+          match List.assoc_opt "scale" fields with
+          | Some (`Int 0) | None -> base
+          | Some (`Int k) when k > 0 ->
+              let rec pow10 n = if n <= 0 then 1 else 10 * pow10 (n - 1) in
+              Decimal.div base (Decimal.of_int (pow10 k))
+          | _ -> base)
+      | None ->
+          invalid_arg
+            ("Finam DTO: decimal object without value: " ^ Yojson.Safe.to_string j))
   | `Null -> Decimal.zero
   | j -> invalid_arg ("Finam DTO: not a decimal: " ^ Yojson.Safe.to_string j)
 
@@ -55,20 +56,17 @@ let rec decimal_of_json : Yojson.Safe.t -> Decimal.t = function
 let decimal_field_any ?(required = true) j candidates =
   let rec loop = function
     | [] ->
-      if required then
-        invalid_arg ("Finam DTO: missing decimal field "
-                     ^ String.concat "/" candidates)
-      else Decimal.zero
-    | k :: rest ->
-      match Yojson.Safe.Util.member k j with
-      | `Null -> loop rest
-      | v ->
-        try decimal_of_json v
-        with _ -> loop rest
+        if required then
+          invalid_arg ("Finam DTO: missing decimal field " ^ String.concat "/" candidates)
+        else Decimal.zero
+    | k :: rest -> (
+        match Yojson.Safe.Util.member k j with
+        | `Null -> loop rest
+        | v -> ( try decimal_of_json v with _ -> loop rest))
   in
   loop candidates
 
-let decimal_field k j = decimal_field_any j [k]
+let decimal_field k j = decimal_field_any j [ k ]
 
 let candle_of_json j : Candle.t =
   (* On the first decode, log the raw shape so we can see what the
@@ -79,22 +77,24 @@ let candle_of_json j : Candle.t =
     | `String s -> Infra_common.Iso8601.parse s
     | `Int n -> Int64.of_int n
     | `Intlit s -> Int64.of_string s
-    | `Null ->
-      (* Alternative common names: 'time', 't'. *)
-      (match Yojson.Safe.Util.member "time" j with
-       | `String s -> Infra_common.Iso8601.parse s
-       | `Int n -> Int64.of_int n
-       | _ -> 0L)
+    | `Null -> (
+        (* Alternative common names: 'time', 't'. *)
+        match Yojson.Safe.Util.member "time" j with
+        | `String s -> Infra_common.Iso8601.parse s
+        | `Int n -> Int64.of_int n
+        | _ -> 0L)
     | _ -> 0L
   in
   (* Per-field candidate lists: first match wins. Volume is the one that
      notoriously varies between gRPC transcoders. *)
-  let open_  = decimal_field_any j ["open"; "o"] in
-  let high   = decimal_field_any j ["high"; "h"] in
-  let low    = decimal_field_any j ["low";  "l"] in
-  let close  = decimal_field_any j ["close"; "c"] in
-  let volume = decimal_field_any ~required:false j
-    ["volume"; "vol"; "v"; "total_volume"; "trading_volume"] in
+  let open_ = decimal_field_any j [ "open"; "o" ] in
+  let high = decimal_field_any j [ "high"; "h" ] in
+  let low = decimal_field_any j [ "low"; "l" ] in
+  let close = decimal_field_any j [ "close"; "c" ] in
+  let volume =
+    decimal_field_any ~required:false j
+      [ "volume"; "vol"; "v"; "total_volume"; "trading_volume" ]
+  in
   Candle.make ~ts ~open_ ~high ~low ~close ~volume
 
 (** Decode Finam's [GetAssetResponse] (proto field set: board, id,
@@ -123,16 +123,16 @@ let instrument_of_asset_json (j : Yojson.Safe.t) : Instrument.t =
     | None -> invalid_arg ("Finam DTO asset: missing string field " ^ k)
   in
   let ticker = Ticker.of_string (req_str "ticker") in
-  let venue  = Mic.of_string (req_str "mic") in
+  let venue = Mic.of_string (req_str "mic") in
   let isin =
     match str_opt "isin" with
     | None -> None
-    | Some s -> try Some (Isin.of_string s) with Invalid_argument _ -> None
+    | Some s -> ( try Some (Isin.of_string s) with Invalid_argument _ -> None)
   in
   let board =
     match str_opt "board" with
     | None -> None
-    | Some s -> try Some (Board.of_string s) with Invalid_argument _ -> None
+    | Some s -> ( try Some (Board.of_string s) with Invalid_argument _ -> None)
   in
   Instrument.make ~ticker ~venue ?isin ?board ()
 
@@ -149,7 +149,7 @@ let finam_kind_of_wire s price_fn =
   | "ORDER_TYPE_LIMIT" -> Order.Limit (price_fn "limit_price")
   | "ORDER_TYPE_STOP" -> Stop (price_fn "stop_price")
   | "ORDER_TYPE_STOP_LIMIT" ->
-    Stop_limit { stop = price_fn "stop_price"; limit = price_fn "limit_price" }
+      Stop_limit { stop = price_fn "stop_price"; limit = price_fn "limit_price" }
   | _ -> Market
 
 let finam_tif_to_wire : Order.time_in_force -> string = function
@@ -165,10 +165,12 @@ let finam_tif_of_wire = function
   | _ -> DAY
 
 let finam_side_to_wire : Side.t -> string = function
-  | Buy -> "SIDE_BUY" | Sell -> "SIDE_SELL"
+  | Buy -> "SIDE_BUY"
+  | Sell -> "SIDE_SELL"
 
 let finam_side_of_wire = function
-  | "SIDE_SELL" -> Side.Sell | _ -> Buy
+  | "SIDE_SELL" -> Side.Sell
+  | _ -> Buy
 
 let finam_status_of_wire = function
   | "ORDER_STATUS_NEW" -> Order.New
@@ -199,25 +201,27 @@ let place_order_payload
     ?client_order_id
     () : Yojson.Safe.t =
   let w = Acl_common.Decimal_wire.yojson_of_t_wrapped in
-  let price_fields = match kind with
+  let price_fields =
+    match kind with
     | Market -> []
-    | Limit p -> [ "limit_price", w p ]
-    | Stop p  -> [ "stop_price", w p ]
-    | Stop_limit { stop; limit } -> [
-        "limit_price", w limit;
-        "stop_price", w stop;
-      ]
+    | Limit p -> [ ("limit_price", w p) ]
+    | Stop p -> [ ("stop_price", w p) ]
+    | Stop_limit { stop; limit } -> [ ("limit_price", w limit); ("stop_price", w stop) ]
   in
-  let coid = match client_order_id with
-    | None -> [] | Some id -> [ "client_order_id", `String id ]
+  let coid =
+    match client_order_id with
+    | None -> []
+    | Some id -> [ ("client_order_id", `String id) ]
   in
-  `Assoc ([
-    "symbol",        `String (Routing.qualify_instrument instrument);
-    "quantity",       w quantity;
-    "side",          `String (finam_side_to_wire side);
-    "type",          `String (finam_kind_to_wire kind);
-    "time_in_force", `String (finam_tif_to_wire tif);
-  ] @ price_fields @ coid)
+  `Assoc
+    ([
+       ("symbol", `String (Routing.qualify_instrument instrument));
+       ("quantity", w quantity);
+       ("side", `String (finam_side_to_wire side));
+       ("type", `String (finam_kind_to_wire kind));
+       ("time_in_force", `String (finam_tif_to_wire tif));
+     ]
+    @ price_fields @ coid)
 
 (** Decode a single Finam [OrderState] JSON (returned by GetOrder,
     PlaceOrder, and as array elements in GetOrders). The nested
@@ -225,25 +229,33 @@ let place_order_payload
     top-level fields carry execution state. *)
 let order_of_json (j : Yojson.Safe.t) : Order.t =
   let open Yojson.Safe.Util in
-  let str k = match member k j with `String s -> s | _ -> "" in
-  let inner = member "order" j in
-  let inner_str k = match member k inner with `String s -> s | _ -> "" in
-  let dec k obj =
-    try decimal_of_json (member k obj) with _ -> Decimal.zero
+  let str k =
+    match member k j with
+    | `String s -> s
+    | _ -> ""
   in
+  let inner = member "order" j in
+  let inner_str k =
+    match member k inner with
+    | `String s -> s
+    | _ -> ""
+  in
+  let dec k obj = try decimal_of_json (member k obj) with _ -> Decimal.zero in
   let instrument =
     try Instrument.of_qualified (inner_str "symbol")
     with _ ->
-      Instrument.make ~ticker:(Ticker.of_string "UNKNOWN")
-        ~venue:(Mic.of_string "XXXX") ()
+      Instrument.make ~ticker:(Ticker.of_string "UNKNOWN") ~venue:(Mic.of_string "XXXX")
+        ()
   in
   let price_fn field_name = dec field_name inner in
   let kind = finam_kind_of_wire (inner_str "type") price_fn in
   let tif = finam_tif_of_wire (inner_str "time_in_force") in
   let side = finam_side_of_wire (inner_str "side") in
   let status = finam_status_of_wire (str "status") in
-  let created_ts = match member "transact_at" j with
-    | `String s -> Infra_common.Iso8601.parse s | _ -> 0L
+  let created_ts =
+    match member "transact_at" j with
+    | `String s -> Infra_common.Iso8601.parse s
+    | _ -> 0L
   in
   {
     Order.id = str "order_id";
@@ -266,6 +278,7 @@ let orders_of_json (j : Yojson.Safe.t) : Order.t list =
   | `List items -> List.map order_of_json items
   | _ -> []
 
+type account_trade = { order_id : string; execution : Order.execution }
 (** Per-trade record from [GET /v1/accounts/{account_id}/trades].
     Shape (from the Finam swagger's [v1AccountTrade]):
     {v
@@ -282,27 +295,23 @@ let orders_of_json (j : Yojson.Safe.t) : Order.t list =
     prorate by fill quantity. Returns the parent [order_id] so
     the caller can filter to the trades relevant to their
     [client_order_id]. *)
-type account_trade = {
-  order_id : string;
-  execution : Order.execution;
-}
 
 let account_trade_of_json (j : Yojson.Safe.t) : account_trade =
   let open Yojson.Safe.Util in
-  let str k = match member k j with `String s -> s | _ -> "" in
-  let dec k =
-    try decimal_of_json (member k j) with _ -> Decimal.zero in
-  let ts = match member "timestamp" j with
-    | `String s -> Infra_common.Iso8601.parse s | _ -> 0L
+  let str k =
+    match member k j with
+    | `String s -> s
+    | _ -> ""
+  in
+  let dec k = try decimal_of_json (member k j) with _ -> Decimal.zero in
+  let ts =
+    match member "timestamp" j with
+    | `String s -> Infra_common.Iso8601.parse s
+    | _ -> 0L
   in
   {
     order_id = str "order_id";
-    execution = {
-      ts;
-      quantity = dec "size";
-      price = dec "price";
-      fee = Decimal.zero;
-    };
+    execution = { ts; quantity = dec "size"; price = dec "price"; fee = Decimal.zero };
   }
 
 let account_trades_of_json (j : Yojson.Safe.t) : account_trade list =
@@ -312,18 +321,20 @@ let account_trades_of_json (j : Yojson.Safe.t) : account_trade list =
   | _ -> []
 
 let candles_of_json j : Candle.t list =
-  let arr = match Yojson.Safe.Util.member "bars" j with
+  let arr =
+    match Yojson.Safe.Util.member "bars" j with
     | `List l -> l
-    | _ ->
-      match Yojson.Safe.Util.member "candles" j with
-      | `List l -> l
-      | `Null ->
-        (* Some gRPC bridges wrap the payload under "result": { "bars": [...] }. *)
-        (match Yojson.Safe.Util.member "result" j with
-         | `Assoc _ as inner ->
-           (match Yojson.Safe.Util.member "bars" inner with
-            | `List l -> l | _ -> [])
-         | _ -> [])
-      | _ -> []
+    | _ -> (
+        match Yojson.Safe.Util.member "candles" j with
+        | `List l -> l
+        | `Null -> (
+            (* Some gRPC bridges wrap the payload under "result": { "bars": [...] }. *)
+            match Yojson.Safe.Util.member "result" j with
+            | `Assoc _ as inner -> (
+                match Yojson.Safe.Util.member "bars" inner with
+                | `List l -> l
+                | _ -> [])
+            | _ -> [])
+        | _ -> [])
   in
   List.map candle_of_json arr

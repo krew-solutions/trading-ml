@@ -10,7 +10,8 @@ type t = {
   price : float option;
   stop_price : float option;
   limit_price : float option;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Core.Order.kind
 

@@ -17,12 +17,12 @@ type t = {
   token_endpoint : Uri.t;
   client_id : string;
   account_id : string option;
-  (** BCS identifies instruments by (classCode, ticker) rather than a
+      (** BCS identifies instruments by (classCode, ticker) rather than a
       single composite symbol. When the UI sends a bare ticker ("SBER")
       we fall back to this class code. Default [TQBR] is the MOEX
       T+ stocks board, i.e. the retail-trading norm. *)
   default_class_code : string;
-  (** WebSocket endpoint for the multiplexed market-data stream —
+      (** WebSocket endpoint for the multiplexed market-data stream —
       one socket serves BARS, QUOTES, ORDER_BOOK subscriptions
       together, distinguished by a [type] field in the subscribe
       envelope. Previously BCS shipped a path per subscription kind
@@ -41,9 +41,9 @@ type t = {
    implementation. *)
 let make
     ?(rest_base = Uri.of_string "https://be.broker.ru")
-    ?(token_endpoint = Uri.of_string
-        "https://be.broker.ru/trade-api-keycloak/realms/tradeapi\
-         /protocol/openid-connect/token")
+    ?(token_endpoint =
+      Uri.of_string
+        "https://be.broker.ru/trade-api-keycloak/realms/tradeapi/protocol/openid-connect/token")
     (* Default to the full-trading client. Read-only [trade-api-read]
        cannot place orders, and this system is a trading engine; the
        conservative default is the one that doesn't surprise callers
@@ -54,9 +54,15 @@ let make
     ?(client_id = "trade-api-write")
     ?account_id
     ?(default_class_code = "TQBR")
-    ?(ws_market_data_url = Uri.of_string
-        "wss://ws.broker.ru/trade-api-market-data-connector/api/v1\
-         /market-data/ws")
+    ?(ws_market_data_url =
+      Uri.of_string
+        "wss://ws.broker.ru/trade-api-market-data-connector/api/v1/market-data/ws")
     () =
-  { rest_base; token_endpoint; client_id; account_id;
-    default_class_code; ws_market_data_url }
+  {
+    rest_base;
+    token_endpoint;
+    client_id;
+    account_id;
+    default_class_code;
+    ws_market_data_url;
+  }

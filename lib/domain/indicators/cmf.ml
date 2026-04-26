@@ -5,7 +5,9 @@
 
 open Core
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "CMF: period must be > 0"
 
   type state = {
@@ -18,11 +20,13 @@ module Make (C : sig val period : int end) : Indicator.S = struct
 
   let name = Printf.sprintf "CMF(%d)" C.period
 
-  let init () = {
-    mfv_ring = Ring.create ~capacity:C.period 0.0;
-    vol_ring = Ring.create ~capacity:C.period 0.0;
-    sum_mfv = 0.0; sum_vol = 0.0;
-  }
+  let init () =
+    {
+      mfv_ring = Ring.create ~capacity:C.period 0.0;
+      vol_ring = Ring.create ~capacity:C.period 0.0;
+      sum_mfv = 0.0;
+      sum_vol = 0.0;
+    }
 
   let update st c =
     let high = Decimal.to_float c.Candle.high in
@@ -30,39 +34,39 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let close = Decimal.to_float c.close in
     let vol = Decimal.to_float c.volume in
     let range = high -. low in
-    let mfm = if range = 0.0 then 0.0
-              else ((close -. low) -. (high -. close)) /. range in
+    let mfm = if range = 0.0 then 0.0 else (close -. low -. (high -. close)) /. range in
     let mfv = mfm *. vol in
     let mr, vr, sum_mfv, sum_vol =
       if Ring.is_full st.mfv_ring then
         let om = Ring.oldest st.mfv_ring in
         let ov = Ring.oldest st.vol_ring in
-        Ring.push st.mfv_ring mfv,
-        Ring.push st.vol_ring vol,
-        st.sum_mfv -. om +. mfv,
-        st.sum_vol -. ov +. vol
+        ( Ring.push st.mfv_ring mfv,
+          Ring.push st.vol_ring vol,
+          st.sum_mfv -. om +. mfv,
+          st.sum_vol -. ov +. vol )
       else
-        Ring.push st.mfv_ring mfv,
-        Ring.push st.vol_ring vol,
-        st.sum_mfv +. mfv,
-        st.sum_vol +. vol
+        ( Ring.push st.mfv_ring mfv,
+          Ring.push st.vol_ring vol,
+          st.sum_mfv +. mfv,
+          st.sum_vol +. vol )
     in
     let st' = { mfv_ring = mr; vol_ring = vr; sum_mfv; sum_vol } in
     let out =
-      if Ring.is_full mr then
-        Some (if sum_vol = 0.0 then 0.0 else sum_mfv /. sum_vol)
+      if Ring.is_full mr then Some (if sum_vol = 0.0 then 0.0 else sum_mfv /. sum_vol)
       else None
     in
-    st', out
+    (st', out)
 
   let value st =
     if Ring.is_full st.mfv_ring then
       Some (if st.sum_vol = 0.0 then 0.0 else st.sum_mfv /. st.sum_vol)
     else None
 
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module Mk = Make (struct let period = period end) in
+  let module Mk = Make (struct
+    let period = period
+  end) in
   Indicator.make (module Mk)

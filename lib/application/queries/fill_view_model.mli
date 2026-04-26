@@ -8,7 +8,8 @@ type t = {
   price : float;
   fee : float;
   reason : string;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Engine.Backtest.fill
 

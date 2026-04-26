@@ -7,7 +7,8 @@ type t = {
   kind : Queries.Order_kind_view_model.t;
   tif : string;
   client_order_id : string;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type validation_error =
   | Invalid_symbol of string
@@ -19,20 +20,16 @@ type validation_error =
   | Missing_client_order_id
 
 let validation_error_to_string = function
-  | Invalid_symbol s ->
-    Printf.sprintf "invalid symbol: %S" s
-  | Invalid_side s ->
-    Printf.sprintf "invalid side: %S (expected BUY | SELL)" s
-  | Non_positive_quantity q ->
-    Printf.sprintf "quantity must be > 0, got %g" q
+  | Invalid_symbol s -> Printf.sprintf "invalid symbol: %S" s
+  | Invalid_side s -> Printf.sprintf "invalid side: %S (expected BUY | SELL)" s
+  | Non_positive_quantity q -> Printf.sprintf "quantity must be > 0, got %g" q
   | Unknown_kind_type s ->
-    Printf.sprintf "unknown kind type: %S (expected MARKET | LIMIT | STOP | STOP_LIMIT)" s
+      Printf.sprintf "unknown kind type: %S (expected MARKET | LIMIT | STOP | STOP_LIMIT)"
+        s
   | Missing_kind_price { kind_type; field } ->
-    Printf.sprintf "kind %s: missing required field %S" kind_type field
-  | Invalid_tif s ->
-    Printf.sprintf "invalid tif: %S (expected GTC | DAY | IOC | FOK)" s
-  | Missing_client_order_id ->
-    "client_order_id is required"
+      Printf.sprintf "kind %s: missing required field %S" kind_type field
+  | Invalid_tif s -> Printf.sprintf "invalid tif: %S (expected GTC | DAY | IOC | FOK)" s
+  | Missing_client_order_id -> "client_order_id is required"
 
 type unvalidated = {
   instrument : Instrument.t;
@@ -45,11 +42,11 @@ type unvalidated = {
 
 let reservation_error_to_string = function
   | Engine.Portfolio.Insufficient_cash { required; available } ->
-    Printf.sprintf "insufficient cash: required %s, available %s"
-      (Decimal.to_string required) (Decimal.to_string available)
+      Printf.sprintf "insufficient cash: required %s, available %s"
+        (Decimal.to_string required) (Decimal.to_string available)
   | Engine.Portfolio.Insufficient_qty { required; available } ->
-    Printf.sprintf "insufficient quantity: required %s, available %s"
-      (Decimal.to_string required) (Decimal.to_string available)
+      Printf.sprintf "insufficient quantity: required %s, available %s"
+        (Decimal.to_string required) (Decimal.to_string available)
 
 let reserve
     ~(portfolio : Engine.Portfolio.t)
@@ -57,15 +54,14 @@ let reserve
     ~(slippage_buffer : float)
     ~(fee_rate : float)
     ~(next_reservation_id : unit -> int)
-    (u : unvalidated)
-    : (Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
-       Engine.Portfolio.reservation_error) Rop.t =
+    (u : unvalidated) :
+    ( Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
+      Engine.Portfolio.reservation_error )
+    Rop.t =
   let id = next_reservation_id () in
-  Rop.of_result (Engine.Portfolio.try_reserve portfolio
-    ~id ~side:u.side ~instrument:u.instrument
-    ~quantity:u.quantity ~price:market_price
-    ~slippage_buffer ~fee_rate)
-
+  Rop.of_result
+    (Engine.Portfolio.try_reserve portfolio ~id ~side:u.side ~instrument:u.instrument
+       ~quantity:u.quantity ~price:market_price ~slippage_buffer ~fee_rate)
 
 let parse_symbol raw : (Instrument.t, validation_error) Rop.t =
   try Rop.succeed (Instrument.of_qualified raw)
@@ -86,30 +82,26 @@ let parse_quantity q : (Decimal.t, validation_error) Rop.t =
     aggressively, but validating the outer fields' primary
     shape is the 80% case and deeper accumulation hasn't paid
     off yet. *)
-let parse_kind (k : Queries.Order_kind_view_model.t)
-    : (Order.kind, validation_error) Rop.t =
-  let missing kind_type field =
-    Rop.fail (Missing_kind_price { kind_type; field })
-  in
+let parse_kind (k : Queries.Order_kind_view_model.t) :
+    (Order.kind, validation_error) Rop.t =
+  let missing kind_type field = Rop.fail (Missing_kind_price { kind_type; field }) in
   match String.uppercase_ascii k.type_ with
   | "MARKET" -> Rop.succeed Order.Market
-  | "LIMIT" ->
-    (match k.price with
-     | Some p -> Rop.succeed (Order.Limit (Decimal.of_float p))
-     | None -> missing "LIMIT" "price")
-  | "STOP" ->
-    (match k.price with
-     | Some p -> Rop.succeed (Order.Stop (Decimal.of_float p))
-     | None -> missing "STOP" "price")
-  | "STOP_LIMIT" ->
-    (match k.stop_price, k.limit_price with
-     | Some s, Some l ->
-       Rop.succeed (Order.Stop_limit {
-         stop = Decimal.of_float s;
-         limit = Decimal.of_float l;
-       })
-     | None, _ -> missing "STOP_LIMIT" "stop_price"
-     | _, None -> missing "STOP_LIMIT" "limit_price")
+  | "LIMIT" -> (
+      match k.price with
+      | Some p -> Rop.succeed (Order.Limit (Decimal.of_float p))
+      | None -> missing "LIMIT" "price")
+  | "STOP" -> (
+      match k.price with
+      | Some p -> Rop.succeed (Order.Stop (Decimal.of_float p))
+      | None -> missing "STOP" "price")
+  | "STOP_LIMIT" -> (
+      match (k.stop_price, k.limit_price) with
+      | Some s, Some l ->
+          Rop.succeed
+            (Order.Stop_limit { stop = Decimal.of_float s; limit = Decimal.of_float l })
+      | None, _ -> missing "STOP_LIMIT" "stop_price"
+      | _, None -> missing "STOP_LIMIT" "limit_price")
   | other -> Rop.fail (Unknown_kind_type other)
 
 let parse_tif raw : (Order.time_in_force, validation_error) Rop.t =
@@ -121,8 +113,7 @@ let parse_tif raw : (Order.time_in_force, validation_error) Rop.t =
   | _ -> Rop.fail (Invalid_tif raw)
 
 let parse_client_order_id raw : (string, validation_error) Rop.t =
-  if String.trim raw = "" then Rop.fail Missing_client_order_id
-  else Rop.succeed raw
+  if String.trim raw = "" then Rop.fail Missing_client_order_id else Rop.succeed raw
 
 let to_unvalidated (t : t) : (unvalidated, validation_error) Rop.t =
   let open Rop in

@@ -7,24 +7,19 @@
     type: you can't call [push] without capturing the returned
     ring. *)
 
-type 'a t = {
-  buf : 'a array;
-  head : int;
-  size : int;
-  capacity : int;
-}
+type 'a t = { buf : 'a array; head : int; size : int; capacity : int }
 
 let create ~capacity default =
-  { buf = Array.make capacity default;
-    head = 0; size = 0; capacity }
+  { buf = Array.make capacity default; head = 0; size = 0; capacity }
 
 let push r x =
   let buf' = Array.copy r.buf in
   buf'.(r.head) <- x;
-  { r with
+  {
+    r with
     buf = buf';
     head = (r.head + 1) mod r.capacity;
-    size = if r.size < r.capacity then r.size + 1 else r.size;
+    size = (if r.size < r.capacity then r.size + 1 else r.size);
   }
 
 let is_full r = r.size = r.capacity
@@ -42,7 +37,12 @@ let newest r = get r (r.size - 1)
 
 let fold r init f =
   let acc = ref init in
-  for i = 0 to r.size - 1 do acc := f !acc (get r i) done;
+  for i = 0 to r.size - 1 do
+    acc := f !acc (get r i)
+  done;
   !acc
 
-let iter r f = for i = 0 to r.size - 1 do f (get r i) done
+let iter r f =
+  for i = 0 to r.size - 1 do
+    f (get r i)
+  done

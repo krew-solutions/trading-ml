@@ -3,12 +3,7 @@
 
 open Core
 
-type params = {
-  fast : int;
-  slow : int;
-  signal : int;
-  allow_short : bool;
-}
+type params = { fast : int; slow : int; signal : int; allow_short : bool }
 
 type state
 

@@ -7,6 +7,4 @@
 let placeholder () = Alcotest.(check bool) "wiring" true true
 
 let () =
-  Alcotest.run "trading-contract" [
-    "placeholder", [ "wiring", `Quick, placeholder ];
-  ]
+  Alcotest.run "trading-contract" [ ("placeholder", [ ("wiring", `Quick, placeholder) ]) ]

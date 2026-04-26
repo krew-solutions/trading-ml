@@ -6,7 +6,8 @@ type t = {
   instrument : Instrument_view_model.t;
   quantity : float;
   per_unit_cash : float;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Engine.Portfolio.reservation
 

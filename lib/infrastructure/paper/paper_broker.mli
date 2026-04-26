@@ -30,7 +30,8 @@ val make :
   ?slippage_bps:float ->
   ?participation_rate:float ->
   source:Broker.client ->
-  unit -> t
+  unit ->
+  t
 (** [initial_cash] defaults to 1_000_000 — the same scale as
     {!Engine.Backtest.default_config}, so paper and backtest P&L are
     comparable out of the box.
@@ -78,8 +79,7 @@ val get_orders : t -> Order.t list
 val get_order : t -> client_order_id:string -> Order.t
 val cancel_order : t -> client_order_id:string -> Order.t
 
-val get_executions :
-  t -> client_order_id:string -> Order.execution list
+val get_executions : t -> client_order_id:string -> Order.execution list
 (** Chronological list of executions (simulated fills) that match
     [client_order_id]. Empty for unknown cids. *)
 

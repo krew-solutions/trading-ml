@@ -20,11 +20,9 @@ let typical c =
   let three = Decimal.of_int 3 in
   Decimal.div (Decimal.add (Decimal.add c.high c.low) c.close) three
 
-let median c =
-  Decimal.div (Decimal.add c.high c.low) (Decimal.of_int 2)
+let median c = Decimal.div (Decimal.add c.high c.low) (Decimal.of_int 2)
 
 let range c = Decimal.sub c.high c.low
 
 let is_bull c = Decimal.compare c.close c.open_ > 0
 let is_bear c = Decimal.compare c.close c.open_ < 0
-

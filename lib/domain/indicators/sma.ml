@@ -5,13 +5,12 @@ open Core
 
 type config = { period : int }
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "SMA: period must be > 0"
 
-  type state = {
-    ring : float Ring.t;
-    sum : float;
-  }
+  type state = { ring : float Ring.t; sum : float }
 
   type output = float
 
@@ -23,25 +22,22 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let price = Decimal.to_float candle.Candle.close in
     let st =
       if Ring.is_full st.ring then
-        { ring = Ring.push st.ring price;
-          sum = st.sum -. Ring.oldest st.ring +. price }
-      else
-        { ring = Ring.push st.ring price;
-          sum = st.sum +. price }
+        { ring = Ring.push st.ring price; sum = st.sum -. Ring.oldest st.ring +. price }
+      else { ring = Ring.push st.ring price; sum = st.sum +. price }
     in
     let out =
-      if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period)
-      else None
+      if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period) else None
     in
-    st, out
+    (st, out)
 
   let value st =
-    if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period)
-    else None
+    if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period) else None
 
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module M = Make (struct let period = period end) in
+  let module M = Make (struct
+    let period = period
+  end) in
   Indicator.make (module M)

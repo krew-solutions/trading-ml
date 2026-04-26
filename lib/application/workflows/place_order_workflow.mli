@@ -16,9 +16,9 @@
     started or stopped before any state changed. *)
 
 type event =
-  | Amount_reserved     of Engine.Portfolio.amount_reserved
-  | Order_forwarded     of Domain_event_handlers.Forward_order_to_broker.order_forwarded
-  | Forward_rejected    of Domain_event_handlers.Forward_order_to_broker.forward_rejection
+  | Amount_reserved of Engine.Portfolio.amount_reserved
+  | Order_forwarded of Domain_event_handlers.Forward_order_to_broker.order_forwarded
+  | Forward_rejected of Domain_event_handlers.Forward_order_to_broker.forward_rejection
   | Reservation_released of Engine.Portfolio.reservation_released
 
 type error =

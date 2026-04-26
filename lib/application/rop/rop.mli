@@ -50,22 +50,22 @@ val of_result : ('a, 'err) result -> ('a, 'err) t
 (** Lift a stdlib Result into Rop by wrapping the single error
     in a singleton list. *)
 
-val (<!>) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
+val ( <!> ) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!map}. Applicative entry point: lifts a
     plain function into the Result context. *)
 
-val (<*>) : ('a -> 'b, 'err) t -> ('a, 'err) t -> ('b, 'err) t
+val ( <*> ) : ('a -> 'b, 'err) t -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!apply}. Each additional argument in an
     applicative chain. *)
 
-val (let+) : ('a, 'err) t -> ('a -> 'b) -> ('b, 'err) t
+val ( let+ ) : ('a, 'err) t -> ('a -> 'b) -> ('b, 'err) t
 (** Applicative let-binding. Use with [and+] for parallel
     validations; errors from every branch accumulate. *)
 
-val (and+) : ('a, 'err) t -> ('b, 'err) t -> ('a * 'b, 'err) t
+val ( and+ ) : ('a, 'err) t -> ('b, 'err) t -> ('a * 'b, 'err) t
 (** Applicative join — see {!both}. *)
 
-val (let*) : ('a, 'err) t -> ('a -> ('b, 'err) t) -> ('b, 'err) t
+val ( let* ) : ('a, 'err) t -> ('a -> ('b, 'err) t) -> ('b, 'err) t
 (** Monadic let-binding. Short-circuits on first Error. Use for
     pipelines where a later step depends on an earlier step's
     success value. *)

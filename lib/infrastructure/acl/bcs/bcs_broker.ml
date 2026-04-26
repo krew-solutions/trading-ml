@@ -22,15 +22,13 @@ type t = Rest.t
 
 let name = "bcs"
 
-let bars t ~n ~instrument ~timeframe =
-  Rest.bars t ~n ~instrument ~timeframe
+let bars t ~n ~instrument ~timeframe = Rest.bars t ~n ~instrument ~timeframe
 
 let venues _t : Mic.t list = [ Mic.of_string "MISX" ]
 
 let place_order t ~instrument ~side ~quantity ~kind ~tif:_ ~client_order_id =
   let q_int = int_of_float (Decimal.to_float quantity) in
-  Rest.create_order t ~instrument ~side ~quantity:q_int
-    ~kind ~client_order_id ()
+  Rest.create_order t ~instrument ~side ~quantity:q_int ~kind ~client_order_id ()
 
 let get_orders t = Rest.get_orders t
 let get_order t ~client_order_id = Rest.get_order t ~client_order_id
@@ -53,24 +51,25 @@ let get_executions t ~client_order_id =
   else
     Rest.get_deals t
     |> List.filter_map (fun (order_num, exec) ->
-      if order_num = order.exec_id then Some exec else None)
+        if order_num = order.exec_id then Some exec else None)
 
 (** UUIDv4 in canonical dashed form — BCS validates [clientOrderId]
     as "UUID format" and 400s on anything else. *)
 let generate_client_order_id _ =
-  Uuidm.v4_gen (Random.State.make_self_init ()) ()
-  |> Uuidm.to_string
+  Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
 let as_broker (rest : Rest.t) : Broker.client =
-  Broker.make (module struct
-    type nonrec t = t
-    let name = name
-    let bars = bars
-    let venues = venues
-    let place_order = place_order
-    let get_orders = get_orders
-    let get_order = get_order
-    let cancel_order = cancel_order
-    let get_executions = get_executions
-    let generate_client_order_id = generate_client_order_id
-  end) rest
+  Broker.make
+    (module struct
+      type nonrec t = t
+      let name = name
+      let bars = bars
+      let venues = venues
+      let place_order = place_order
+      let get_orders = get_orders
+      let get_order = get_order
+      let cancel_order = cancel_order
+      let get_executions = get_executions
+      let generate_client_order_id = generate_client_order_id
+    end)
+    rest

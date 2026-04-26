@@ -5,7 +5,9 @@
 
 open Core
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "WMA: period must be > 0"
 
   type state = { ring : float Ring.t }
@@ -22,7 +24,7 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     for i = 0 to n - 1 do
       (* ring.get 0 = oldest; weight for oldest = 1, newest = period. *)
       let w = float_of_int (i + 1) in
-      sum := !sum +. Ring.get ring i *. w
+      sum := !sum +. (Ring.get ring i *. w)
     done;
     !sum /. denom
 
@@ -31,14 +33,15 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let r = Ring.push st.ring price in
     let st' = { ring = r } in
     let out = if Ring.is_full r then Some (compute r) else None in
-    st', out
+    (st', out)
 
-  let value st =
-    if Ring.is_full st.ring then Some (compute st.ring) else None
+  let value st = if Ring.is_full st.ring then Some (compute st.ring) else None
 
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module M = Make (struct let period = period end) in
+  let module M = Make (struct
+    let period = period
+  end) in
   Indicator.make (module M)

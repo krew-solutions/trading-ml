@@ -21,15 +21,15 @@
 
 open Core
 
-(** Prediction function injected into [Learned] policy.
-    Receives child signals, the current candle, and recent
-    market-context lists; returns P(profitable long) in [0, 1]. *)
 type predictor =
   signals:Signal.t list ->
   candle:Candle.t ->
   recent_closes:float list ->
   recent_volumes:float list ->
   float
+(** Prediction function injected into [Learned] policy.
+    Receives child signals, the current candle, and recent
+    market-context lists; returns P(profitable long) in [0, 1]. *)
 
 type policy =
   | Unanimous
@@ -38,10 +38,7 @@ type policy =
   | Adaptive of { window : int }
   | Learned of { predict : predictor; threshold : float }
 
-type params = {
-  policy : policy;
-  children : Strategy.t list;
-}
+type params = { policy : policy; children : Strategy.t list }
 
 type state
 

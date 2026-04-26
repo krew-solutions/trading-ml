@@ -1,9 +1,7 @@
 (** Runtime registry of indicator factories. Lets the UI list indicators and
     build new ones by name with typed parameters. *)
 
-type param =
-  | Int of int
-  | Float of float
+type param = Int of int | Float of float
 
 type spec = {
   name : string;

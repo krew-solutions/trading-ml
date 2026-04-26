@@ -2,11 +2,7 @@
     to the UI/CLI pickers. Each entry knows how to build a default instance
     and how to describe its tunable parameters. *)
 
-type param =
-  | Int of int
-  | Float of float
-  | Bool of bool
-  | String of string
+type param = Int of int | Float of float | Bool of bool | String of string
 
 type spec = {
   name : string;

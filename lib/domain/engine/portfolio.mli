@@ -22,29 +22,29 @@
     matching note in [core/candle.mli] — Gospel 0.3.1 doesn't carry
     [model] declarations across files, so each consumer restates it. *)
 
-(** Snapshot of an open trading position. *)
 type position = {
   instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;   (** signed: positive = long, negative = short *)
+  quantity : Core.Decimal.t;  (** signed: positive = long, negative = short *)
   avg_price : Core.Decimal.t;  (** VWAP entry price *)
 }
+(** Snapshot of an open trading position. *)
 
-(** A pending trade — cash/qty reserved but not yet applied.
-    Scales down on partial fills: [quantity] is the *remaining*
-    reserved amount, [per_unit_cash] is immutable after {!reserve}
-    so proration stays linear. *)
 type reservation = {
   id : int;
   side : Core.Side.t;
   instrument : Core.Instrument.t;
   quantity : Core.Decimal.t;
-  (** Remaining reserved quantity — decreases on
+      (** Remaining reserved quantity — decreases on
       {!commit_partial_fill}, hits zero on {!commit_fill}. *)
   per_unit_cash : Core.Decimal.t;
-  (** For Buy: per-unit cash impact including slippage buffer and
+      (** For Buy: per-unit cash impact including slippage buffer and
       fee estimate — set at {!reserve} and never changes. For Sell
       it's zero (sells free cash, they don't consume it). *)
 }
+(** A pending trade — cash/qty reserved but not yet applied.
+    Scales down on partial fills: [quantity] is the *remaining*
+    reserved amount, [per_unit_cash] is immutable after {!reserve}
+    so proration stays linear. *)
 
 val reserved_cash : reservation -> Core.Decimal.t
 (** [quantity × per_unit_cash]. Earmarked cash still pending
@@ -135,11 +135,9 @@ type reservation_released = {
     (e.g. broker rejected the order, operator cancelled before
     submission). Released cash/qty becomes available again. *)
 
-type release_error =
-  | Reservation_not_found of int
+type release_error = Reservation_not_found of int
 
-val try_release :
-  t -> id:int -> (t * reservation_released, release_error) result
+val try_release : t -> id:int -> (t * reservation_released, release_error) result
 (** Releases a reservation by id, returning new state and the
     event. Returns [Reservation_not_found] if no reservation
     with that id exists — callers that want idempotent behaviour

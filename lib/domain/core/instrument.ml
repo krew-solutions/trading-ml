@@ -1,53 +1,53 @@
 type t = {
   ticker : Ticker.t;
-  venue  : Mic.t;
-  isin   : Isin.t option;
-  board  : Board.t option;
+  venue : Mic.t;
+  isin : Isin.t option;
+  board : Board.t option;
 }
 
-let make ~ticker ~venue ?isin ?board () =
-  { ticker; venue; isin; board }
+let make ~ticker ~venue ?isin ?board () = { ticker; venue; isin; board }
 
 let ticker t = t.ticker
-let venue  t = t.venue
-let isin   t = t.isin
-let board  t = t.board
+let venue t = t.venue
+let isin t = t.isin
+let board t = t.board
 
 (** Identity rule: ISIN+MIC if both sides have ISIN, else Ticker+MIC.
     Board is intentionally excluded — see {!t}. *)
 let equal a b =
   Mic.equal a.venue b.venue
-  && (match a.isin, b.isin with
-      | Some x, Some y -> Isin.equal x y
-      | None, None     -> Ticker.equal a.ticker b.ticker
-      | _ -> false)
+  &&
+  match (a.isin, b.isin) with
+  | Some x, Some y -> Isin.equal x y
+  | None, None -> Ticker.equal a.ticker b.ticker
+  | _ -> false
 
 let compare a b =
   let c = Mic.compare a.venue b.venue in
   if c <> 0 then c
-  else match a.isin, b.isin with
+  else
+    match (a.isin, b.isin) with
     | Some x, Some y -> Isin.compare x y
-    | None, None     -> Ticker.compare a.ticker b.ticker
-    | None, Some _   -> -1
-    | Some _, None   -> 1
+    | None, None -> Ticker.compare a.ticker b.ticker
+    | None, Some _ -> -1
+    | Some _, None -> 1
 
 let hash t =
-  let key = match t.isin with
+  let key =
+    match t.isin with
     | Some i -> "I:" ^ Isin.to_string i
-    | None   -> "T:" ^ Ticker.to_string t.ticker
+    | None -> "T:" ^ Ticker.to_string t.ticker
   in
   Hashtbl.hash (Mic.to_string t.venue, key)
 
 let pp ppf t =
-  Format.fprintf ppf "%a@@%a%s%s"
-    Ticker.pp t.ticker
-    Mic.pp t.venue
+  Format.fprintf ppf "%a@@%a%s%s" Ticker.pp t.ticker Mic.pp t.venue
     (match t.board with
-     | Some b -> "/" ^ Board.to_string b
-     | None -> "")
+    | Some b -> "/" ^ Board.to_string b
+    | None -> "")
     (match t.isin with
-     | Some i -> " [" ^ Isin.to_string i ^ "]"
-     | None -> "")
+    | Some i -> " [" ^ Isin.to_string i ^ "]"
+    | None -> "")
 
 let to_qualified t =
   let base = Ticker.to_string t.ticker ^ "@" ^ Mic.to_string t.venue in
@@ -61,40 +61,34 @@ let to_qualified t =
 let parse_query s =
   String.split_on_char '&' s
   |> List.filter_map (fun kv ->
-       match String.index_opt kv '=' with
-       | None -> None
-       | Some i ->
-         Some (String.sub kv 0 i,
-               String.sub kv (i + 1) (String.length kv - i - 1)))
+      match String.index_opt kv '=' with
+      | None -> None
+      | Some i ->
+          Some (String.sub kv 0 i, String.sub kv (i + 1) (String.length kv - i - 1)))
 
 let of_qualified raw =
   let s = String.trim raw in
   let body, isin_opt =
     match String.index_opt s '?' with
-    | None -> s, None
+    | None -> (s, None)
     | Some i ->
-      let body = String.sub s 0 i in
-      let q = String.sub s (i + 1) (String.length s - i - 1) in
-      let isin = List.assoc_opt "isin" (parse_query q) in
-      body, Option.map Isin.of_string isin
+        let body = String.sub s 0 i in
+        let q = String.sub s (i + 1) (String.length s - i - 1) in
+        let isin = List.assoc_opt "isin" (parse_query q) in
+        (body, Option.map Isin.of_string isin)
   in
   match String.index_opt body '@' with
-  | None ->
-    invalid_arg ("Instrument.of_qualified: missing @MIC in " ^ raw)
+  | None -> invalid_arg ("Instrument.of_qualified: missing @MIC in " ^ raw)
   | Some at ->
-    let ticker = String.sub body 0 at in
-    let rest = String.sub body (at + 1) (String.length body - at - 1) in
-    let mic, board =
-      match String.index_opt rest '/' with
-      | None -> rest, None
-      | Some j ->
-        String.sub rest 0 j,
-        Some (String.sub rest (j + 1) (String.length rest - j - 1))
-    in
-    make
-      ~ticker:(Ticker.of_string ticker)
-      ~venue:(Mic.of_string mic)
-      ?isin:isin_opt
-      ?board:(Option.map Board.of_string board)
-      ()
-
+      let ticker = String.sub body 0 at in
+      let rest = String.sub body (at + 1) (String.length body - at - 1) in
+      let mic, board =
+        match String.index_opt rest '/' with
+        | None -> (rest, None)
+        | Some j ->
+            ( String.sub rest 0 j,
+              Some (String.sub rest (j + 1) (String.length rest - j - 1)) )
+      in
+      make ~ticker:(Ticker.of_string ticker) ~venue:(Mic.of_string mic) ?isin:isin_opt
+        ?board:(Option.map Board.of_string board)
+        ()

@@ -20,7 +20,8 @@ open Core
 open Broker_boot
 
 let usage () =
-  prerr_endline {|trading <command> [options]
+  prerr_endline
+    {|trading <command> [options]
 
   serve [--port 8080] [--broker synthetic|finam|bcs] [--paper]
         [--strategy NAME] [--engine-symbol SBER@MISX]
@@ -83,10 +84,12 @@ this runtime CLI focused on live operations:
 
 let cmd_list () =
   print_endline "Indicators:";
-  List.iter (fun s -> Printf.printf "  - %s\n" s.Indicators.Registry.name)
+  List.iter
+    (fun s -> Printf.printf "  - %s\n" s.Indicators.Registry.name)
     Indicators.Registry.specs;
   print_endline "Strategies:";
-  List.iter (fun s -> Printf.printf "  - %s\n" s.Strategies.Registry.name)
+  List.iter
+    (fun s -> Printf.printf "  - %s\n" s.Strategies.Registry.name)
     Strategies.Registry.specs
 
 (** Collect every value that follows a given flag; useful for repeated
@@ -96,7 +99,8 @@ let arg_values name args =
     | k :: v :: rest when k = name -> go (v :: acc) rest
     | _ :: rest -> go acc rest
     | [] -> List.rev acc
-  in go [] args
+  in
+  go [] args
 
 (** Parse one [KEY=VALUE] string against the spec's declared
     parameter types. Returns [(key, coerced_param)] or raises
@@ -108,70 +112,75 @@ let arg_values name args =
     than silently dropped — a typo in a CLI invocation that looks
     like it worked but had no effect is a worse failure mode than
     an error. *)
-let parse_strategy_param
-    (spec : Strategies.Registry.spec) (kv : string)
-    : string * Strategies.Registry.param =
+let parse_strategy_param (spec : Strategies.Registry.spec) (kv : string) :
+    string * Strategies.Registry.param =
   match String.index_opt kv '=' with
-  | None ->
-    invalid_arg
-      (Printf.sprintf "--param expects KEY=VALUE, got %S" kv)
-  | Some i ->
-    let k = String.sub kv 0 i in
-    let v = String.sub kv (i + 1) (String.length kv - i - 1) in
-    match List.assoc_opt k spec.params with
-    | None ->
-      invalid_arg (Printf.sprintf
-        "unknown --param key %S for strategy %S (expected one of: %s)"
-        k spec.name
-        (String.concat ", " (List.map fst spec.params)))
-    | Some (Strategies.Registry.Int _) ->
-      k, Strategies.Registry.Int (int_of_string v)
-    | Some (Strategies.Registry.Float _) ->
-      k, Strategies.Registry.Float (float_of_string v)
-    | Some (Strategies.Registry.Bool _) ->
-      k, Strategies.Registry.Bool (bool_of_string v)
-    | Some (Strategies.Registry.String _) ->
-      k, Strategies.Registry.String v
+  | None -> invalid_arg (Printf.sprintf "--param expects KEY=VALUE, got %S" kv)
+  | Some i -> (
+      let k = String.sub kv 0 i in
+      let v = String.sub kv (i + 1) (String.length kv - i - 1) in
+      match List.assoc_opt k spec.params with
+      | None ->
+          invalid_arg
+            (Printf.sprintf "unknown --param key %S for strategy %S (expected one of: %s)"
+               k spec.name
+               (String.concat ", " (List.map fst spec.params)))
+      | Some (Strategies.Registry.Int _) -> (k, Strategies.Registry.Int (int_of_string v))
+      | Some (Strategies.Registry.Float _) ->
+          (k, Strategies.Registry.Float (float_of_string v))
+      | Some (Strategies.Registry.Bool _) ->
+          (k, Strategies.Registry.Bool (bool_of_string v))
+      | Some (Strategies.Registry.String _) -> (k, Strategies.Registry.String v))
 
-let strategy_params_from_args spec args
-    : (string * Strategies.Registry.param) list =
+let strategy_params_from_args spec args : (string * Strategies.Registry.param) list =
   arg_values "--param" args |> List.map (parse_strategy_param spec)
 
 let cmd_backtest args =
-  let strat_name = match args with
-    | n :: _ -> n | [] -> usage () in
+  let strat_name =
+    match args with
+    | n :: _ -> n
+    | [] -> usage ()
+  in
   let n =
     let rec find = function
       | "--n" :: v :: _ -> int_of_string v
       | _ :: rest -> find rest
       | [] -> 500
-    in find args in
+    in
+    find args
+  in
   let instrument =
     let rec find = function
       | "--symbol" :: v :: _ -> Instrument.of_qualified v
       | _ :: rest -> find rest
       | [] -> Instrument.of_qualified "SBER@MISX"
-    in find args in
+    in
+    find args
+  in
   match Strategies.Registry.find strat_name with
   | None ->
-    Printf.eprintf "unknown strategy %s\n" strat_name;
-    exit 1
+      Printf.eprintf "unknown strategy %s\n" strat_name;
+      exit 1
   | Some spec ->
-    let params = strategy_params_from_args spec args in
-    let strat = spec.build params in
-    let syn = Synthetic.Synthetic_broker.make () in
-    let candles = Synthetic.Synthetic_broker.bars syn
-      ~n ~instrument ~timeframe:Timeframe.H1 in
-    let cfg = Engine.Backtest.default_config () in
-    let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
-    Printf.printf "Strategy: %s\nBars: %d\nTrades: %d\n\
-                   Total return: %.2f%%\nMax drawdown: %.2f%%\n\
-                   Realized PnL: %s\nFinal cash: %s\n"
-      strat_name n r.num_trades
-      (r.total_return *. 100.0) (r.max_drawdown *. 100.0)
-      (Decimal.to_string r.final.realized_pnl)
-      (Decimal.to_string r.final.cash)
-
+      let params = strategy_params_from_args spec args in
+      let strat = spec.build params in
+      let syn = Synthetic.Synthetic_broker.make () in
+      let candles =
+        Synthetic.Synthetic_broker.bars syn ~n ~instrument ~timeframe:Timeframe.H1
+      in
+      let cfg = Engine.Backtest.default_config () in
+      let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
+      Printf.printf
+        "Strategy: %s\n\
+         Bars: %d\n\
+         Trades: %d\n\
+         Total return: %.2f%%\n\
+         Max drawdown: %.2f%%\n\
+         Realized PnL: %s\n\
+         Final cash: %s\n"
+        strat_name n r.num_trades (r.total_return *. 100.0) (r.max_drawdown *. 100.0)
+        (Decimal.to_string r.final.realized_pnl)
+        (Decimal.to_string r.final.cash)
 
 (** Build a {!Server.Http.live_setup} that bridges Finam's WebSocket
     feed into the SSE stream registry. Connection happens up-front on
@@ -189,53 +198,53 @@ let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.li
   let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
   let on_event (ev : Finam.Ws.event) =
     match ev with
-    | Bars { instrument; timeframe; bars } ->
-      List.iter (fun candle -> paper_sink instrument candle) bars;
-      (match !registry_ref, timeframe with
-       | Some r, Some tf ->
-         List.iter (fun candle ->
-           Server.Stream.push_from_upstream r
-             ~instrument ~timeframe:tf candle
-         ) bars
-       | Some _, None ->
-         (* No subscription_key in the frame — fall back to the
+    | Bars { instrument; timeframe; bars } -> (
+        List.iter (fun candle -> paper_sink instrument candle) bars;
+        match (!registry_ref, timeframe) with
+        | Some r, Some tf ->
+            List.iter
+              (fun candle ->
+                Server.Stream.push_from_upstream r ~instrument ~timeframe:tf candle)
+              bars
+        | Some _, None -> (
+            (* No subscription_key in the frame — fall back to the
             legacy scan of active subs for this instrument. *)
-         (match !bridge_ref with
-          | None -> ()
-          | Some b ->
-            let tfs =
-              Finam.Ws_bridge.timeframes_for_instrument b instrument in
-            match !registry_ref with
+            match !bridge_ref with
             | None -> ()
-            | Some r ->
-              List.iter (fun candle ->
-                List.iter (fun tf ->
-                  Server.Stream.push_from_upstream r
-                    ~instrument ~timeframe:tf candle
-                ) tfs
-              ) bars)
-       | None, _ -> ())
+            | Some b -> (
+                let tfs = Finam.Ws_bridge.timeframes_for_instrument b instrument in
+                match !registry_ref with
+                | None -> ()
+                | Some r ->
+                    List.iter
+                      (fun candle ->
+                        List.iter
+                          (fun tf ->
+                            Server.Stream.push_from_upstream r ~instrument ~timeframe:tf
+                              candle)
+                          tfs)
+                      bars))
+        | None, _ -> ())
     | Error_ev { code; type_; message } ->
-      Log.warn "[finam ws] error %d %s: %s" code type_ message
+        Log.warn "[finam ws] error %d %s: %s" code type_ message
     | Lifecycle { event; code; reason } ->
-      Log.info "[finam ws] %s (%d) %s" event code reason
+        Log.info "[finam ws] %s (%d) %s" event code reason
     | _ -> ()
   in
   let bridge = Finam.Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event in
   bridge_ref := Some bridge;
-  Server.Http.{
-    on_first = (fun ~instrument ~timeframe ->
-      try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-      with e ->
-        Log.warn "[finam ws] subscribe failed: %s"
-          (Printexc.to_string e));
-    on_last = (fun ~instrument ~timeframe ->
-      try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-      with e ->
-        Log.warn "[finam ws] unsubscribe failed: %s"
-          (Printexc.to_string e));
-    bind = (fun r -> registry_ref := Some r);
-  }
+  Server.Http.
+    {
+      on_first =
+        (fun ~instrument ~timeframe ->
+          try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
+          with e -> Log.warn "[finam ws] subscribe failed: %s" (Printexc.to_string e));
+      on_last =
+        (fun ~instrument ~timeframe ->
+          try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
+          with e -> Log.warn "[finam ws] unsubscribe failed: %s" (Printexc.to_string e));
+      bind = (fun r -> registry_ref := Some r);
+    }
 
 (** Build a {!Server.Http.live_setup} for BCS. Unlike Finam, BCS
     opens one socket per subscription, so the bridge defers connect
@@ -253,20 +262,18 @@ let bcs_live_setup ~env ~paper_sink (rest : Bcs.Rest.t) ~sw : Server.Http.live_s
     | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
     | None -> ()
   in
-  Server.Http.{
-    on_first = (fun ~instrument ~timeframe ->
-      try Bcs.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-            ~on_candle:push
-      with e ->
-        Log.warn "[bcs ws] subscribe failed: %s"
-          (Printexc.to_string e));
-    on_last = (fun ~instrument ~timeframe ->
-      try Bcs.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-      with e ->
-        Log.warn "[bcs ws] unsubscribe failed: %s"
-          (Printexc.to_string e));
-    bind = (fun r -> registry_ref := Some r);
-  }
+  Server.Http.
+    {
+      on_first =
+        (fun ~instrument ~timeframe ->
+          try Bcs.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe ~on_candle:push
+          with e -> Log.warn "[bcs ws] subscribe failed: %s" (Printexc.to_string e));
+      on_last =
+        (fun ~instrument ~timeframe ->
+          try Bcs.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
+          with e -> Log.warn "[bcs ws] unsubscribe failed: %s" (Printexc.to_string e));
+      bind = (fun r -> registry_ref := Some r);
+    }
 
 let cmd_serve args =
   let port =
@@ -297,11 +304,12 @@ let cmd_serve args =
     | Some v -> Some v
     | None -> Sys.getenv_opt "BCS_CLIENT_ID"
   in
-  let log_level = match arg_value "--log-level" args with
-    | Some "debug"   -> Logs.Debug
+  let log_level =
+    match arg_value "--log-level" args with
+    | Some "debug" -> Logs.Debug
     | Some "warning" -> Logs.Warning
-    | Some "error"   -> Logs.Error
-    | _              -> Logs.Info
+    | Some "error" -> Logs.Error
+    | _ -> Logs.Info
   in
   Log.setup ~level:log_level ();
   Eio_main.run @@ fun env ->
@@ -310,13 +318,13 @@ let cmd_serve args =
      of its own and the secret doesn't rotate. BCS reads from its
      [Token_store] chain (file → env) so a missing --secret is fine
      when the file is already populated. *)
-  let need_secret () = match secret with
+  let need_secret () =
+    match secret with
     | Some s -> s
     | None ->
-      Printf.eprintf
-        "--broker %s requires a secret (use --secret or %s_SECRET)\n"
-        broker_id prefix;
-      exit 2
+        Printf.eprintf "--broker %s requires a secret (use --secret or %s_SECRET)\n"
+          broker_id prefix;
+        exit 2
   in
   let paper_mode = List.mem "--paper" args in
   let strategy_name = arg_value "--strategy" args in
@@ -325,85 +333,90 @@ let cmd_serve args =
     | Some v -> Instrument.of_qualified v
     | None -> Instrument.of_qualified "SBER@MISX"
   in
-  let opened = match broker_id with
+  let opened =
+    match broker_id with
     | "synthetic" -> open_synthetic ()
     | "finam" -> open_finam ~env ~secret:(need_secret ()) ~account
-    | "bcs"   -> open_bcs   ~env ~secret ~account ~client_id
-    | other ->
-      failwith ("unknown --broker: " ^ other
-                ^ " (expected synthetic|finam|bcs)")
+    | "bcs" -> open_bcs ~env ~secret ~account ~client_id
+    | other -> failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
   in
   let source_client = opened_client opened in
-  let paper_t = if paper_mode
-    then Some (Paper.Paper_broker.make ~source:source_client ())
-    else None
+  let paper_t =
+    if paper_mode then Some (Paper.Paper_broker.make ~source:source_client ()) else None
   in
-  let client = match paper_t with
+  let client =
+    match paper_t with
     | Some p -> Paper.Paper_broker.as_broker p
     | None -> source_client
   in
   (* Live engine — optional; constructed only when --strategy is set.
      Trades [engine_symbol] through [client] (which is Paper-wrapped
      when --paper, so engine orders are simulated in that case). *)
-  let engine_t = match strategy_name with
+  let engine_t =
+    match strategy_name with
     | None -> None
-    | Some name ->
-      match Strategies.Registry.find name with
-      | None ->
-        Printf.eprintf "unknown --strategy: %s (use `trading list`)\n" name;
-        exit 2
-      | Some spec ->
-        let strat = spec.build (strategy_params_from_args spec args) in
-        let equity = Decimal.of_int 1_000_000 in
-        let cfg : Live_engine.config = {
-          broker = client;
-          strategy = strat;
-          instrument = engine_symbol;
-          initial_cash = equity;
-          limits = Engine.Risk.default_limits ~equity;
-          tif = Order.DAY;
-          fee_rate = 0.0005;
-          reconcile_every = 10; max_drawdown_pct = 0.15; rate_limit = None;
-        } in
-        Some (Live_engine.make cfg)
+    | Some name -> (
+        match Strategies.Registry.find name with
+        | None ->
+            Printf.eprintf "unknown --strategy: %s (use `trading list`)\n" name;
+            exit 2
+        | Some spec ->
+            let strat = spec.build (strategy_params_from_args spec args) in
+            let equity = Decimal.of_int 1_000_000 in
+            let cfg : Live_engine.config =
+              {
+                broker = client;
+                strategy = strat;
+                instrument = engine_symbol;
+                initial_cash = equity;
+                limits = Engine.Risk.default_limits ~equity;
+                tif = Order.DAY;
+                fee_rate = 0.0005;
+                reconcile_every = 10;
+                max_drawdown_pct = 0.15;
+                rate_limit = None;
+              }
+            in
+            Some (Live_engine.make cfg))
   in
   (* Wire Paper's fill events into Live_engine's reservation ledger.
      In real live trading this will be driven by WS [order_update]
      frames from Finam/BCS instead — Paper is the stand-in with the
      same callback contract. *)
-  (match paper_t, engine_t with
-   | Some p, Some e ->
-     Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
-       Live_engine.on_fill_event e {
-         client_order_id = f.client_order_id;
-         actual_quantity = f.quantity;
-         actual_price = f.price;
-         actual_fee = f.fee;
-       })
-   | _ -> ());
-  Log.info "broker: %s%s (account=%s)%s"
-    (Broker.name source_client)
+  (match (paper_t, engine_t) with
+  | Some p, Some e ->
+      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
+          Live_engine.on_fill_event e
+            {
+              client_order_id = f.client_order_id;
+              actual_quantity = f.quantity;
+              actual_price = f.price;
+              actual_fee = f.fee;
+            })
+  | _ -> ());
+  Log.info "broker: %s%s (account=%s)%s" (Broker.name source_client)
     (if paper_mode then " [paper]" else "")
     (Option.value account ~default:"<none>")
     (match strategy_name with
-     | Some n -> Printf.sprintf " [engine: %s on %s]"
-                   n (Instrument.to_qualified engine_symbol)
-     | None -> "");
+    | Some n ->
+        Printf.sprintf " [engine: %s on %s]" n (Instrument.to_qualified engine_symbol)
+    | None -> "");
   (* Engine source is an [Eio.Stream] the WS sinks push candles into;
      [Live_engine.run] reads from it in its own fiber (spawned below
      inside the server's switch). This replaces the previous direct
      on_bar callback with a proper pull-driven pipeline, decoupling
      the WS producer from the engine consumer. *)
   let engine_source = Option.map (fun _ -> Eio.Stream.create 64) engine_t in
-  let paper_sink = match paper_t with
-    | Some p -> fun instrument candle ->
-      Paper.Paper_broker.on_bar p ~instrument candle
+  let paper_sink =
+    match paper_t with
+    | Some p -> fun instrument candle -> Paper.Paper_broker.on_bar p ~instrument candle
     | None -> fun _ _ -> ()
   in
-  let engine_sink = match engine_source with
-    | Some src -> fun instrument candle ->
-      if Instrument.equal instrument engine_symbol
-      then Eio.Stream.add src candle
+  let engine_sink =
+    match engine_source with
+    | Some src ->
+        fun instrument candle ->
+          if Instrument.equal instrument engine_symbol then Eio.Stream.add src candle
     | None -> fun _ _ -> ()
   in
   let bar_sink instrument candle =
@@ -414,25 +427,25 @@ let cmd_serve args =
      server's switch opens, we also spawn the engine fiber on the
      same switch. Engine's lifetime is thereby tied to the server's
      — shutdown the server, the engine daemon winds down with it. *)
-  let with_engine (base : sw:Eio.Switch.t -> Server.Http.live_setup)
-      ~sw : Server.Http.live_setup =
-    (match engine_t, engine_source with
-     | Some e, Some src ->
-       Eio.Fiber.fork_daemon ~sw (fun () ->
-         Live_engine.run e ~source:src;
-         `Stop_daemon)
-     | _ -> ());
+  let with_engine (base : sw:Eio.Switch.t -> Server.Http.live_setup) ~sw :
+      Server.Http.live_setup =
+    (match (engine_t, engine_source) with
+    | Some e, Some src ->
+        Eio.Fiber.fork_daemon ~sw (fun () ->
+            Live_engine.run e ~source:src;
+            `Stop_daemon)
+    | _ -> ());
     base ~sw
   in
-  let ws_setup = match opened with
-    | Opened_finam     { rest; _ } ->
-      Some (with_engine (finam_live_setup ~env ~paper_sink:bar_sink rest))
-    | Opened_bcs       { rest; _ } ->
-      Some (with_engine (bcs_live_setup   ~env ~paper_sink:bar_sink rest))
-    | Opened_synthetic _           -> None
+  let ws_setup =
+    match opened with
+    | Opened_finam { rest; _ } ->
+        Some (with_engine (finam_live_setup ~env ~paper_sink:bar_sink rest))
+    | Opened_bcs { rest; _ } ->
+        Some (with_engine (bcs_live_setup ~env ~paper_sink:bar_sink rest))
+    | Opened_synthetic _ -> None
   in
-  Log.info "listening on http://127.0.0.1:%d (%s)"
-    port (Broker.name client);
+  Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
   Server.Http.run ?setup:ws_setup ~env ~port ~client ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
@@ -442,15 +455,11 @@ let api_url host path = Uri.of_string (host ^ path)
 
 let api_request ~env ~host ~meth ?body path : Yojson.Safe.t =
   let transport = Http_transport.make_eio ~env in
-  let headers = [
-    "Content-Type", "application/json";
-    "Accept",       "application/json";
-  ] in
-  let resp = transport {
-    meth; url = api_url host path; headers; body;
-  } in
-  if resp.status >= 200 && resp.status < 300 then
-    Yojson.Safe.from_string resp.body
+  let headers =
+    [ ("Content-Type", "application/json"); ("Accept", "application/json") ]
+  in
+  let resp = transport { meth; url = api_url host path; headers; body } in
+  if resp.status >= 200 && resp.status < 300 then Yojson.Safe.from_string resp.body
   else begin
     Printf.eprintf "HTTP %d: %s\n" resp.status resp.body;
     exit 1
@@ -458,15 +467,15 @@ let api_request ~env ~host ~meth ?body path : Yojson.Safe.t =
 
 let format_order (j : Yojson.Safe.t) : string =
   let open Yojson.Safe.Util in
-  let cid     = j |> member "client_order_id" |> to_string in
-  let symbol  = j |> member "instrument"      |> to_string in
-  let side    = j |> member "side"            |> to_string in
-  let qty     = j |> member "quantity"        |> to_float in
-  let filled  = j |> member "filled"          |> to_float in
-  let status  = j |> member "status"          |> to_string in
-  let kind    = j |> member "kind" |> member "type" |> to_string in
-  Printf.sprintf "%-24s %-14s %-4s qty=%-8g filled=%-8g %-6s %s"
-    cid symbol side qty filled kind status
+  let cid = j |> member "client_order_id" |> to_string in
+  let symbol = j |> member "instrument" |> to_string in
+  let side = j |> member "side" |> to_string in
+  let qty = j |> member "quantity" |> to_float in
+  let filled = j |> member "filled" |> to_float in
+  let status = j |> member "status" |> to_string in
+  let kind = j |> member "kind" |> member "type" |> to_string in
+  Printf.sprintf "%-24s %-14s %-4s qty=%-8g filled=%-8g %-6s %s" cid symbol side qty
+    filled kind status
 
 let cmd_orders_list ~env ~host () =
   let j = api_request ~env ~host ~meth:`GET "/api/orders" in
@@ -482,37 +491,42 @@ let cmd_orders_place ~env ~host args =
   let get name =
     match arg_value ("--" ^ name) args with
     | Some v -> v
-    | None -> Printf.eprintf "missing --%s\n" name; exit 2
+    | None ->
+        Printf.eprintf "missing --%s\n" name;
+        exit 2
   in
   let optional name = arg_value ("--" ^ name) args in
-  let body_fields = [
-    "symbol",          `String (get "symbol");
-    "side",            `String (String.uppercase_ascii (get "side"));
-    "quantity",        `Float (float_of_string (get "qty"));
-    "client_order_id", `String (get "cid");
-    "tif",             `String (Option.value (optional "tif") ~default:"DAY");
-  ] in
+  let body_fields =
+    [
+      ("symbol", `String (get "symbol"));
+      ("side", `String (String.uppercase_ascii (get "side")));
+      ("quantity", `Float (float_of_string (get "qty")));
+      ("client_order_id", `String (get "cid"));
+      ("tif", `String (Option.value (optional "tif") ~default:"DAY"));
+    ]
+  in
   let kind : Yojson.Safe.t =
     let k = String.uppercase_ascii (Option.value (optional "kind") ~default:"MARKET") in
     match k with
-    | "MARKET" -> `Assoc [ "type", `String "MARKET" ]
-    | "LIMIT" -> `Assoc [
-        "type",  `String "LIMIT";
-        "price", `Float (float_of_string (get "price"));
-      ]
-    | "STOP" -> `Assoc [
-        "type",  `String "STOP";
-        "price", `Float (float_of_string (get "price"));
-      ]
-    | "STOP_LIMIT" -> `Assoc [
-        "type",        `String "STOP_LIMIT";
-        "stop_price",  `Float (float_of_string (get "stop"));
-        "limit_price", `Float (float_of_string (get "price"));
-      ]
-    | other -> Printf.eprintf "unknown --kind %s\n" other; exit 2
+    | "MARKET" -> `Assoc [ ("type", `String "MARKET") ]
+    | "LIMIT" ->
+        `Assoc
+          [ ("type", `String "LIMIT"); ("price", `Float (float_of_string (get "price"))) ]
+    | "STOP" ->
+        `Assoc
+          [ ("type", `String "STOP"); ("price", `Float (float_of_string (get "price"))) ]
+    | "STOP_LIMIT" ->
+        `Assoc
+          [
+            ("type", `String "STOP_LIMIT");
+            ("stop_price", `Float (float_of_string (get "stop")));
+            ("limit_price", `Float (float_of_string (get "price")));
+          ]
+    | other ->
+        Printf.eprintf "unknown --kind %s\n" other;
+        exit 2
   in
-  let payload : Yojson.Safe.t =
-    `Assoc (body_fields @ [ "kind", kind ]) in
+  let payload : Yojson.Safe.t = `Assoc (body_fields @ [ ("kind", kind) ]) in
   let body = Yojson.Safe.to_string payload in
   let j = api_request ~env ~host ~meth:`POST ~body "/api/orders" in
   print_endline (format_order j)
@@ -522,9 +536,7 @@ let cmd_orders_cancel ~env ~host cid =
   print_endline (format_order j)
 
 let cmd_orders args =
-  let host =
-    Option.value (arg_value "--host" args) ~default:"http://localhost:8080"
-  in
+  let host = Option.value (arg_value "--host" args) ~default:"http://localhost:8080" in
   Eio_main.run @@ fun env ->
   Mirage_crypto_rng_unix.use_default ();
   match args with
@@ -533,8 +545,8 @@ let cmd_orders args =
   | "place" :: rest -> cmd_orders_place ~env ~host rest
   | "cancel" :: cid :: _ -> cmd_orders_cancel ~env ~host cid
   | _ ->
-    prerr_endline
-      {|orders <list|get|place|cancel> [--host http://localhost:8080]
+      prerr_endline
+        {|orders <list|get|place|cancel> [--host http://localhost:8080]
 
   list                     list all orders on the running server
   get <cid>                fetch one order by client_order_id
@@ -542,7 +554,7 @@ let cmd_orders args =
         [--kind MARKET|LIMIT|STOP|STOP_LIMIT]
         [--price PRICE] [--stop PRICE] [--tif DAY|GTC|IOC|FOK]
   cancel <cid>             cancel by client_order_id|};
-    exit 2
+      exit 2
 
 let () =
   match Array.to_list Sys.argv with

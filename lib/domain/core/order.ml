@@ -37,12 +37,7 @@ type t = {
   client_order_id : string;
 }
 
-type execution = {
-  ts : int64;
-  quantity : Decimal.t;
-  price : Decimal.t;
-  fee : Decimal.t;
-}
+type execution = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
 
 let remaining_qty (o : t) = Decimal.sub o.quantity o.filled
 
@@ -59,12 +54,19 @@ let kind_to_string = function
   | Stop_limit _ -> "STOP_LIMIT"
 
 let status_to_string = function
-  | New -> "NEW" | Partially_filled -> "PARTIALLY_FILLED"
-  | Filled -> "FILLED" | Cancelled -> "CANCELLED"
-  | Rejected -> "REJECTED" | Expired -> "EXPIRED"
-  | Pending_cancel -> "PENDING_CANCEL" | Pending_new -> "PENDING_NEW"
-  | Suspended -> "SUSPENDED" | Failed -> "FAILED"
+  | New -> "NEW"
+  | Partially_filled -> "PARTIALLY_FILLED"
+  | Filled -> "FILLED"
+  | Cancelled -> "CANCELLED"
+  | Rejected -> "REJECTED"
+  | Expired -> "EXPIRED"
+  | Pending_cancel -> "PENDING_CANCEL"
+  | Pending_new -> "PENDING_NEW"
+  | Suspended -> "SUSPENDED"
+  | Failed -> "FAILED"
 
 let tif_to_string = function
-  | GTC -> "GTC" | DAY -> "DAY" | IOC -> "IOC" | FOK -> "FOK"
-
+  | GTC -> "GTC"
+  | DAY -> "DAY"
+  | IOC -> "IOC"
+  | FOK -> "FOK"

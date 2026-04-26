@@ -10,7 +10,8 @@ type t = {
   client_order_id : string;
   reservation_id : int;
   reason : string;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Domain_event_handlers.Forward_order_to_broker.forward_rejection
 

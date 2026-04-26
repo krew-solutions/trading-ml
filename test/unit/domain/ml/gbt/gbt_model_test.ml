@@ -5,7 +5,8 @@
     produce, but matches the format exactly: same header keys, same
     tree-section shape, same child-encoding convention. *)
 
-let sample_binary = {|tree
+let sample_binary =
+  {|tree
 version=v3
 num_class=1
 num_tree_per_iteration=1
@@ -75,16 +76,14 @@ x1=1
 
     Combined raw score and sigmoid per test input: see each assertion. *)
 
-let sigmoid x = 1.0 /. (1.0 +. exp (-. x))
+let sigmoid x = 1.0 /. (1.0 +. exp (-.x))
 
 let test_parses_header () =
   let m = Gbt.Gbt_model.of_text sample_binary in
   Alcotest.(check int) "num_features" 2 m.num_features;
-  Alcotest.(check (array string)) "feature_names"
-    [| "x0"; "x1" |] m.feature_names;
+  Alcotest.(check (array string)) "feature_names" [| "x0"; "x1" |] m.feature_names;
   Alcotest.(check int) "num_trees" 2 (Array.length m.trees);
-  Alcotest.(check bool) "objective is Binary" true
-    (m.objective = Binary)
+  Alcotest.(check bool) "objective is Binary" true (m.objective = Binary)
 
 let test_binary_predict_basic () =
   let m = Gbt.Gbt_model.of_text sample_binary in
@@ -92,8 +91,7 @@ let test_binary_predict_basic () =
      f0=0.3 → tree1 right → leaf1 = 0.15
      raw = 0.65, sigmoid ≈ 0.6570 *)
   let p = Gbt.Gbt_model.predict m ~features:[| 0.3; 2.0 |] in
-  Alcotest.(check (float 1e-4)) "P(1) at (0.3, 2.0)"
-    (sigmoid 0.65) p
+  Alcotest.(check (float 1e-4)) "P(1) at (0.3, 2.0)" (sigmoid 0.65) p
 
 let test_binary_predict_left_branch () =
   let m = Gbt.Gbt_model.of_text sample_binary in
@@ -101,8 +99,7 @@ let test_binary_predict_left_branch () =
      f0=0.3 → tree1 right → leaf1 = 0.15
      raw = -0.15, sigmoid ≈ 0.4626 *)
   let p = Gbt.Gbt_model.predict m ~features:[| 0.3; 1.0 |] in
-  Alcotest.(check (float 1e-4)) "P(1) at (0.3, 1.0)"
-    (sigmoid (-0.15)) p
+  Alcotest.(check (float 1e-4)) "P(1) at (0.3, 1.0)" (sigmoid (-0.15)) p
 
 let test_binary_predict_right_branch () =
   let m = Gbt.Gbt_model.of_text sample_binary in
@@ -110,8 +107,7 @@ let test_binary_predict_right_branch () =
      f0=1.0 → tree1 right → leaf1 = 0.15
      raw = 0.35, sigmoid ≈ 0.5866 *)
   let p = Gbt.Gbt_model.predict m ~features:[| 1.0; 0.0 |] in
-  Alcotest.(check (float 1e-4)) "P(1) at (1.0, 0.0)"
-    (sigmoid 0.35) p
+  Alcotest.(check (float 1e-4)) "P(1) at (1.0, 0.0)" (sigmoid 0.35) p
 
 let test_nan_uses_default_left () =
   (* decision_type=2 → default_left = true. NaN at f0 in tree 0 should
@@ -121,18 +117,14 @@ let test_nan_uses_default_left () =
      f0=NaN → tree1 left → leaf0 = -0.10
      raw = 0.40, sigmoid ≈ 0.5987 *)
   let p = Gbt.Gbt_model.predict m ~features:[| Float.nan; 2.0 |] in
-  Alcotest.(check (float 1e-4)) "NaN traverses default_left"
-    (sigmoid 0.40) p
+  Alcotest.(check (float 1e-4)) "NaN traverses default_left" (sigmoid 0.40) p
 
 let test_predict_class_probs_binary () =
   let m = Gbt.Gbt_model.of_text sample_binary in
-  let probs = Gbt.Gbt_model.predict_class_probs m
-    ~features:[| 0.3; 2.0 |] in
+  let probs = Gbt.Gbt_model.predict_class_probs m ~features:[| 0.3; 2.0 |] in
   Alcotest.(check int) "two probs" 2 (Array.length probs);
-  Alcotest.(check (float 1e-6)) "sums to 1"
-    1.0 (probs.(0) +. probs.(1));
-  Alcotest.(check (float 1e-4)) "P(1) matches predict"
-    (sigmoid 0.65) probs.(1)
+  Alcotest.(check (float 1e-6)) "sums to 1" 1.0 (probs.(0) +. probs.(1));
+  Alcotest.(check (float 1e-4)) "P(1) matches predict" (sigmoid 0.65) probs.(1)
 
 let test_raw_score_shape () =
   let m = Gbt.Gbt_model.of_text sample_binary in
@@ -142,7 +134,8 @@ let test_raw_score_shape () =
 
 let test_rejects_categorical_split () =
   (* Minimal tree with decision_type=1 (bit 0 set) = categorical. *)
-  let bad = {|tree
+  let bad =
+    {|tree
 version=v3
 num_class=1
 num_tree_per_iteration=1
@@ -163,13 +156,15 @@ is_linear=0
 shrinkage=1
 
 end of trees
-|} in
+|}
+  in
   Alcotest.check_raises "categorical → Invalid_argument"
-    (Invalid_argument "Gbt_model: categorical splits not supported")
-    (fun () -> ignore (Gbt.Gbt_model.of_text bad))
+    (Invalid_argument "Gbt_model: categorical splits not supported") (fun () ->
+      ignore (Gbt.Gbt_model.of_text bad))
 
 let test_rejects_linear_tree () =
-  let bad = {|tree
+  let bad =
+    {|tree
 version=v3
 num_class=1
 num_tree_per_iteration=1
@@ -190,14 +185,16 @@ is_linear=1
 shrinkage=1
 
 end of trees
-|} in
+|}
+  in
   Alcotest.check_raises "linear tree → Invalid_argument"
-    (Invalid_argument "Gbt_model: linear tree leaves not supported")
-    (fun () -> ignore (Gbt.Gbt_model.of_text bad))
+    (Invalid_argument "Gbt_model: linear tree leaves not supported") (fun () ->
+      ignore (Gbt.Gbt_model.of_text bad))
 
 (* Multiclass test: 3 classes, 2 trees per iteration (= 6 trees total
    over 2 iterations), single-feature stumps. *)
-let sample_multiclass = {|tree
+let sample_multiclass =
+  {|tree
 version=v3
 num_class=3
 num_tree_per_iteration=3
@@ -292,8 +289,7 @@ end of trees
 let test_multiclass_parses () =
   let m = Gbt.Gbt_model.of_text sample_multiclass in
   Alcotest.(check int) "num_trees" 6 (Array.length m.trees);
-  Alcotest.(check bool) "objective is Multiclass 3" true
-    (m.objective = Multiclass 3)
+  Alcotest.(check bool) "objective is Multiclass 3" true (m.objective = Multiclass 3)
 
 let test_multiclass_softmax () =
   (* f0=0.0 ≤ 0.5 so every tree picks its left leaf.
@@ -305,25 +301,24 @@ let test_multiclass_softmax () =
   let m = Gbt.Gbt_model.of_text sample_multiclass in
   let raw = Gbt.Gbt_model.raw_score m ~features:[| 0.0 |] in
   Alcotest.(check int) "3 classes" 3 (Array.length raw);
-  Alcotest.(check (float 1e-6)) "raw[0]"  1.2 raw.(0);
+  Alcotest.(check (float 1e-6)) "raw[0]" 1.2 raw.(0);
   Alcotest.(check (float 1e-6)) "raw[1]" (-0.6) raw.(1);
   Alcotest.(check (float 1e-6)) "raw[2]" (-0.6) raw.(2);
   let probs = Gbt.Gbt_model.predict_class_probs m ~features:[| 0.0 |] in
-  Alcotest.(check (float 1e-6)) "probs sum = 1" 1.0
-    (Array.fold_left (+.) 0.0 probs);
-  Alcotest.(check bool) "argmax = 0" true
-    (probs.(0) > probs.(1) && probs.(0) > probs.(2))
+  Alcotest.(check (float 1e-6)) "probs sum = 1" 1.0 (Array.fold_left ( +. ) 0.0 probs);
+  Alcotest.(check bool) "argmax = 0" true (probs.(0) > probs.(1) && probs.(0) > probs.(2))
 
-let tests = [
-  "parses header",               `Quick, test_parses_header;
-  "binary predict basic",        `Quick, test_binary_predict_basic;
-  "binary predict left branch",  `Quick, test_binary_predict_left_branch;
-  "binary predict right branch", `Quick, test_binary_predict_right_branch;
-  "NaN uses default_left",       `Quick, test_nan_uses_default_left;
-  "predict_class_probs binary",  `Quick, test_predict_class_probs_binary;
-  "raw_score shape",             `Quick, test_raw_score_shape;
-  "rejects categorical split",   `Quick, test_rejects_categorical_split;
-  "rejects linear tree",         `Quick, test_rejects_linear_tree;
-  "multiclass parses",           `Quick, test_multiclass_parses;
-  "multiclass softmax",          `Quick, test_multiclass_softmax;
-]
+let tests =
+  [
+    ("parses header", `Quick, test_parses_header);
+    ("binary predict basic", `Quick, test_binary_predict_basic);
+    ("binary predict left branch", `Quick, test_binary_predict_left_branch);
+    ("binary predict right branch", `Quick, test_binary_predict_right_branch);
+    ("NaN uses default_left", `Quick, test_nan_uses_default_left);
+    ("predict_class_probs binary", `Quick, test_predict_class_probs_binary);
+    ("raw_score shape", `Quick, test_raw_score_shape);
+    ("rejects categorical split", `Quick, test_rejects_categorical_split);
+    ("rejects linear tree", `Quick, test_rejects_linear_tree);
+    ("multiclass parses", `Quick, test_multiclass_parses);
+    ("multiclass softmax", `Quick, test_multiclass_softmax);
+  ]

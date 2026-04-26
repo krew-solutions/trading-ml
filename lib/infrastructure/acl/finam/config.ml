@@ -12,7 +12,7 @@ type t = {
   ws_url : Uri.t;
   secret : string;
   account_id : string option;
-  (** Default Market Identifier Code (ISO 10383) appended to bare tickers.
+      (** Default Market Identifier Code (ISO 10383) appended to bare tickers.
       Finam's new API requires symbols in [TICKER@MIC] form, e.g.
       [SBER@MISX] for MOEX. Users that type just [SBER] get [MISX] by
       default; override here for other venues (e.g. [XNGS] for NASDAQ). *)

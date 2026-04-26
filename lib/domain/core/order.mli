@@ -36,17 +36,12 @@ type t = {
   client_order_id : string;
 }
 
+type execution = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
 (** One execution (trade / fill slice) reported by the broker.
     A single {!t} may be filled across multiple executions —
     {!Broker.S.get_executions} returns the list that sums to the
     order's [filled] quantity. Price and fee are per-execution
     (broker's actual numbers), not intended. *)
-type execution = {
-  ts : int64;
-  quantity : Decimal.t;
-  price : Decimal.t;
-  fee : Decimal.t;
-}
 
 val remaining_qty : t -> Decimal.t
 val is_done : t -> bool

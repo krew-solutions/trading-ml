@@ -2,10 +2,10 @@
     Represented as integer value with implicit 8-decimal scale. *)
 
 type t
-(*@ model raw : integer *)
 (** Logical view: the underlying scaled integer. [add]/[sub] are
     linear over [raw]; [mul]/[div] rescale (specs omitted — Gospel's
     stdlib has no integer power). *)
+(*@ model raw : integer *)
 
 val scale : int
 (** Implicit scale: [10^scale] units per 1.0. *)
@@ -17,11 +17,13 @@ val zero : t
 val one : t
 
 val of_int : int -> t
+
 val of_float : float -> t
 (** Lossy; use only at system boundaries (UI, JSON ingest). *)
 
 val to_float : t -> float
 val to_string : t -> string
+
 val of_string : string -> t
 (** Accepts [-?\d+(\.\d+)?]; raises [Invalid_argument] otherwise. *)
 

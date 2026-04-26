@@ -10,7 +10,6 @@
 
 open Core
 
-(** A single executed fill. *)
 type fill = {
   ts : int64;
   instrument : Instrument.t;
@@ -20,8 +19,8 @@ type fill = {
   fee : Decimal.t;
   reason : string;
 }
+(** A single executed fill. *)
 
-(** Summary of a completed backtest run. *)
 type result = {
   final : Portfolio.t;
   fills : fill list;
@@ -30,22 +29,19 @@ type result = {
   total_return : float;
   num_trades : int;
 }
+(** Summary of a completed backtest run. *)
 
+type config = { initial_cash : Decimal.t; fee_rate : float; limits : Risk.limits }
 (** Backtest configuration. *)
-type config = {
-  initial_cash : Decimal.t;
-  fee_rate : float;
-  limits : Risk.limits;
-}
 
-(** Sensible defaults: 1M cash, 5 bps fees, standard risk limits. *)
 val default_config : ?initial_cash:Decimal.t -> unit -> config
+(** Sensible defaults: 1M cash, 5 bps fees, standard risk limits. *)
 
-(** [run ~config ~strategy ~instrument ~candles] executes the backtest.
-    Candles must be in chronological order. *)
 val run :
   config:config ->
   strategy:Strategies.Strategy.t ->
   instrument:Instrument.t ->
   candles:Candle.t list ->
   result
+(** [run ~config ~strategy ~instrument ~candles] executes the backtest.
+    Candles must be in chronological order. *)

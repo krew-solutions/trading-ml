@@ -31,11 +31,17 @@ type order_forwarded = {
     reflect a partial or full fill. *)
 
 type forward_rejection =
-  | Order_rejected_by_broker of
-      { client_order_id : string; reservation_id : int; reason : string }
-  | Broker_unreachable of
-      { client_order_id : string; reservation_id : int; reason : string }
-(** Failure events carry [reservation_id] so the downstream
+  | Order_rejected_by_broker of {
+      client_order_id : string;
+      reservation_id : int;
+      reason : string;
+    }
+  | Broker_unreachable of {
+      client_order_id : string;
+      reservation_id : int;
+      reason : string;
+    }
+      (** Failure events carry [reservation_id] so the downstream
     rejection handler can find and release the earmark. *)
 
 val forward_rejection_to_string : forward_rejection -> string

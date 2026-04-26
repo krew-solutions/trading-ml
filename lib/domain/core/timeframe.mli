@@ -1,9 +1,6 @@
 (** Bar aggregation period. *)
 
-type t =
-  | M1 | M5 | M15 | M30
-  | H1 | H4
-  | D1 | W1 | MN1
+type t = M1 | M5 | M15 | M30 | H1 | H4 | D1 | W1 | MN1
 
 val to_seconds : t -> int
 (** Bar length in whole seconds. Always positive. *)

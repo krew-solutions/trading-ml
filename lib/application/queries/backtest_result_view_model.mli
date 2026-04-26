@@ -6,10 +6,7 @@
     exposes the whole portfolio as a nested DTO. Callers that
     need only the summary can ignore [portfolio]. *)
 
-type equity_point = {
-  ts : int64;
-  equity : float;
-} [@@deriving yojson]
+type equity_point = { ts : int64; equity : float } [@@deriving yojson]
 
 type t = {
   num_trades : int;
@@ -20,7 +17,8 @@ type t = {
   portfolio : Portfolio_view_model.t;
   fills : Fill_view_model.t list;
   equity_curve : equity_point list;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Engine.Backtest.result
 

@@ -4,9 +4,9 @@
     implementation avoids drift between [Finam] and [Bcs] TLS
     configurations (CA loading, domain name validation, etc.). *)
 
+type headers = (string * string) list
 (** Request shape — intentionally tiny. Complex features (multipart,
     streaming bodies) live in the caller, not here. *)
-type headers = (string * string) list
 
 type request = {
   meth : [ `GET | `POST | `PUT | `DELETE ];
@@ -15,10 +15,7 @@ type request = {
   body : string option;
 }
 
-type response = {
-  status : int;
-  body : string;
-}
+type response = { status : int; body : string }
 
 type t = request -> response
 
@@ -41,12 +38,12 @@ let with_auth_retry
     invalidate ();
     let token' = get_token () in
     transport (build_request ~token:token')
-  end else resp
+  end
+  else resp
 
 (** --- Eio-backed implementation --- *)
 
-let read_file path =
-  In_channel.with_open_bin path In_channel.input_all
+let read_file path = In_channel.with_open_bin path In_channel.input_all
 
 let now () =
   match Ptime.of_float_s (Unix.gettimeofday ()) with
@@ -54,18 +51,23 @@ let now () =
   | None -> Some Ptime.epoch
 
 let load_authenticator () =
-  let candidates = [
-    "/etc/ssl/certs/ca-certificates.crt";   (* Debian/Ubuntu *)
-    "/etc/pki/tls/certs/ca-bundle.crt";     (* Fedora/RHEL *)
-    "/etc/ssl/cert.pem";                    (* macOS/OpenBSD *)
-  ] in
+  let candidates =
+    [
+      "/etc/ssl/certs/ca-certificates.crt";
+      (* Debian/Ubuntu *)
+      "/etc/pki/tls/certs/ca-bundle.crt";
+      (* Fedora/RHEL *)
+      "/etc/ssl/cert.pem";
+      (* macOS/OpenBSD *)
+    ]
+  in
   match List.find_opt Sys.file_exists candidates with
   | None -> Error "no CA bundle found in standard locations"
-  | Some path ->
-    let pem = read_file path in
-    match X509.Certificate.decode_pem_multiple pem with
-    | Error (`Msg m) -> Error ("CA decode failed: " ^ m)
-    | Ok certs -> Ok (X509.Authenticator.chain_of_trust ~time:now certs)
+  | Some path -> (
+      let pem = read_file path in
+      match X509.Certificate.decode_pem_multiple pem with
+      | Error (`Msg m) -> Error ("CA decode failed: " ^ m)
+      | Ok certs -> Ok (X509.Authenticator.chain_of_trust ~time:now certs))
 
 (** Per-request deadline. Without a cap a stalled remote or a
     half-open TCP session silently freezes the caller. 30 s is wide
@@ -96,12 +98,13 @@ let make_eio ~env : t =
     let connect uri raw =
       let host =
         match Uri.host uri with
-        | Some h ->
-          (match Domain_name.of_string h with
-           | Ok d ->
-             (match Domain_name.host d with
-              | Ok h -> Some h | Error _ -> None)
-           | Error _ -> None)
+        | Some h -> (
+            match Domain_name.of_string h with
+            | Ok d -> (
+                match Domain_name.host d with
+                | Ok h -> Some h
+                | Error _ -> None)
+            | Error _ -> None)
         | None -> None
       in
       Tls_eio.client_of_flow ?host tls_config raw
@@ -117,12 +120,10 @@ let make_eio ~env : t =
       let body = Option.map Cohttp_eio.Body.of_string req.body in
       let resp, body_in =
         match req.meth with
-        | `GET    -> Cohttp_eio.Client.get    ~sw ~headers client req.url
+        | `GET -> Cohttp_eio.Client.get ~sw ~headers client req.url
         | `DELETE -> Cohttp_eio.Client.delete ~sw ~headers client req.url
-        | `POST   ->
-          Cohttp_eio.Client.post ~sw ~headers ?body client req.url
-        | `PUT    ->
-          Cohttp_eio.Client.put ~sw ~headers ?body client req.url
+        | `POST -> Cohttp_eio.Client.post ~sw ~headers ?body client req.url
+        | `PUT -> Cohttp_eio.Client.put ~sw ~headers ?body client req.url
       in
       let status = Cohttp.Code.code_of_status (Cohttp.Response.status resp) in
       let body_str = Eio.Flow.read_all body_in in
@@ -130,13 +131,14 @@ let make_eio ~env : t =
     with
     | Ok r -> r
     | Error `Timeout ->
-      failwith (Printf.sprintf
-        "HTTP timeout after %.0fs on %s %s"
-        request_timeout_s
-        (match req.meth with
-         | `GET -> "GET" | `POST -> "POST"
-         | `PUT -> "PUT" | `DELETE -> "DELETE")
-        (Uri.to_string req.url))
+        failwith
+          (Printf.sprintf "HTTP timeout after %.0fs on %s %s" request_timeout_s
+             (match req.meth with
+             | `GET -> "GET"
+             | `POST -> "POST"
+             | `PUT -> "PUT"
+             | `DELETE -> "DELETE")
+             (Uri.to_string req.url))
   in
   (* Cohttp's client keeps a pool of TCP+TLS connections for keepalive.
      Brokers (notably BCS) close idle pooled connections after a few
@@ -165,5 +167,4 @@ let make_eio ~env : t =
     | _ -> false
   in
   fun (req : request) : response ->
-    try send_once req
-    with e when is_stale_keepalive e -> send_once req
+    try send_once req with e when is_stale_keepalive e -> send_once req

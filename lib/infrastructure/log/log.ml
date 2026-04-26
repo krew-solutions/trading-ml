@@ -11,17 +11,13 @@
 let src = Logs.Src.create "trading" ~doc:"trading application"
 module L = (val Logs.src_log src : Logs.LOG)
 
-let debug fmt =
-  Printf.ksprintf (fun msg -> L.debug (fun m -> m "%s" msg)) fmt
+let debug fmt = Printf.ksprintf (fun msg -> L.debug (fun m -> m "%s" msg)) fmt
 
-let info fmt =
-  Printf.ksprintf (fun msg -> L.info (fun m -> m "%s" msg)) fmt
+let info fmt = Printf.ksprintf (fun msg -> L.info (fun m -> m "%s" msg)) fmt
 
-let warn fmt =
-  Printf.ksprintf (fun msg -> L.warn (fun m -> m "%s" msg)) fmt
+let warn fmt = Printf.ksprintf (fun msg -> L.warn (fun m -> m "%s" msg)) fmt
 
-let error fmt =
-  Printf.ksprintf (fun msg -> L.err (fun m -> m "%s" msg)) fmt
+let error fmt = Printf.ksprintf (fun msg -> L.err (fun m -> m "%s" msg)) fmt
 
 (** Initialise the [Logs] reporter. Call once from [main]. *)
 let setup ?(level = Logs.Info) () =

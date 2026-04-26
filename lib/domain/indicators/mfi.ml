@@ -6,7 +6,9 @@
 
 open Core
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "MFI: period must be > 0"
 
   type state = {
@@ -15,23 +17,24 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     neg_ring : float Ring.t;
     sum_pos : float;
     sum_neg : float;
-    samples : int;   (* number of signed contributions observed *)
+    samples : int; (* number of signed contributions observed *)
   }
   type output = float
 
   let name = Printf.sprintf "MFI(%d)" C.period
 
-  let init () = {
-    prev_typical = None;
-    pos_ring = Ring.create ~capacity:C.period 0.0;
-    neg_ring = Ring.create ~capacity:C.period 0.0;
-    sum_pos = 0.0; sum_neg = 0.0;
-    samples = 0;
-  }
+  let init () =
+    {
+      prev_typical = None;
+      pos_ring = Ring.create ~capacity:C.period 0.0;
+      neg_ring = Ring.create ~capacity:C.period 0.0;
+      sum_pos = 0.0;
+      sum_neg = 0.0;
+      samples = 0;
+    }
 
   let compute sum_pos sum_neg =
-    if sum_neg = 0.0 then 100.0
-    else 100.0 -. 100.0 /. (1.0 +. sum_pos /. sum_neg)
+    if sum_neg = 0.0 then 100.0 else 100.0 -. (100.0 /. (1.0 +. (sum_pos /. sum_neg)))
 
   let update st c =
     let high = Decimal.to_float c.Candle.high in
@@ -41,43 +44,46 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let typical = (high +. low +. close) /. 3.0 in
     let raw = typical *. vol in
     match st.prev_typical with
-    | None -> { st with prev_typical = Some typical }, None
+    | None -> ({ st with prev_typical = Some typical }, None)
     | Some prev ->
-      let pos = if typical > prev then raw else 0.0 in
-      let neg = if typical < prev then raw else 0.0 in
-      let pr, nr, sum_pos, sum_neg =
-        if Ring.is_full st.pos_ring then
-          let op = Ring.oldest st.pos_ring in
-          let on = Ring.oldest st.neg_ring in
-          Ring.push st.pos_ring pos,
-          Ring.push st.neg_ring neg,
-          st.sum_pos -. op +. pos,
-          st.sum_neg -. on +. neg
-        else
-          Ring.push st.pos_ring pos,
-          Ring.push st.neg_ring neg,
-          st.sum_pos +. pos,
-          st.sum_neg +. neg
-      in
-      let samples = st.samples + 1 in
-      let st' = {
-        prev_typical = Some typical;
-        pos_ring = pr; neg_ring = nr;
-        sum_pos; sum_neg; samples;
-      } in
-      let out =
-        if samples >= C.period then Some (compute sum_pos sum_neg)
-        else None
-      in
-      st', out
+        let pos = if typical > prev then raw else 0.0 in
+        let neg = if typical < prev then raw else 0.0 in
+        let pr, nr, sum_pos, sum_neg =
+          if Ring.is_full st.pos_ring then
+            let op = Ring.oldest st.pos_ring in
+            let on = Ring.oldest st.neg_ring in
+            ( Ring.push st.pos_ring pos,
+              Ring.push st.neg_ring neg,
+              st.sum_pos -. op +. pos,
+              st.sum_neg -. on +. neg )
+          else
+            ( Ring.push st.pos_ring pos,
+              Ring.push st.neg_ring neg,
+              st.sum_pos +. pos,
+              st.sum_neg +. neg )
+        in
+        let samples = st.samples + 1 in
+        let st' =
+          {
+            prev_typical = Some typical;
+            pos_ring = pr;
+            neg_ring = nr;
+            sum_pos;
+            sum_neg;
+            samples;
+          }
+        in
+        let out = if samples >= C.period then Some (compute sum_pos sum_neg) else None in
+        (st', out)
 
   let value st =
-    if st.samples >= C.period then Some (compute st.sum_pos st.sum_neg)
-    else None
+    if st.samples >= C.period then Some (compute st.sum_pos st.sum_neg) else None
 
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module Mk = Make (struct let period = period end) in
+  let module Mk = Make (struct
+    let period = period
+  end) in
   Indicator.make (module Mk)

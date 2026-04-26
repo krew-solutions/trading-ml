@@ -10,5 +10,6 @@
 val handle :
   portfolio:Engine.Portfolio.t ->
   Forward_order_to_broker.forward_rejection ->
-  (Engine.Portfolio.t * Engine.Portfolio.reservation_released,
-   Engine.Portfolio.release_error) Rop.t
+  ( Engine.Portfolio.t * Engine.Portfolio.reservation_released,
+    Engine.Portfolio.release_error )
+  Rop.t

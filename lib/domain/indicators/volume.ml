@@ -15,10 +15,10 @@ module M : Indicator.S = struct
 
   let update _ c =
     let v = Decimal.to_float c.Candle.volume in
-    { value = Some v }, Some v
+    ({ value = Some v }, Some v)
 
   let value st = st.value
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make () = Indicator.make (module M)

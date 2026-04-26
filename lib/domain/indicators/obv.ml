@@ -7,11 +7,7 @@
 open Core
 
 module M : Indicator.S = struct
-  type state = {
-    prev_close : float option;
-    value : float;
-    seeded : bool;
-  }
+  type state = { prev_close : float option; value : float; seeded : bool }
   type output = float
 
   let name = "OBV"
@@ -25,15 +21,15 @@ module M : Indicator.S = struct
       match st.prev_close with
       | None -> st.value
       | Some prev ->
-        if close > prev then st.value +. vol
-        else if close < prev then st.value -. vol
-        else st.value
+          if close > prev then st.value +. vol
+          else if close < prev then st.value -. vol
+          else st.value
     in
     let st' = { prev_close = Some close; value = value'; seeded = true } in
-    st', Some value'
+    (st', Some value')
 
   let value st = if st.seeded then Some st.value else None
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make () = Indicator.make (module M)

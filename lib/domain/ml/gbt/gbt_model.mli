@@ -12,10 +12,10 @@
     ever need them, extend here, don't bolt them into callers. *)
 
 type objective =
-  | Regression    (** Raw tree-sum is the prediction. *)
-  | Binary        (** Sigmoid on tree-sum → P(class=1). *)
+  | Regression  (** Raw tree-sum is the prediction. *)
+  | Binary  (** Sigmoid on tree-sum → P(class=1). *)
   | Multiclass of int
-    (** Softmax over per-class raw scores. For [num_class = k] the
+      (** Softmax over per-class raw scores. For [num_class = k] the
         model carries [k] trees per boosting iteration, interleaved
         in [trees]: tree at position [i] contributes to class
         [i mod k]. *)

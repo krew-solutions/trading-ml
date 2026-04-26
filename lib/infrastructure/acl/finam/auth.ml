@@ -5,16 +5,14 @@
     and refreshes transparently before expiry. Consumers (Rest, Ws_bridge)
     call [current] and treat it as opaque. *)
 
-type jwt = {
-  token : string;
-  expires_at : float;   (* unix epoch seconds *)
-}
+type jwt = { token : string; expires_at : float (* unix epoch seconds *) }
 
 type t = {
   secret : string;
   transport : Http_transport.t;
   base : Uri.t;
-  mutex : Mutex.t;           (* guards [state] ONLY — never held across
+  mutex : Mutex.t;
+      (* guards [state] ONLY — never held across
                                 the HTTP refresh call, otherwise an Eio
                                 fiber yielding inside refresh could
                                 deadlock another fiber trying to read
@@ -22,11 +20,8 @@ type t = {
   mutable state : jwt option;
 }
 
-let make ~secret ~transport ~base = {
-  secret; transport; base;
-  mutex = Mutex.create ();
-  state = None;
-}
+let make ~secret ~transport ~base =
+  { secret; transport; base; mutex = Mutex.create (); state = None }
 
 (** Decode a JWT's payload [exp] claim. Returns [None] on any parsing
     problem; callers fall back to a conservative TTL. *)
@@ -34,20 +29,25 @@ let decode_exp (token : string) : float option =
   try
     let parts = String.split_on_char '.' token in
     match parts with
-    | _ :: payload_b64 :: _ ->
-      let normalise s =
-        let s =
-          String.map (function '-' -> '+' | '_' -> '/' | c -> c) s
+    | _ :: payload_b64 :: _ -> (
+        let normalise s =
+          let s =
+            String.map
+              (function
+                | '-' -> '+'
+                | '_' -> '/'
+                | c -> c)
+              s
+          in
+          let pad = (4 - (String.length s mod 4)) mod 4 in
+          s ^ String.make pad '='
         in
-        let pad = (4 - String.length s mod 4) mod 4 in
-        s ^ String.make pad '='
-      in
-      let raw = Base64.decode_exn (normalise payload_b64) in
-      let j = Yojson.Safe.from_string raw in
-      (match Yojson.Safe.Util.member "exp" j with
-       | `Int n -> Some (float_of_int n)
-       | `Float f -> Some f
-       | _ -> None)
+        let raw = Base64.decode_exn (normalise payload_b64) in
+        let j = Yojson.Safe.from_string raw in
+        match Yojson.Safe.Util.member "exp" j with
+        | `Int n -> Some (float_of_int n)
+        | `Float f -> Some f
+        | _ -> None)
     | _ -> None
   with _ -> None
 
@@ -62,32 +62,31 @@ let margin = 30.0
 let http_refresh t : jwt =
   let path = Uri.path t.base ^ "/v1/sessions" in
   let url = Uri.with_path t.base path in
-  let body = `Assoc [ "secret", `String t.secret ] in
+  let body = `Assoc [ ("secret", `String t.secret) ] in
   let resp =
-    t.transport {
-      meth = `POST;
-      url;
-      headers = [
-        "Content-Type", "application/json";
-        "Accept", "application/json";
-      ];
-      body = Some (Yojson.Safe.to_string body);
-    }
+    t.transport
+      {
+        meth = `POST;
+        url;
+        headers = [ ("Content-Type", "application/json"); ("Accept", "application/json") ];
+        body = Some (Yojson.Safe.to_string body);
+      }
   in
   if resp.status < 200 || resp.status >= 300 then
-    failwith (Printf.sprintf
-      "Finam Auth: /v1/sessions returned %d: %s" resp.status resp.body);
+    failwith
+      (Printf.sprintf "Finam Auth: /v1/sessions returned %d: %s" resp.status resp.body);
   let j = Yojson.Safe.from_string resp.body in
   let open Yojson.Safe.Util in
   let token =
     match member "token" j with
     | `String s -> s
-    | _ ->
-      match member "jwt" j with
-      | `String s -> s
-      | _ -> failwith ("Finam Auth: no token field in " ^ resp.body)
+    | _ -> (
+        match member "jwt" j with
+        | `String s -> s
+        | _ -> failwith ("Finam Auth: no token field in " ^ resp.body))
   in
-  let expires_at = match decode_exp token with
+  let expires_at =
+    match decode_exp token with
     | Some exp -> exp
     | None -> now () +. 600.0
   in
@@ -99,8 +98,7 @@ let with_lock t f =
 
 (** Force-drop the cached JWT so the next [current] refreshes. Called
     by the HTTP retry layer on 401. *)
-let invalidate (t : t) : unit =
-  with_lock t (fun () -> t.state <- None)
+let invalidate (t : t) : unit = with_lock t (fun () -> t.state <- None)
 
 (** Returns a live JWT.
     Fast path: inspect cache under a tiny critical section.
@@ -112,13 +110,13 @@ let invalidate (t : t) : unit =
 let current (t : t) : string =
   let cached =
     with_lock t (fun () ->
-      match t.state with
-      | Some jwt when jwt.expires_at -. now () >= margin -> Some jwt
-      | _ -> None)
+        match t.state with
+        | Some jwt when jwt.expires_at -. now () >= margin -> Some jwt
+        | _ -> None)
   in
   match cached with
   | Some jwt -> jwt.token
   | None ->
-    let fresh = http_refresh t in
-    with_lock t (fun () -> t.state <- Some fresh);
-    fresh.token
+      let fresh = http_refresh t in
+      with_lock t (fun () -> t.state <- Some fresh);
+      fresh.token

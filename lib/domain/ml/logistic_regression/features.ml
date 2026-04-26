@@ -31,13 +31,13 @@ let std xs =
   if n < 2 then 0.0
   else
     let var =
-      List.fold_left (fun acc x -> acc +. (x -. m) *. (x -. m)) 0.0 xs
+      List.fold_left (fun acc x -> acc +. ((x -. m) *. (x -. m))) 0.0 xs
       /. float_of_int (n - 1)
     in
     Float.sqrt var
 
 (** Number of features produced for [n_children] child strategies. *)
-let n_features ~n_children = 2 * n_children + 2
+let n_features ~n_children = (2 * n_children) + 2
 
 (** Extract feature vector from the current bar's child signals and
     recent market data.
@@ -49,20 +49,19 @@ let extract
     ~(signals : Signal.t list)
     ~(candle : Candle.t)
     ~(recent_closes : float list)
-    ~(recent_volumes : float list)
-    : float array =
+    ~(recent_volumes : float list) : float array =
   let n = List.length signals in
-  let arr = Array.make (2 * n + 2) 0.0 in
-  List.iteri (fun i (s : Signal.t) ->
-    arr.(2 * i)     <- signal_to_float s;
-    arr.(2 * i + 1) <- s.strength
-  ) signals;
+  let arr = Array.make ((2 * n) + 2) 0.0 in
+  List.iteri
+    (fun i (s : Signal.t) ->
+      arr.(2 * i) <- signal_to_float s;
+      arr.((2 * i) + 1) <- s.strength)
+    signals;
   let vol_idx = 2 * n in
   let vr_idx = vol_idx + 1 in
   let m_close = mean recent_closes in
   arr.(vol_idx) <-
-    (if Float.abs m_close < 1e-9 then 0.0
-     else std recent_closes /. m_close);
+    (if Float.abs m_close < 1e-9 then 0.0 else std recent_closes /. m_close);
   let m_vol = mean recent_volumes in
   arr.(vr_idx) <-
     (if Float.abs m_vol < 1e-9 then 0.0

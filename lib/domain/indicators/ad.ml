@@ -19,13 +19,12 @@ module M : Indicator.S = struct
     let close = Decimal.to_float c.close in
     let vol = Decimal.to_float c.volume in
     let range = high -. low in
-    let mfm = if range = 0.0 then 0.0
-              else ((close -. low) -. (high -. close)) /. range in
-    let v = st.value +. mfm *. vol in
-    { value = v; seeded = true }, Some v
+    let mfm = if range = 0.0 then 0.0 else (close -. low -. (high -. close)) /. range in
+    let v = st.value +. (mfm *. vol) in
+    ({ value = v; seeded = true }, Some v)
 
   let value st = if st.seeded then Some st.value else None
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make () = Indicator.make (module M)

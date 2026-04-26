@@ -20,17 +20,14 @@ val broker_env_prefix : string -> string
     plus the concrete REST handle for live brokers (the server's
     WS bridge needs it). Synthetic has no REST side. *)
 type opened =
-  | Opened_finam     of { client : Broker.client; rest : Finam.Rest.t }
-  | Opened_bcs       of { client : Broker.client; rest : Bcs.Rest.t }
+  | Opened_finam of { client : Broker.client; rest : Finam.Rest.t }
+  | Opened_bcs of { client : Broker.client; rest : Bcs.Rest.t }
   | Opened_synthetic of { client : Broker.client }
 
 val opened_client : opened -> Broker.client
 
 val open_finam :
-  env:Eio_unix.Stdenv.base ->
-  secret:string ->
-  account:string option ->
-  opened
+  env:Eio_unix.Stdenv.base -> secret:string -> account:string option -> opened
 (** Requires a valid secret + account (errors to stderr + exits
     with status 2 if [account] is [None]). *)
 

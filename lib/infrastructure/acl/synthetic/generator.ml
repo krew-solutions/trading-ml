@@ -16,10 +16,10 @@ let generate ~n ~start_ts ~tf_seconds ~start_price =
       let low = Float.min price close -. Random.State.float rng 0.5 in
       let low = Float.max 0.5 low in
       let volume = 100.0 +. Random.State.float rng 1000.0 in
-      let c = Candle.make
-        ~ts ~open_:(Decimal.of_float price)
-        ~high:(Decimal.of_float high) ~low:(Decimal.of_float low)
-        ~close:(Decimal.of_float close) ~volume:(Decimal.of_float volume)
+      let c =
+        Candle.make ~ts ~open_:(Decimal.of_float price) ~high:(Decimal.of_float high)
+          ~low:(Decimal.of_float low) ~close:(Decimal.of_float close)
+          ~volume:(Decimal.of_float volume)
       in
       loop (i + 1) (c :: acc) close (Int64.add ts (Int64.of_int tf_seconds))
   in

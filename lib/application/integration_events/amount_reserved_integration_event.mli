@@ -7,7 +7,8 @@ type t = {
   quantity : float;
   price : float;
   reserved_cash : float;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Engine.Portfolio.amount_reserved
 

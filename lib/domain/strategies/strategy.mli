@@ -15,23 +15,20 @@ module type S = sig
   val default_params : params
   val init : params -> state
 
-  val on_candle :
-    state -> Instrument.t -> Candle.t -> state * Signal.t
+  val on_candle : state -> Instrument.t -> Candle.t -> state * Signal.t
 end
 
-(** Existential wrapper hiding the concrete state/params types. *)
 type t
+(** Existential wrapper hiding the concrete state/params types. *)
 
+val make : (module S with type state = 's and type params = 'p) -> 'p -> t
 (** [make (module M) params] creates a strategy instance with explicit params. *)
-val make :
-  (module S with type state = 's and type params = 'p) -> 'p -> t
 
+val default : (module S with type state = 's and type params = 'p) -> t
 (** [default (module M)] creates a strategy instance using [M.default_params]. *)
-val default :
-  (module S with type state = 's and type params = 'p) -> t
 
-(** Feed one candle; returns the updated strategy and the resulting signal. *)
 val on_candle : t -> Instrument.t -> Candle.t -> t * Signal.t
+(** Feed one candle; returns the updated strategy and the resulting signal. *)
 
-(** Human-readable name of the underlying strategy module. *)
 val name : t -> string
+(** Human-readable name of the underlying strategy module. *)

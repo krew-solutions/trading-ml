@@ -3,7 +3,4 @@
     e2e. Example: the WebSocket echo roundtrip uses in-process TCP,
     a server-side handshake helper, and the real [Ws_client] stack. *)
 
-let () =
-  Alcotest.run "trading-component" [
-    "ws echo", Ws_echo_test.tests;
-  ]
+let () = Alcotest.run "trading-component" [ ("ws echo", Ws_echo_test.tests) ]

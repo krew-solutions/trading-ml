@@ -4,12 +4,12 @@
     Finam async-api which always emits one JSON doc per frame. *)
 
 type opcode =
-  | Continuation  (* 0x0 *)
-  | Text          (* 0x1 *)
-  | Binary        (* 0x2 *)
-  | Close         (* 0x8 *)
-  | Ping          (* 0x9 *)
-  | Pong          (* 0xA *)
+  | Continuation (* 0x0 *)
+  | Text (* 0x1 *)
+  | Binary (* 0x2 *)
+  | Close (* 0x8 *)
+  | Ping (* 0x9 *)
+  | Pong (* 0xA *)
   | Unknown of int
 
 let opcode_of_int = function
@@ -19,28 +19,25 @@ let opcode_of_int = function
   | 0x8 -> Close
   | 0x9 -> Ping
   | 0xA -> Pong
-  | n   -> Unknown n
+  | n -> Unknown n
 
 let opcode_to_int = function
   | Continuation -> 0x0
-  | Text -> 0x1 | Binary -> 0x2
-  | Close -> 0x8 | Ping -> 0x9 | Pong -> 0xA
+  | Text -> 0x1
+  | Binary -> 0x2
+  | Close -> 0x8
+  | Ping -> 0x9
+  | Pong -> 0xA
   | Unknown n -> n land 0xF
 
-type frame = {
-  fin : bool;
-  opcode : opcode;
-  payload : string;
-}
+type frame = { fin : bool; opcode : opcode; payload : string }
 
 let mask_payload ~key (s : string) : string =
-  if String.length key <> 4 then
-    invalid_arg "ws_frame.mask_payload: key must be 4 bytes";
+  if String.length key <> 4 then invalid_arg "ws_frame.mask_payload: key must be 4 bytes";
   let n = String.length s in
   let out = Bytes.create n in
   for i = 0 to n - 1 do
-    Bytes.set out i
-      (Char.chr (Char.code s.[i] lxor Char.code key.[i land 3]))
+    Bytes.set out i (Char.chr (Char.code s.[i] lxor Char.code key.[i land 3]))
   done;
   Bytes.unsafe_to_string out
 
@@ -50,17 +47,17 @@ let mask_payload ~key (s : string) : string =
     path, used in tests). *)
 let encode ~mask_key (f : frame) : string =
   let buf = Buffer.create (String.length f.payload + 14) in
-  let b0 = (if f.fin then 0x80 else 0) lor (opcode_to_int f.opcode) in
+  let b0 = (if f.fin then 0x80 else 0) lor opcode_to_int f.opcode in
   Buffer.add_char buf (Char.chr b0);
   let len = String.length f.payload in
   let mask_bit = if String.length mask_key = 4 then 0x80 else 0 in
-  if len <= 125 then
-    Buffer.add_char buf (Char.chr (mask_bit lor len))
+  if len <= 125 then Buffer.add_char buf (Char.chr (mask_bit lor len))
   else if len <= 0xFFFF then begin
     Buffer.add_char buf (Char.chr (mask_bit lor 126));
     Buffer.add_char buf (Char.chr ((len lsr 8) land 0xFF));
     Buffer.add_char buf (Char.chr (len land 0xFF))
-  end else begin
+  end
+  else begin
     Buffer.add_char buf (Char.chr (mask_bit lor 127));
     for i = 7 downto 0 do
       Buffer.add_char buf (Char.chr ((len lsr (i * 8)) land 0xFF))
@@ -69,8 +66,8 @@ let encode ~mask_key (f : frame) : string =
   if mask_bit <> 0 then begin
     Buffer.add_string buf mask_key;
     Buffer.add_string buf (mask_payload ~key:mask_key f.payload)
-  end else
-    Buffer.add_string buf f.payload;
+  end
+  else Buffer.add_string buf f.payload;
   Buffer.contents buf
 
 (** Reader protocol the client-side driver talks to: pulls N bytes,
@@ -82,10 +79,10 @@ end
 
 let decode (module R : Reader) : frame =
   let b0 = Char.code (R.read_exact 1).[0] in
-  let fin = (b0 land 0x80) <> 0 in
+  let fin = b0 land 0x80 <> 0 in
   let opcode = opcode_of_int (b0 land 0x0F) in
   let b1 = Char.code (R.read_exact 1).[0] in
-  let masked = (b1 land 0x80) <> 0 in
+  let masked = b1 land 0x80 <> 0 in
   let len7 = b1 land 0x7F in
   let length =
     if len7 < 126 then len7
@@ -102,9 +99,7 @@ let decode (module R : Reader) : frame =
   in
   let mask_key = if masked then R.read_exact 4 else "" in
   let payload = R.read_exact length in
-  let payload =
-    if masked then mask_payload ~key:mask_key payload else payload
-  in
+  let payload = if masked then mask_payload ~key:mask_key payload else payload in
   { fin; opcode; payload }
 
 (** 16 random bytes → base64 (for Sec-WebSocket-Key). Uses the OCaml

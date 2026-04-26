@@ -39,8 +39,7 @@ val filter_map : ('a -> 'b option) -> 'a t -> 'b t
 val take : int -> 'a t -> 'a t
 val zip : 'a t -> 'b t -> ('a * 'b) t
 
-val scan_map :
-  'state -> ('state -> 'a -> 'state * 'b) -> 'a t -> 'b t
+val scan_map : 'state -> ('state -> 'a -> 'state * 'b) -> 'a t -> 'b t
 (** Mealy-transducer: thread [state] through the stream, emitting
     one output per input. The missing-from-stdlib primitive —
     {!Seq.scan} emits only accumulator snapshots, not a distinct
@@ -50,8 +49,7 @@ val scan_map :
     [scan_map state0 step input] evaluates lazily: each forced node
     of the output runs [step] once on the corresponding input. *)
 
-val scan_filter_map :
-  'state -> ('state -> 'a -> 'state * 'b option) -> 'a t -> 'b t
+val scan_filter_map : 'state -> ('state -> 'a -> 'state * 'b option) -> 'a t -> 'b t
 (** Like {!scan_map}, but the step may choose not to emit (returns
     [None]). State still advances either way — useful for gated
     pipelines (e.g. "only emit an order on non-Hold signals, but

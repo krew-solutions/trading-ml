@@ -8,7 +8,8 @@ type t = {
   stop_loss : float option;
   take_profit : float option;
   reason : string;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Core.Signal.t
 

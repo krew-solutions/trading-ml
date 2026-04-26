@@ -6,8 +6,8 @@
 
 type t = {
   flow : Eio.Flow.two_way_ty Eio.Resource.t;
-  buf  : Eio.Buf_read.t;
-  mutex : Eio.Mutex.t;             (* serialises writes to [flow] *)
+  buf : Eio.Buf_read.t;
+  mutex : Eio.Mutex.t; (* serialises writes to [flow] *)
   mutable closed : bool;
 }
 
@@ -28,8 +28,7 @@ let reader_of buf : (module Frame.Reader) =
   (module R)
 
 let write_raw (t : t) (s : string) : unit =
-  Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-    Eio.Flow.copy_string s t.flow)
+  Eio.Mutex.use_rw ~protect:true t.mutex (fun () -> Eio.Flow.copy_string s t.flow)
 
 let send_frame (t : t) (f : Frame.frame) : unit =
   let mask = Frame.random_mask () in
@@ -55,8 +54,7 @@ let send_close (t : t) ?(code = 1000) ?(reason = "") () : unit =
       Bytes.blit_string reason 0 b 2 (String.length reason);
       Bytes.to_string b
     in
-    (try send_frame t { fin = true; opcode = Close; payload }
-     with _ -> ());
+    (try send_frame t { fin = true; opcode = Close; payload } with _ -> ());
     t.closed <- true
   end
 
@@ -69,18 +67,20 @@ let rec recv (t : t) : message =
   match f.opcode with
   | Text -> Text f.payload
   | Binary -> Binary f.payload
-  | Ping -> send_pong t ~payload:f.payload; recv t
-  | Pong -> recv t   (* ignore unsolicited pongs *)
+  | Ping ->
+      send_pong t ~payload:f.payload;
+      recv t
+  | Pong -> recv t (* ignore unsolicited pongs *)
   | Close ->
-    let code, reason =
-      if String.length f.payload >= 2 then
-        let c = (Char.code f.payload.[0] lsl 8) lor Char.code f.payload.[1] in
-        let r = String.sub f.payload 2 (String.length f.payload - 2) in
-        Some c, r
-      else None, ""
-    in
-    send_close t ?code ~reason ();
-    Close { code; reason }
+      let code, reason =
+        if String.length f.payload >= 2 then
+          let c = (Char.code f.payload.[0] lsl 8) lor Char.code f.payload.[1] in
+          let r = String.sub f.payload 2 (String.length f.payload - 2) in
+          (Some c, r)
+        else (None, "")
+      in
+      send_close t ?code ~reason ();
+      Close { code; reason }
   | Continuation | Unknown _ -> recv t
 
 (** --- HTTP Upgrade handshake --- *)
@@ -95,8 +95,7 @@ let build_handshake ~host ~path ~key ~extra_headers =
   Buffer.add_string buf (header_line "Connection" "Upgrade");
   Buffer.add_string buf (header_line "Sec-WebSocket-Key" key);
   Buffer.add_string buf (header_line "Sec-WebSocket-Version" "13");
-  List.iter (fun (k, v) -> Buffer.add_string buf (header_line k v))
-    extra_headers;
+  List.iter (fun (k, v) -> Buffer.add_string buf (header_line k v)) extra_headers;
   Buffer.add_string buf "\r\n";
   Buffer.contents buf
 
@@ -104,51 +103,50 @@ let read_response_headers (buf : Eio.Buf_read.t) : int * (string * string) list 
   let status_line = Eio.Buf_read.line buf in
   let code =
     match String.split_on_char ' ' status_line with
-    | _ :: c :: _ -> (try int_of_string c with _ -> 0)
+    | _ :: c :: _ -> ( try int_of_string c with _ -> 0)
     | _ -> 0
   in
   let rec loop acc =
     match Eio.Buf_read.line buf with
     | "" -> List.rev acc
-    | line ->
-      match String.index_opt line ':' with
-      | None -> loop acc
-      | Some i ->
-        let k = String.sub line 0 i |> String.trim |> String.lowercase_ascii in
-        let v = String.sub line (i + 1) (String.length line - i - 1)
-                |> String.trim in
-        loop ((k, v) :: acc)
+    | line -> (
+        match String.index_opt line ':' with
+        | None -> loop acc
+        | Some i ->
+            let k = String.sub line 0 i |> String.trim |> String.lowercase_ascii in
+            let v = String.sub line (i + 1) (String.length line - i - 1) |> String.trim in
+            loop ((k, v) :: acc))
   in
-  code, loop []
+  (code, loop [])
 
-let find_header hs k =
-  List.assoc_opt (String.lowercase_ascii k) hs
+let find_header hs k = List.assoc_opt (String.lowercase_ascii k) hs
 
 (** Connect to a `wss://` URL, perform the WS handshake, return a live
     client. The caller is expected to register the returned [t] under
     an [Eio.Switch.t] that cancels on teardown (we don't [close] the
     underlying flow here — the switch does). *)
-let connect
-    ~env
-    ~sw
-    ~uri
-    ?(extra_headers = [])
-    ?authenticator
-    () : t =
+let connect ~env ~sw ~uri ?(extra_headers = []) ?authenticator () : t =
   let host =
     match Uri.host uri with
-    | Some h -> h | None -> invalid_arg "ws_client: uri missing host"
+    | Some h -> h
+    | None -> invalid_arg "ws_client: uri missing host"
   in
-  let port = match Uri.port uri with
+  let port =
+    match Uri.port uri with
     | Some p -> p
-    | None ->
-      match Uri.scheme uri with Some "wss" -> 443 | _ -> 80
+    | None -> (
+        match Uri.scheme uri with
+        | Some "wss" -> 443
+        | _ -> 80)
   in
-  let path = match Uri.path_and_query uri with "" -> "/" | p -> p in
+  let path =
+    match Uri.path_and_query uri with
+    | "" -> "/"
+    | p -> p
+  in
   let net = Eio.Stdenv.net env in
   let addr =
-    Eio.Net.getaddrinfo_stream net host ~service:(string_of_int port)
-    |> function
+    Eio.Net.getaddrinfo_stream net host ~service:(string_of_int port) |> function
     | [] -> failwith ("ws_client: cannot resolve " ^ host)
     | a :: _ -> a
   in
@@ -156,25 +154,27 @@ let connect
   let flow : Eio.Flow.two_way_ty Eio.Resource.t =
     match Uri.scheme uri with
     | Some "wss" ->
-      let authenticator = match authenticator with
-        | Some a -> a
-        | None -> fun ?ip:_ ~host:_ _ -> Ok None
-      in
-      let tls_cfg =
-        match Tls.Config.client ~authenticator () with
-        | Ok c -> c
-        | Error (`Msg m) -> failwith ("ws_client: tls config: " ^ m)
-      in
-      let host_opt =
-        match Domain_name.of_string host with
-        | Ok d ->
-          (match Domain_name.host d with Ok h -> Some h | _ -> None)
-        | Error _ -> None
-      in
-      let tls = Tls_eio.client_of_flow ?host:host_opt tls_cfg raw in
-      (tls :> Eio.Flow.two_way_ty Eio.Resource.t)
-    | _ ->
-      (raw :> Eio.Flow.two_way_ty Eio.Resource.t)
+        let authenticator =
+          match authenticator with
+          | Some a -> a
+          | None -> fun ?ip:_ ~host:_ _ -> Ok None
+        in
+        let tls_cfg =
+          match Tls.Config.client ~authenticator () with
+          | Ok c -> c
+          | Error (`Msg m) -> failwith ("ws_client: tls config: " ^ m)
+        in
+        let host_opt =
+          match Domain_name.of_string host with
+          | Ok d -> (
+              match Domain_name.host d with
+              | Ok h -> Some h
+              | _ -> None)
+          | Error _ -> None
+        in
+        let tls = Tls_eio.client_of_flow ?host:host_opt tls_cfg raw in
+        (tls :> Eio.Flow.two_way_ty Eio.Resource.t)
+    | _ -> (raw :> Eio.Flow.two_way_ty Eio.Resource.t)
   in
   let key = Frame.random_key () in
   let handshake = build_handshake ~host ~path ~key ~extra_headers in
@@ -188,14 +188,11 @@ let connect
          can distinguish "silent drop" (0 bytes — usually an auth or
          header-shape check failing at a layer that doesn't bother
          with HTTP error codes) from "truncated response". *)
-      let partial =
-        try Eio.Buf_read.take_all buf
-        with _ -> ""
-      in
-      failwith (Printf.sprintf
-        "ws_client: server closed handshake without response \
-         (received %d bytes: %S)"
-        (String.length partial) partial)
+      let partial = try Eio.Buf_read.take_all buf with _ -> "" in
+      failwith
+        (Printf.sprintf
+           "ws_client: server closed handshake without response (received %d bytes: %S)"
+           (String.length partial) partial)
   in
   if code <> 101 then begin
     (* Drain whatever body the server returned (often a small JSON or
@@ -203,17 +200,15 @@ let connect
        debugging 4xx/5xx). Bounded to keep a misbehaving server from
        hanging the handshake error. *)
     let body =
-      try Eio.Buf_read.take 1024 buf
-      with End_of_file -> Eio.Buf_read.take_all buf
+      try Eio.Buf_read.take 1024 buf with End_of_file -> Eio.Buf_read.take_all buf
     in
-    failwith (Printf.sprintf
-      "ws_client: handshake failed, status %d, body: %s" code body)
+    failwith (Printf.sprintf "ws_client: handshake failed, status %d, body: %s" code body)
   end;
   let expected = Frame.accept_token key in
   (match find_header headers "sec-websocket-accept" with
-   | Some v when v = expected -> ()
-   | Some v ->
-     failwith (Printf.sprintf
-       "ws_client: bad Sec-WebSocket-Accept (got %s, want %s)" v expected)
-   | None -> failwith "ws_client: no Sec-WebSocket-Accept in response");
+  | Some v when v = expected -> ()
+  | Some v ->
+      failwith
+        (Printf.sprintf "ws_client: bad Sec-WebSocket-Accept (got %s, want %s)" v expected)
+  | None -> failwith "ws_client: no Sec-WebSocket-Accept in response");
   { flow; buf; mutex = Eio.Mutex.create (); closed = false }

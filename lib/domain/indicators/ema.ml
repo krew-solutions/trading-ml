@@ -3,14 +3,12 @@
 
 open Core
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "EMA: period must be > 0"
 
-  type state = {
-    samples : int;
-    seed_sum : float;
-    value : float option;
-  }
+  type state = { samples : int; seed_sum : float; value : float option }
 
   type output = float
 
@@ -23,24 +21,30 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let price = Decimal.to_float candle.Candle.close in
     let st =
       if st.samples < C.period - 1 then
-        { samples = st.samples + 1;
-          seed_sum = st.seed_sum +. price;
-          value = None }
+        { samples = st.samples + 1; seed_sum = st.seed_sum +. price; value = None }
       else if st.samples = C.period - 1 then
         let sum = st.seed_sum +. price in
-        { samples = st.samples + 1;
+        {
+          samples = st.samples + 1;
           seed_sum = sum;
-          value = Some (sum /. float_of_int C.period) }
+          value = Some (sum /. float_of_int C.period);
+        }
       else
-        let v = match st.value with Some v -> v | None -> price in
-        { st with value = Some (alpha *. price +. (1.0 -. alpha) *. v) }
+        let v =
+          match st.value with
+          | Some v -> v
+          | None -> price
+        in
+        { st with value = Some ((alpha *. price) +. ((1.0 -. alpha) *. v)) }
     in
-    st, st.value
+    (st, st.value)
 
   let value st = st.value
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module M = Make (struct let period = period end) in
+  let module M = Make (struct
+    let period = period
+  end) in
   Indicator.make (module M)

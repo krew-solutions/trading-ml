@@ -13,7 +13,8 @@ type t = {
   kind : Queries.Order_kind_view_model.t;
   tif : string;
   client_order_id : string;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 (** Command payload — straight from HTTP body, primitive-typed,
     unvalidated. [kind] reuses the view model so the JSON shape
     of the [kind] subtree matches the outbound form. *)
@@ -68,6 +69,6 @@ val reserve :
   fee_rate:float ->
   next_reservation_id:(unit -> int) ->
   unvalidated ->
-  (Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
-   Engine.Portfolio.reservation_error) Rop.t
-
+  ( Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
+    Engine.Portfolio.reservation_error )
+  Rop.t

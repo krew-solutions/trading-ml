@@ -6,5 +6,4 @@
 open Core
 
 let qualify_instrument (i : Instrument.t) : string =
-  Ticker.to_string (Instrument.ticker i)
-  ^ "@" ^ Mic.to_string (Instrument.venue i)
+  Ticker.to_string (Instrument.ticker i) ^ "@" ^ Mic.to_string (Instrument.venue i)

@@ -13,7 +13,8 @@ type t = {
   tif : string;
   status : string;
   created_ts : int64;
-} [@@deriving yojson]
+}
+[@@deriving yojson]
 
 type domain = Core.Order.t
 

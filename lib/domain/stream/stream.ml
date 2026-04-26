@@ -24,17 +24,17 @@ let rec scan_map (state : 'state) step seq () : 'b Seq.node =
   match seq () with
   | Seq.Nil -> Seq.Nil
   | Seq.Cons (x, rest) ->
-    let state', y = step state x in
-    Seq.Cons (y, scan_map state' step rest)
+      let state', y = step state x in
+      Seq.Cons (y, scan_map state' step rest)
 
 let rec scan_filter_map (state : 'state) step seq () : 'b Seq.node =
   match seq () with
   | Seq.Nil -> Seq.Nil
-  | Seq.Cons (x, rest) ->
-    let state', y_opt = step state x in
-    match y_opt with
-    | Some y -> Seq.Cons (y, scan_filter_map state' step rest)
-    | None -> scan_filter_map state' step rest ()
+  | Seq.Cons (x, rest) -> (
+      let state', y_opt = step state x in
+      match y_opt with
+      | Some y -> Seq.Cons (y, scan_filter_map state' step rest)
+      | None -> scan_filter_map state' step rest ())
 
 (* --- Consumption --- *)
 

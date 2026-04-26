@@ -4,7 +4,9 @@
 
 open Core
 
-module Make (C : sig val period : int end) : Indicator.S = struct
+module Make (C : sig
+  val period : int
+end) : Indicator.S = struct
   let () = if C.period <= 0 then invalid_arg "VolumeMA: period must be > 0"
 
   type state = { ring : float Ring.t; sum : float }
@@ -19,23 +21,21 @@ module Make (C : sig val period : int end) : Indicator.S = struct
     let r, sum =
       if Ring.is_full st.ring then
         let old = Ring.oldest st.ring in
-        Ring.push st.ring vol, st.sum -. old +. vol
-      else
-        Ring.push st.ring vol, st.sum +. vol
+        (Ring.push st.ring vol, st.sum -. old +. vol)
+      else (Ring.push st.ring vol, st.sum +. vol)
     in
     let st' = { ring = r; sum } in
-    let out =
-      if Ring.is_full r then Some (sum /. float_of_int C.period) else None
-    in
-    st', out
+    let out = if Ring.is_full r then Some (sum /. float_of_int C.period) else None in
+    (st', out)
 
   let value st =
-    if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period)
-    else None
+    if Ring.is_full st.ring then Some (st.sum /. float_of_int C.period) else None
 
-  let output_to_float x = [x]
+  let output_to_float x = [ x ]
 end
 
 let make ~period =
-  let module Mk = Make (struct let period = period end) in
+  let module Mk = Make (struct
+    let period = period
+  end) in
   Indicator.make (module Mk)

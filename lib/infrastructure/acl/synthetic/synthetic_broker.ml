@@ -23,8 +23,7 @@ type t = {
 
 let make ?(start_ts = 1_704_067_200L) ?(start_price = 100.0) () =
   let state = Random.State.make_self_init () in
-  { start_ts; start_price;
-    wobble = (fun () -> Random.State.float state 1.0) }
+  { start_ts; start_price; wobble = (fun () -> Random.State.float state 1.0) }
 
 let name = "synthetic"
 
@@ -36,24 +35,20 @@ let wobble_last ~rng candles =
   match List.rev candles with
   | [] -> []
   | last :: rest_rev ->
-    let f = Decimal.to_float last.Candle.close in
-    let drift = (rng () *. 2.0 -. 1.0) *. 0.3 in
-    let close = Float.max 1.0 (f +. drift) in
-    let high = Float.max (Decimal.to_float last.high) close in
-    let low = Float.min (Decimal.to_float last.low) close in
-    let updated = Candle.make
-      ~ts:last.ts
-      ~open_:last.open_
-      ~high:(Decimal.of_float high)
-      ~low:(Decimal.of_float low)
-      ~close:(Decimal.of_float close)
-      ~volume:(Decimal.add last.volume (Decimal.of_int 100))
-    in
-    List.rev (updated :: rest_rev)
+      let f = Decimal.to_float last.Candle.close in
+      let drift = ((rng () *. 2.0) -. 1.0) *. 0.3 in
+      let close = Float.max 1.0 (f +. drift) in
+      let high = Float.max (Decimal.to_float last.high) close in
+      let low = Float.min (Decimal.to_float last.low) close in
+      let updated =
+        Candle.make ~ts:last.ts ~open_:last.open_ ~high:(Decimal.of_float high)
+          ~low:(Decimal.of_float low) ~close:(Decimal.of_float close)
+          ~volume:(Decimal.add last.volume (Decimal.of_int 100))
+      in
+      List.rev (updated :: rest_rev)
 
 let bars t ~n ~instrument:_ ~timeframe =
-  Generator.generate
-    ~n ~start_ts:t.start_ts
+  Generator.generate ~n ~start_ts:t.start_ts
     ~tf_seconds:(Timeframe.to_seconds timeframe)
     ~start_price:t.start_price
   |> wobble_last ~rng:t.wobble
@@ -70,12 +65,13 @@ let venues _ = [ Mic.of_string "MISX" ]
     misconfiguration surfaces at the first call instead of silently
     returning empty lists. *)
 let unsupported fn =
-  failwith (Printf.sprintf
-    "synthetic broker does not support %s — \
-     wrap it in Paper.Paper_broker for order simulation" fn)
+  failwith
+    (Printf.sprintf
+       "synthetic broker does not support %s — wrap it in Paper.Paper_broker for order \
+        simulation"
+       fn)
 
-let place_order _ ~instrument:_ ~side:_ ~quantity:_
-    ~kind:_ ~tif:_ ~client_order_id:_ =
+let place_order _ ~instrument:_ ~side:_ ~quantity:_ ~kind:_ ~tif:_ ~client_order_id:_ =
   unsupported "place_order"
 let get_orders _ = unsupported "get_orders"
 let get_order _ ~client_order_id:_ = unsupported "get_order"
@@ -86,19 +82,20 @@ let get_executions _ ~client_order_id:_ = unsupported "get_executions"
     dashed UUIDv4 for log readability; nothing else depends on the
     shape. *)
 let generate_client_order_id _ =
-  Uuidm.v4_gen (Random.State.make_self_init ()) ()
-  |> Uuidm.to_string
+  Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
 let as_broker (t : t) : Broker.client =
-  Broker.make (module struct
-    type nonrec t = t
-    let name = name
-    let bars = bars
-    let venues = venues
-    let place_order = place_order
-    let get_orders = get_orders
-    let get_order = get_order
-    let cancel_order = cancel_order
-    let get_executions = get_executions
-    let generate_client_order_id = generate_client_order_id
-  end) t
+  Broker.make
+    (module struct
+      type nonrec t = t
+      let name = name
+      let bars = bars
+      let venues = venues
+      let place_order = place_order
+      let get_orders = get_orders
+      let get_order = get_order
+      let cancel_order = cancel_order
+      let get_executions = get_executions
+      let generate_client_order_id = generate_client_order_id
+    end)
+    t

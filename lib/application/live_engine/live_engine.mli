@@ -33,24 +33,24 @@ type config = {
   limits : Engine.Risk.limits;
   tif : Order.time_in_force;
   fee_rate : float;
-  (** Commission multiplier on fill notional — mirrors
+      (** Commission multiplier on fill notional — mirrors
       {!Engine.Backtest.config.fee_rate} so a live-engine run with
       the same value produces the same Portfolio P&L as a backtest
       over identical candles. *)
   reconcile_every : int;
-  (** {!reconcile} is invoked automatically every [reconcile_every]
+      (** {!reconcile} is invoked automatically every [reconcile_every]
       bars processed by {!on_bar}. Set to [0] to disable (manual
       [reconcile] only — tests often prefer this). A modest value
       like [10] trades a bit of broker API load for bounded drift
       detection latency. *)
   max_drawdown_pct : float;
-  (** Kill switch: if equity falls below
+      (** Kill switch: if equity falls below
       [peak * (1 - max_drawdown_pct)], the engine halts — no new
       orders are submitted until {!reset} is called. Set to [0.0]
       to disable (no kill switch). Typical production value:
       [0.10] .. [0.20] (10–20%). *)
   rate_limit : (int * float) option;
-  (** [Some (max_orders, window_seconds)] caps submission to
+      (** [Some (max_orders, window_seconds)] caps submission to
       [max_orders] orders within any rolling [window_seconds]
       window. Orders exceeding the limit are dropped (reservation
       released). [None] disables the limit. Useful against

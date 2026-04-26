@@ -1,24 +1,18 @@
 (** List-backed immutable ring. Items stored newest-first — the
     head is the most recent push, the tail is the oldest. *)
 
-type 'a t = {
-  items : 'a list;
-  size : int;
-  capacity : int;
-}
+type 'a t = { items : 'a list; size : int; capacity : int }
 
 let create ~capacity _ = { items = []; size = 0; capacity }
 
 (** Drop the last element of [l]. Assumes [l] non-empty. *)
 let rec drop_last = function
-  | [] | [_] -> []
+  | [] | [ _ ] -> []
   | x :: rest -> x :: drop_last rest
 
 let push r x =
-  if r.size < r.capacity then
-    { r with items = x :: r.items; size = r.size + 1 }
-  else
-    { r with items = x :: drop_last r.items }
+  if r.size < r.capacity then { r with items = x :: r.items; size = r.size + 1 }
+  else { r with items = x :: drop_last r.items }
 
 let is_full r = r.size = r.capacity
 let size r = r.size
@@ -42,8 +36,7 @@ let newest r =
 (** Fold oldest → newest. Internal list is newest-first, so we
     process it via [List.fold_right] which visits right-to-left
     and applies [f] in that order (oldest is rightmost). *)
-let fold r init f =
-  List.fold_right (fun x acc -> f acc x) r.items init
+let fold r init f = List.fold_right (fun x acc -> f acc x) r.items init
 
 let iter r f =
   (* Build reversed list once and iterate — cheaper than

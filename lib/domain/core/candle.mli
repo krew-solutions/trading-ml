@@ -7,7 +7,7 @@
     cross-file models are supported we can drop it. *)
 
 type t = private {
-  ts : int64;       (** open time, unix epoch seconds (UTC) *)
+  ts : int64;  (** open time, unix epoch seconds (UTC) *)
   open_ : Decimal.t;
   high : Decimal.t;
   low : Decimal.t;

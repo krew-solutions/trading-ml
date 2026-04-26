@@ -10,19 +10,19 @@
 
 open Core
 
-(** One bar processed through the trading state machine. *)
 type event = {
   bar : Candle.t;
   state : Step.state;
-  (** Full state snapshot after this tick. Callers that want the
+      (** Full state snapshot after this tick. Callers that want the
       portfolio, strategy instance or [last_bar_ts] read them off
       this snapshot. *)
   settled : (Signal.t * Step.settled) option;
-  (** Populated iff a pending signal executed at [bar.open_]. The
+      (** Populated iff a pending signal executed at [bar.open_]. The
       carried {!Signal.t} is the one that fired (useful for
       logging / reason tracking); {!Step.settled} has the fill
       side/qty/price/fee. *)
 }
+(** One bar processed through the trading state machine. *)
 
 val run : Step.config -> Step.state -> Candle.t Stream.t -> event Stream.t
 (** [run cfg state0 bars] threads [state0] through [bars] via

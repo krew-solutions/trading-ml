@@ -19,11 +19,7 @@ module type S = sig
   (** Identifier used on the CLI (e.g. "finam", "bcs") and in logs. *)
 
   val bars :
-    t ->
-    n:int ->
-    instrument:Instrument.t ->
-    timeframe:Timeframe.t ->
-    Candle.t list
+    t -> n:int -> instrument:Instrument.t -> timeframe:Timeframe.t -> Candle.t list
   (** Fetch the last [n] bars for [instrument] at [timeframe]. The
       adapter routes the request using whatever fields it needs:
       Finam takes [(ticker, mic)]; BCS takes [(ticker, board)] and
@@ -62,8 +58,7 @@ module type S = sig
       may be [Cancelled] (confirmed) or [Pending_cancel] depending on
       the broker's response semantics. *)
 
-  val get_executions :
-    t -> client_order_id:string -> Order.execution list
+  val get_executions : t -> client_order_id:string -> Order.execution list
   (** Per-execution detail for the order identified by
       [client_order_id]. Total [quantity] over the list equals the
       order's [filled]; prices are the broker's actual fill prices
@@ -89,8 +84,7 @@ end
 
 type client = E : (module S with type t = 't) * 't -> client
 
-let make (type a) (module M : S with type t = a) (x : a) : client =
-  E ((module M), x)
+let make (type a) (module M : S with type t = a) (x : a) : client = E ((module M), x)
 
 let name (E ((module M), _)) = M.name
 
@@ -99,20 +93,23 @@ let bars (E ((module M), t)) ~n ~instrument ~timeframe =
 
 let venues (E ((module M), t)) = M.venues t
 
-let place_order (E ((module M), t))
-    ~instrument ~side ~quantity ~kind ~tif ~client_order_id =
+let place_order
+    (E ((module M), t))
+    ~instrument
+    ~side
+    ~quantity
+    ~kind
+    ~tif
+    ~client_order_id =
   M.place_order t ~instrument ~side ~quantity ~kind ~tif ~client_order_id
 
 let get_orders (E ((module M), t)) = M.get_orders t
 
-let get_order (E ((module M), t)) ~client_order_id =
-  M.get_order t ~client_order_id
+let get_order (E ((module M), t)) ~client_order_id = M.get_order t ~client_order_id
 
-let cancel_order (E ((module M), t)) ~client_order_id =
-  M.cancel_order t ~client_order_id
+let cancel_order (E ((module M), t)) ~client_order_id = M.cancel_order t ~client_order_id
 
 let get_executions (E ((module M), t)) ~client_order_id =
   M.get_executions t ~client_order_id
 
-let generate_client_order_id (E ((module M), t)) =
-  M.generate_client_order_id t
+let generate_client_order_id (E ((module M), t)) = M.generate_client_order_id t

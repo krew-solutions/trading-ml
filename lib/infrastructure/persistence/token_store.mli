@@ -21,24 +21,24 @@ type t
 val load : t -> string option
 val save : t -> string -> unit
 
+val env : name:string -> t
 (** Read-only view of an environment variable. [save] is a no-op —
     the process can't mutate its own parent shell's environment. *)
-val env : name:string -> t
 
+val memory : ?initial:string -> unit -> t
 (** In-process volatile store. Useful for unit tests and for the
     `save`-target half of a [fallback] pair. *)
-val memory : ?initial:string -> unit -> t
 
+val file : path:string -> t
 (** On-disk store. Writes land atomically via [tmp + rename], with
     mode 0o600 on the temp file so the replacement inherits safe
     permissions. [load] returns [None] if [path] doesn't exist; any
     other I/O error propagates (callers should not silently ignore
     a permissions failure). The parent directory must exist. *)
-val file : path:string -> t
 
+val fallback : t -> t -> t
 (** Composition: [fallback primary secondary] loads from [primary]
     if it has a value, otherwise falls back to [secondary]. [save]
     writes only to [primary] — the bootstrap source stays immutable,
     which is what you want when pairing an env var (bootstrap) with
     a file (persistent). *)
-val fallback : t -> t -> t

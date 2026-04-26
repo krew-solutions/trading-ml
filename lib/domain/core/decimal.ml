@@ -49,7 +49,9 @@ let to_string x =
     let len = String.length s in
     let trim =
       let i = ref (len - 1) in
-      while !i >= 0 && s.[!i] = '0' do decr i done;
+      while !i >= 0 && s.[!i] = '0' do
+        decr i
+      done;
       String.sub s 0 (!i + 1)
     in
     Printf.sprintf "%s%Ld.%s" sign whole trim
@@ -58,14 +60,14 @@ let of_string s =
   let s = String.trim s in
   if s = "" then invalid_arg "Decimal.of_string: empty";
   let neg_, rest =
-    if s.[0] = '-' then true, String.sub s 1 (String.length s - 1)
-    else if s.[0] = '+' then false, String.sub s 1 (String.length s - 1)
-    else false, s
+    if s.[0] = '-' then (true, String.sub s 1 (String.length s - 1))
+    else if s.[0] = '+' then (false, String.sub s 1 (String.length s - 1))
+    else (false, s)
   in
   let whole, frac =
     match String.index_opt rest '.' with
-    | None -> rest, ""
-    | Some i -> String.sub rest 0 i, String.sub rest (i + 1) (String.length rest - i - 1)
+    | None -> (rest, "")
+    | Some i -> (String.sub rest 0 i, String.sub rest (i + 1) (String.length rest - i - 1))
   in
   let frac =
     if String.length frac > scale then String.sub frac 0 scale
@@ -75,4 +77,3 @@ let of_string s =
   let f = if frac = "" then 0L else Int64.of_string frac in
   let v = Int64.add (Int64.mul w unit_) f in
   if neg_ then Int64.neg v else v
-

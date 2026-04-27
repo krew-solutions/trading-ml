@@ -42,7 +42,7 @@ type settled = {
   fee : Decimal.t;
   reservation_id : int;
       (** Handle into [state.portfolio.reservations] — consumers call
-      {!Portfolio.commit_fill} or {!Portfolio.release} with this id
+      {!Account.Portfolio.commit_fill} or {!Account.Portfolio.release} with this id
       when the broker reports the corresponding fill or rejection.
       In Backtest the commit is immediate (same tick); in live mode
       it awaits a broker event. *)
@@ -50,7 +50,7 @@ type settled = {
 
 type state = private {
   strat : Strategies.Strategy.t;
-  portfolio : Portfolio.t;
+  portfolio : Account.Portfolio.t;
   pending_signal : Signal.t option;
   last_bar_ts : int64;
   reservation_seq : int;
@@ -65,7 +65,7 @@ val execute_pending : config -> state -> Candle.t -> state * (Signal.t * settled
 (** Fire any pending signal at [c.open_]. Sizes via
     {!Risk.size_from_strength} (entries) or existing position
     (exits), gates through {!Risk.check}, applies
-    {!Portfolio.fill}. Returns the updated state (with pending
+    {!Account.Portfolio.fill}. Returns the updated state (with pending
     cleared) and, if a trade happened, the signal that caused it
     plus the {!settled} trade details. Exits require a position of
     the matching direction — Exit_long on a flat or short book
@@ -106,7 +106,7 @@ val commit_partial_fill :
 
     Used when a broker reports a partial fill (split over several
     executions). Raises [Not_found] / [Invalid_argument] per
-    {!Portfolio.commit_partial_fill}. *)
+    {!Account.Portfolio.commit_partial_fill}. *)
 
 val release : state -> reservation_id:int -> state
 (** Drop a reservation without a fill — used on broker reject /

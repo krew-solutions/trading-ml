@@ -22,7 +22,7 @@ type fill = {
 (** A single executed fill. *)
 
 type result = {
-  final : Portfolio.t;
+  final : Account.Portfolio.t;
   fills : fill list;
   equity_curve : (int64 * Decimal.t) list;
   max_drawdown : float;

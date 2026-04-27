@@ -7,7 +7,7 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Engine.Portfolio.reservation_released
+type domain = Account.Portfolio.reservation_released
 
 let of_domain (ev : domain) : t =
   {

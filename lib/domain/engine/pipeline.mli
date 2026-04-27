@@ -37,4 +37,4 @@ val run : Step.config -> Step.state -> Candle.t Stream.t -> event Stream.t
 val equity_at_close : event -> Decimal.t
 (** Mark-to-market equity using [event.bar.close] as the mark for
     [event.state.portfolio]. Convenience — equivalent to
-    [Portfolio.equity event.state.portfolio (fun _ -> Some bar.close)]. *)
+    [Account.Portfolio.equity event.state.portfolio (fun _ -> Some bar.close)]. *)

@@ -1,4 +1,4 @@
-(** Outbound projection of {!Engine.Portfolio.amount_reserved}. *)
+(** Outbound projection of {!Account.Portfolio.amount_reserved}. *)
 
 type t = {
   reservation_id : int;
@@ -10,6 +10,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Engine.Portfolio.amount_reserved
+type domain = Account.Portfolio.amount_reserved
 
 val of_domain : domain -> t

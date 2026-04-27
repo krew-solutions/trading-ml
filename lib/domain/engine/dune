@@ -1,7 +1,7 @@
 (library
  (name engine)
  (public_name trading.engine)
- (libraries core indicators strategies stream))
+ (libraries core account indicators strategies stream))
 
 (rule
  (alias gospel)

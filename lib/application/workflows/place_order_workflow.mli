@@ -16,21 +16,21 @@
     started or stopped before any state changed. *)
 
 type event =
-  | Amount_reserved of Engine.Portfolio.amount_reserved
+  | Amount_reserved of Account.Portfolio.amount_reserved
   | Order_forwarded of Domain_event_handlers.Forward_order_to_broker.order_forwarded
   | Forward_rejected of Domain_event_handlers.Forward_order_to_broker.forward_rejection
-  | Reservation_released of Engine.Portfolio.reservation_released
+  | Reservation_released of Account.Portfolio.reservation_released
 
 type error =
   | Validation_errors of Commands.Place_order_command.validation_error list
-  | Reservation_rejected of Engine.Portfolio.reservation_error
+  | Reservation_rejected of Account.Portfolio.reservation_error
 
 val run :
-  portfolio:Engine.Portfolio.t ->
+  portfolio:Account.Portfolio.t ->
   market_price:Core.Decimal.t ->
   slippage_buffer:float ->
   fee_rate:float ->
   next_reservation_id:(unit -> int) ->
   place_order:Domain_event_handlers.Forward_order_to_broker.place_order_port ->
   Commands.Place_order_command.t ->
-  (Engine.Portfolio.t * event list, error) result
+  (Account.Portfolio.t * event list, error) result

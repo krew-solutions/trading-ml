@@ -8,8 +8,8 @@
     reservation so the cash/qty becomes available again. *)
 
 val handle :
-  portfolio:Engine.Portfolio.t ->
+  portfolio:Account.Portfolio.t ->
   Forward_order_to_broker.forward_rejection ->
-  ( Engine.Portfolio.t * Engine.Portfolio.reservation_released,
-    Engine.Portfolio.release_error )
+  ( Account.Portfolio.t * Account.Portfolio.reservation_released,
+    Account.Portfolio.release_error )
   Rop.t

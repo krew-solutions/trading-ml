@@ -54,21 +54,21 @@ val to_unvalidated : t -> (unvalidated, validation_error) Rop.t
 (** {1 Step 1: reserve funds / securities on local portfolio}
 
     Thin application-level handler over
-    {!Engine.Portfolio.try_reserve}: the reservation invariant
-    and the event {!Engine.Portfolio.amount_reserved} live in
+    {!Account.Portfolio.try_reserve}: the reservation invariant
+    and the event {!Account.Portfolio.amount_reserved} live in
     the domain aggregate; this step just threads the command's
     configuration (market price, slippage buffer, fee rate) and
     generates the reservation id. *)
 
-val reservation_error_to_string : Engine.Portfolio.reservation_error -> string
+val reservation_error_to_string : Account.Portfolio.reservation_error -> string
 
 val reserve :
-  portfolio:Engine.Portfolio.t ->
+  portfolio:Account.Portfolio.t ->
   market_price:Decimal.t ->
   slippage_buffer:float ->
   fee_rate:float ->
   next_reservation_id:(unit -> int) ->
   unvalidated ->
-  ( Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
-    Engine.Portfolio.reservation_error )
+  ( Account.Portfolio.t * Account.Portfolio.amount_reserved,
+    Account.Portfolio.reservation_error )
   Rop.t

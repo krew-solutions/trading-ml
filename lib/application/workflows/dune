@@ -1,4 +1,4 @@
 (library
  (name workflows)
  (public_name trading.workflows)
- (libraries core engine commands domain_event_handlers rop))
+ (libraries core account engine commands domain_event_handlers rop))

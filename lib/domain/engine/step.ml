@@ -17,7 +17,7 @@ type settled = {
 
 type state = {
   strat : Strategies.Strategy.t;
-  portfolio : Portfolio.t;
+  portfolio : Account.Portfolio.t;
   pending_signal : Signal.t option;
   last_bar_ts : int64;
   reservation_seq : int;
@@ -26,7 +26,7 @@ type state = {
 let make_state ~strategy ~cash =
   {
     strat = strategy;
-    portfolio = Portfolio.empty ~cash;
+    portfolio = Account.Portfolio.empty ~cash;
     pending_signal = None;
     last_bar_ts = Int64.min_int;
     reservation_seq = 0;
@@ -35,7 +35,7 @@ let make_state ~strategy ~cash =
 let size_for_signal ~config ~portfolio ~price (sig_ : Signal.t) :
     (Side.t * Decimal.t) option =
   let mark _ = Some price in
-  let equity = Portfolio.equity portfolio mark in
+  let equity = Account.Portfolio.equity portfolio mark in
   let entry_qty side =
     let q =
       Risk.size_from_strength ~equity ~price ~limits:config.limits
@@ -48,12 +48,12 @@ let size_for_signal ~config ~portfolio ~price (sig_ : Signal.t) :
   | Enter_long -> entry_qty Side.Buy
   | Enter_short -> entry_qty Side.Sell
   | Exit_long -> (
-      match Portfolio.position portfolio config.instrument with
+      match Account.Portfolio.position portfolio config.instrument with
       | Some p when Decimal.is_positive p.quantity ->
           Some (Side.Sell, Decimal.abs p.quantity)
       | _ -> None)
   | Exit_short -> (
-      match Portfolio.position portfolio config.instrument with
+      match Account.Portfolio.position portfolio config.instrument with
       | Some p when Decimal.is_negative p.quantity ->
           Some (Side.Buy, Decimal.abs p.quantity)
       | _ -> None)
@@ -79,7 +79,7 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
               in
               let reservation_id = state.reservation_seq in
               let portfolio_r =
-                Portfolio.reserve state.portfolio ~id:reservation_id ~side
+                Account.Portfolio.reserve state.portfolio ~id:reservation_id ~side
                   ~instrument:config.instrument ~quantity:q ~price ~slippage_buffer:0.0
                   ~fee_rate:config.fee_rate
               in
@@ -88,7 +88,7 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
            event arrives and calls {!commit_fill} externally. *)
               let portfolio' =
                 if config.auto_commit then
-                  Portfolio.commit_fill portfolio_r ~id:reservation_id ~actual_quantity:q
+                  Account.Portfolio.commit_fill portfolio_r ~id:reservation_id ~actual_quantity:q
                     ~actual_price:price ~actual_fee:fee
                 else portfolio_r
               in
@@ -101,20 +101,20 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
 
 let commit_fill state ~reservation_id ~actual_quantity ~actual_price ~actual_fee =
   let portfolio' =
-    Portfolio.commit_fill state.portfolio ~id:reservation_id ~actual_quantity
+    Account.Portfolio.commit_fill state.portfolio ~id:reservation_id ~actual_quantity
       ~actual_price ~actual_fee
   in
   { state with portfolio = portfolio' }
 
 let commit_partial_fill state ~reservation_id ~actual_quantity ~actual_price ~actual_fee =
   let portfolio' =
-    Portfolio.commit_partial_fill state.portfolio ~id:reservation_id ~actual_quantity
+    Account.Portfolio.commit_partial_fill state.portfolio ~id:reservation_id ~actual_quantity
       ~actual_price ~actual_fee
   in
   { state with portfolio = portfolio' }
 
 let release state ~reservation_id =
-  let portfolio' = Portfolio.release state.portfolio ~id:reservation_id in
+  let portfolio' = Account.Portfolio.release state.portfolio ~id:reservation_id in
   { state with portfolio = portfolio' }
 
 let advance_strategy config state (c : Candle.t) : state =

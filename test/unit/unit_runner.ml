@@ -16,7 +16,6 @@ let () =
       ("isin", Isin_test.tests);
       ("board", Board_test.tests);
       ("instrument", Instrument_test.tests);
-      ("portfolio", Portfolio_test.tests);
       ("backtest", Backtest_test.tests);
       (* Indicators — one file per indicator, mirrored from lib *)
       ("sma", Sma_test.tests);

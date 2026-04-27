@@ -1,6 +1,6 @@
 (library
  (name commands)
  (public_name trading.commands)
- (libraries core engine queries rop yojson ppx_yojson_conv_lib)
+ (libraries core account engine queries rop yojson ppx_yojson_conv_lib)
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

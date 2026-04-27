@@ -1,4 +1,4 @@
-(** Domain event handler: reacts to {!Engine.Portfolio.amount_reserved}
+(** Domain event handler: reacts to {!Account.Portfolio.amount_reserved}
     by forwarding the reservation to the broker as a new order.
 
     Triggered by any source of the event: the manual
@@ -53,5 +53,5 @@ val handle :
   kind:Order.kind ->
   tif:Order.time_in_force ->
   client_order_id:string ->
-  Engine.Portfolio.amount_reserved ->
+  Account.Portfolio.amount_reserved ->
   (order_forwarded, forward_rejection) Rop.t

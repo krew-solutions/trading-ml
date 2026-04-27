@@ -149,7 +149,7 @@ let submit_order t ~(strat_name : string) (settled : Engine.Step.settled) =
 let update_drawdown t (event : Engine.Pipeline.event) =
   if t.cfg.max_drawdown_pct > 0.0 && not t.halted then begin
     let mark _ = Some event.bar.Candle.close in
-    let equity = Engine.Portfolio.equity event.state.portfolio mark in
+    let equity = Account.Portfolio.equity event.state.portfolio mark in
     if Decimal.compare equity t.peak_equity > 0 then t.peak_equity <- equity;
     let peak = Decimal.to_float t.peak_equity in
     let curr = Decimal.to_float equity in
@@ -304,7 +304,7 @@ let on_fill_event t (fe : fill_event) =
 
 let position t =
   with_lock t (fun () ->
-      match Engine.Portfolio.position t.state.portfolio t.cfg.instrument with
+      match Account.Portfolio.position t.state.portfolio t.cfg.instrument with
       | Some p -> p.quantity
       | None -> Decimal.zero)
 
@@ -317,6 +317,6 @@ let halted t = with_lock t (fun () -> t.halted)
 let reset t =
   with_lock t (fun () ->
       let mark _ = None in
-      t.peak_equity <- Engine.Portfolio.equity t.state.portfolio mark;
+      t.peak_equity <- Account.Portfolio.equity t.state.portfolio mark;
       t.halted <- false;
       Log.info "[engine] reset — peak_equity=%s" (Decimal.to_string t.peak_equity))

@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Engine.Portfolio.t}.
+(** Read-model DTO for {!Account.Portfolio.t}.
 
     Positions are projected as a flat list. The domain stores
     them keyed by instrument for O(log n) lookup, but the
@@ -13,6 +13,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Engine.Portfolio.t
+type domain = Account.Portfolio.t
 
 val of_domain : domain -> t

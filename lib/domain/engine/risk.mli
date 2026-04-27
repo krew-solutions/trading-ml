@@ -24,7 +24,7 @@ val size_from_strength :
     the per-instrument notional cap. Returns a positive quantity. *)
 
 val check :
-  portfolio:Portfolio.t ->
+  portfolio:Account.Portfolio.t ->
   limits:limits ->
   instrument:Instrument.t ->
   side:Side.t ->

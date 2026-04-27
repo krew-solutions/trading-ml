@@ -20,7 +20,7 @@ type fill = {
 }
 
 type result = {
-  final : Portfolio.t;
+  final : Account.Portfolio.t;
   fills : fill list;
   equity_curve : (int64 * Decimal.t) list;
   max_drawdown : float;
@@ -91,11 +91,11 @@ let run
   let final_portfolio =
     match List.rev events with
     | e :: _ -> e.Pipeline.state.portfolio
-    | [] -> Portfolio.empty ~cash:config.initial_cash
+    | [] -> Account.Portfolio.empty ~cash:config.initial_cash
   in
   let total_return =
     let init_c = Decimal.to_float config.initial_cash in
-    let fin = Portfolio.equity final_portfolio (fun _ -> None) |> Decimal.to_float in
+    let fin = Account.Portfolio.equity final_portfolio (fun _ -> None) |> Decimal.to_float in
     if init_c = 0.0 then 0.0 else (fin -. init_c) /. init_c
   in
   {

@@ -3,7 +3,7 @@ open Core
 type t = { instrument : Instrument_view_model.t; quantity : float; avg_price : float }
 [@@deriving yojson]
 
-type domain = Engine.Portfolio.position
+type domain = Account.Portfolio.position
 
 let of_domain (p : domain) : t =
   {

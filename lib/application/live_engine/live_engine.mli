@@ -15,7 +15,7 @@
     - {!Engine.Risk.check} runs before every order; a rejection
       (max_leverage, max_gross_exposure, min_cash_buffer) drops the
       signal, matching the backtester's behaviour on the same limits.
-    - The engine keeps its own {!Engine.Portfolio.t} and updates it
+    - The engine keeps its own {!Account.Portfolio.t} and updates it
       synthetically on the expected fill price, which makes paper
       P&L converge with a backtest over the same candle stream.
 
@@ -88,10 +88,10 @@ val position : t -> Decimal.t
     reflects what the engine *expected* to happen, not reconciled
     broker reality. *)
 
-val portfolio : t -> Engine.Portfolio.t
+val portfolio : t -> Account.Portfolio.t
 (** Full portfolio snapshot: cash, positions, realized PnL.
     Updated synthetically at each simulated fill using the same
-    {!Engine.Portfolio.fill} transitions as the backtester. *)
+    {!Account.Portfolio.fill} transitions as the backtester. *)
 
 val placed : t -> Order.t list
 (** Chronological list of orders the engine has submitted via

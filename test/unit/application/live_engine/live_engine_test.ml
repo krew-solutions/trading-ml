@@ -379,12 +379,12 @@ let test_reconcile_releases_rejected () =
   let e = mk_engine ~broker ~action:Signal.Enter_long in
   Live_engine.on_bar e (bar ~ts:100 ~px:100.0);
   Live_engine.on_bar e (bar ~ts:200 ~px:100.0);
-  let before = Engine.Portfolio.available_cash (Live_engine.portfolio e) in
+  let before = Account.Portfolio.available_cash (Live_engine.portfolio e) in
   (match Reporting_broker.(r.orders) with
   | [ o ] -> set_status r o.client_order_id Order.Rejected
   | _ -> Alcotest.fail "expected one order");
   Live_engine.reconcile e;
-  let after = Engine.Portfolio.available_cash (Live_engine.portfolio e) in
+  let after = Account.Portfolio.available_cash (Live_engine.portfolio e) in
   Alcotest.(check bool)
     "reservation released → available_cash grows" true
     (Decimal.compare after before > 0)

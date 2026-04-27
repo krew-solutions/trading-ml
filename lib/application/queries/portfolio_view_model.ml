@@ -8,7 +8,7 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Engine.Portfolio.t
+type domain = Account.Portfolio.t
 
 let of_domain (p : domain) : t =
   {

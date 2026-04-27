@@ -202,9 +202,9 @@ let test_portfolio_updates_on_fill () =
     "position 10 @ 101 after buy"
     (Some ("SBER", d 101.0))
     (Option.map
-       (fun (pos : Engine.Portfolio.position) ->
+       (fun (pos : Account.Portfolio.position) ->
          (Ticker.to_string (Instrument.ticker pos.instrument), pos.avg_price))
-       (Engine.Portfolio.position pf inst));
+       (Account.Portfolio.position pf inst));
   let expected_cash = Decimal.sub (d_int 100_000) (Decimal.mul (d_int 10) (d 101.0)) in
   Alcotest.(check decimal_testable) "cash debited" expected_cash pf.cash
 

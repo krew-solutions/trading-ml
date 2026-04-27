@@ -41,26 +41,26 @@ type unvalidated = {
 }
 
 let reservation_error_to_string = function
-  | Engine.Portfolio.Insufficient_cash { required; available } ->
+  | Account.Portfolio.Insufficient_cash { required; available } ->
       Printf.sprintf "insufficient cash: required %s, available %s"
         (Decimal.to_string required) (Decimal.to_string available)
-  | Engine.Portfolio.Insufficient_qty { required; available } ->
+  | Account.Portfolio.Insufficient_qty { required; available } ->
       Printf.sprintf "insufficient quantity: required %s, available %s"
         (Decimal.to_string required) (Decimal.to_string available)
 
 let reserve
-    ~(portfolio : Engine.Portfolio.t)
+    ~(portfolio : Account.Portfolio.t)
     ~(market_price : Decimal.t)
     ~(slippage_buffer : float)
     ~(fee_rate : float)
     ~(next_reservation_id : unit -> int)
     (u : unvalidated) :
-    ( Engine.Portfolio.t * Engine.Portfolio.amount_reserved,
-      Engine.Portfolio.reservation_error )
+    ( Account.Portfolio.t * Account.Portfolio.amount_reserved,
+      Account.Portfolio.reservation_error )
     Rop.t =
   let id = next_reservation_id () in
   Rop.of_result
-    (Engine.Portfolio.try_reserve portfolio ~id ~side:u.side ~instrument:u.instrument
+    (Account.Portfolio.try_reserve portfolio ~id ~side:u.side ~instrument:u.instrument
        ~quantity:u.quantity ~price:market_price ~slippage_buffer ~fee_rate)
 
 let parse_symbol raw : (Instrument.t, validation_error) Rop.t =

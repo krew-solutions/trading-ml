@@ -1,6 +1,6 @@
 (** Read-model DTO for {!Engine.Backtest.result}.
 
-    The domain result carries a full {!Engine.Portfolio.t} under
+    The domain result carries a full {!Account.Portfolio.t} under
     [final]; the DTO lifts the two headline scalars
     (final cash / realized PnL) next to the aggregate stats and
     exposes the whole portfolio as a nested DTO. Callers that

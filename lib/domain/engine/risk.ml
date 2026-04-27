@@ -35,7 +35,7 @@ let size_from_strength
   if Decimal.is_zero price then Decimal.zero else Decimal.div budget price
 
 let check
-    ~(portfolio : Portfolio.t)
+    ~(portfolio : Account.Portfolio.t)
     ~(limits : limits)
     ~instrument:(_instrument : Instrument.t)
     ~(side : Side.t)
@@ -49,7 +49,7 @@ let check
     (* Uses available_cash (cash minus outstanding reservations) so
        back-to-back signals on consecutive bars can't collectively
        overspend. For reservation-free portfolios this equals cash. *)
-    let available = Portfolio.available_cash portfolio in
+    let available = Account.Portfolio.available_cash portfolio in
     let new_available =
       match side with
       | Side.Buy -> Decimal.sub available notional
@@ -60,7 +60,7 @@ let check
     else
       let gross =
         List.fold_left
-          (fun acc (_, (pos : Portfolio.position)) ->
+          (fun acc (_, (pos : Account.Portfolio.position)) ->
             let p =
               match mark pos.instrument with
               | Some m -> m
@@ -73,7 +73,7 @@ let check
       if Decimal.compare gross' limits.max_gross_exposure > 0 then
         Reject "max_gross_exposure"
       else
-        let equity = Portfolio.equity portfolio mark in
+        let equity = Account.Portfolio.equity portfolio mark in
         if Decimal.is_positive equity then
           let lev = Decimal.to_float gross' /. Decimal.to_float equity in
           if lev > limits.max_leverage then Reject "max_leverage" else Accept quantity

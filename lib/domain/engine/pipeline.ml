@@ -18,4 +18,4 @@ let run (cfg : Step.config) (state0 : Step.state) : Candle.t Stream.t -> event S
 
 let equity_at_close (e : event) : Decimal.t =
   let mark _ = Some e.bar.Candle.close in
-  Portfolio.equity e.state.portfolio mark
+  Account.Portfolio.equity e.state.portfolio mark

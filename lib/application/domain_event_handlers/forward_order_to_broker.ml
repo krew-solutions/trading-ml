@@ -40,7 +40,7 @@ let handle
     ~(kind : Order.kind)
     ~(tif : Order.time_in_force)
     ~(client_order_id : string)
-    (ev : Engine.Portfolio.amount_reserved) : (order_forwarded, forward_rejection) Rop.t =
+    (ev : Account.Portfolio.amount_reserved) : (order_forwarded, forward_rejection) Rop.t =
   try
     let broker_order =
       place_order ~instrument:ev.instrument ~side:ev.side ~quantity:ev.quantity ~kind ~tif

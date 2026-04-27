@@ -57,8 +57,8 @@ let parse_timeframe s = try Timeframe.of_string s with _ -> Timeframe.H1
     return []. Both masked real errors. Callers that want
     deterministic mock data run the server with [--broker synthetic]
     — a {!Synthetic.Synthetic_broker} adapter on the same path. *)
-let fetch_candles client ~instrument ~n ~timeframe =
-  Broker.bars client ~n ~instrument ~timeframe
+let fetch_candles broker ~instrument ~n ~timeframe =
+  Broker.bars broker ~n ~instrument ~timeframe
 
 let strategy_params_of_json j =
   match j with
@@ -75,7 +75,7 @@ let strategy_params_of_json j =
         fields
   | _ -> []
 
-let run_backtest client body_str =
+let run_backtest broker body_str =
   let j = Yojson.Safe.from_string body_str in
   let open Yojson.Safe.Util in
   let instrument = Instrument.of_qualified (member "symbol" j |> to_string) in
@@ -95,7 +95,7 @@ let run_backtest client body_str =
   | None -> `Assoc [ ("error", `String "unknown strategy") ]
   | Some spec ->
       let strat = spec.build params in
-      let candles = fetch_candles client ~instrument ~n ~timeframe in
+      let candles = fetch_candles broker ~instrument ~n ~timeframe in
       let cfg = Engine.Backtest.default_config () in
       let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
       Api.backtest_result_json r
@@ -163,7 +163,7 @@ let sse_expert (registry : Stream.t) ~instrument ~timeframe =
 
 (** Pure routing: given method+path, return (status, action). Kept
     separate from request logging so [handler] can log uniformly. *)
-let route client registry request body : int * Cohttp_eio.Server.response_action =
+let route broker registry request body : int * Cohttp_eio.Server.response_action =
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
   let meth = Cohttp.Request.meth request in
@@ -175,9 +175,9 @@ let route client registry request body : int * Cohttp_eio.Server.response_action
     | `GET, "/api/strategies" -> ok (json_response (Api.strategies_catalog ()))
     | `GET, "/api/exchanges" ->
         let venues =
-          try Broker.venues client
+          try Broker.venues broker
           with e ->
-            Log.warn "%s venues failed: %s" (Broker.name client) (Printexc.to_string e);
+            Log.warn "%s venues failed: %s" (Broker.name broker) (Printexc.to_string e);
             []
         in
         let j : Yojson.Safe.t =
@@ -193,37 +193,37 @@ let route client registry request body : int * Cohttp_eio.Server.response_action
         let timeframe = parse_timeframe (get_query uri "timeframe") in
         ok
           (json_response
-             (Api.candles_json (fetch_candles client ~instrument ~n ~timeframe)))
+             (Api.candles_json (fetch_candles broker ~instrument ~n ~timeframe)))
     | `GET, "/api/stream" ->
         let instrument = Instrument.of_qualified (get_query uri "symbol") in
         let timeframe = parse_timeframe (get_query uri "timeframe") in
         (200, `Expert (sse_expert registry ~instrument ~timeframe))
     | `POST, "/api/backtest" ->
         let body = Eio.Flow.read_all body in
-        ok (json_response (run_backtest client body))
+        ok (json_response (run_backtest broker body))
     | `GET, "/api/orders" ->
-        let orders = Broker.get_orders client in
+        let orders = Broker.get_orders broker in
         ok (json_response (Api.orders_json orders))
     | `POST, "/api/orders" ->
         let body = Eio.Flow.read_all body in
         let req = Api.place_order_of_json (Yojson.Safe.from_string body) in
         let o =
-          Broker.place_order client ~instrument:req.instrument ~side:req.side
+          Broker.place_order broker ~instrument:req.instrument ~side:req.side
             ~quantity:req.quantity ~kind:req.kind ~tif:req.tif
             ~client_order_id:req.client_order_id
         in
         ok (json_response (Api.order_json o))
     | `GET, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/" ->
         let cid = String.sub path 12 (String.length path - 12) in
-        let o = Broker.get_order client ~client_order_id:cid in
+        let o = Broker.get_order broker ~client_order_id:cid in
         ok (json_response (Api.order_json o))
     | `DELETE, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/"
       ->
         let cid = String.sub path 12 (String.length path - 12) in
-        let o = Broker.cancel_order client ~client_order_id:cid in
+        let o = Broker.cancel_order broker ~client_order_id:cid in
         ok (json_response (Api.order_json o))
     | `GET, "/" | `GET, "/health" ->
-        ok (string_response ("ok (" ^ Broker.name client ^ ")"))
+        ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
     | _ -> (404, `Response (string_response ~status:`Not_found "not found"))
   with e ->
     ( 500,
@@ -231,7 +231,7 @@ let route client registry request body : int * Cohttp_eio.Server.response_action
         (json_response ~status:`Internal_server_error
            (`Assoc [ ("error", `String (Printexc.to_string e)) ])) )
 
-let handler client registry _conn request body =
+let handler broker registry _conn request body =
   let t0 = Unix.gettimeofday () in
   let uri = Cohttp.Request.uri request in
   let meth_str = Cohttp.Code.string_of_method (Cohttp.Request.meth request) in
@@ -239,7 +239,7 @@ let handler client registry _conn request body =
     let q = Uri.query uri in
     if q = [] then Uri.path uri else Uri.path uri ^ "?" ^ Uri.encoded_of_query q
   in
-  let status, action = route client registry request body in
+  let status, action = route broker registry request body in
   let dt_ms = (Unix.gettimeofday () -. t0) *. 1000. in
   (match action with
   | `Expert _ ->
@@ -266,10 +266,10 @@ let no_live_setup : live_setup =
     bind = (fun _ -> ());
   }
 
-let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~client () =
+let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~broker () =
   Eio.Switch.run @@ fun sw ->
   let s = setup ~sw in
-  let fetch ~instrument ~n ~timeframe = fetch_candles client ~instrument ~n ~timeframe in
+  let fetch ~instrument ~n ~timeframe = fetch_candles broker ~instrument ~n ~timeframe in
   let registry =
     Stream.create ~on_first_subscriber:s.on_first ~on_last_unsubscriber:s.on_last ~env ~sw
       ~fetch ()
@@ -280,6 +280,6 @@ let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~client () =
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
   in
   let server =
-    Cohttp_eio.Server.make_response_action ~callback:(handler client registry) ()
+    Cohttp_eio.Server.make_response_action ~callback:(handler broker registry) ()
   in
   Cohttp_eio.Server.run socket server ~on_error:raise

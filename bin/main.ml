@@ -446,7 +446,7 @@ let cmd_serve args =
     | Opened_synthetic _ -> None
   in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
-  Server.Http.run ?setup:ws_setup ~env ~port ~client ()
+  Server.Http.run ?setup:ws_setup ~env ~port ~broker:client ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
     server (default http://localhost:8080); the same surface the UI

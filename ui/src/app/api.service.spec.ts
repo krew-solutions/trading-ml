@@ -41,22 +41,31 @@ describe('Api', () => {
   });
 
   describe('stream() (EventSource)', () => {
-    /** Minimal EventSource stub: lets tests drive onmessage / onerror
-     *  and assert that close() happens on unsubscribe. */
+    /** Minimal EventSource stub: tests drive named-channel listeners
+     *  ([bar], [order]) plus onerror, and assert that close() happens
+     *  on unsubscribe. */
     class StubEventSource {
       static CLOSED = 2;
       url: string;
       readyState = 0;
-      onmessage: ((e: { data: string }) => void) | null = null;
       onerror: (() => void) | null = null;
       closed = false;
+      private listeners: Record<string, ((e: { data: string }) => void)[]> = {};
       constructor(url: string) {
         this.url = url;
         StubEventSource.last = this;
       }
+      addEventListener(name: string, fn: (e: { data: string }) => void) {
+        (this.listeners[name] ??= []).push(fn);
+      }
+      removeEventListener(name: string, fn: (e: { data: string }) => void) {
+        this.listeners[name] = (this.listeners[name] ?? []).filter(f => f !== fn);
+      }
       close() { this.closed = true; this.readyState = 2; }
-      emit(data: unknown) {
-        this.onmessage?.({ data: JSON.stringify(data) });
+      emit(name: string, data: unknown) {
+        for (const fn of this.listeners[name] ?? []) {
+          fn({ data: JSON.stringify(data) });
+        }
       }
       static last: StubEventSource | null = null;
     }
@@ -72,22 +81,39 @@ describe('Api', () => {
         origES as unknown;
     });
 
-    it('opens /api/stream with symbol and timeframe', () => {
+    it('opens /api/stream with the requested bar feed in ?bars=', () => {
       const sub = api.stream('SBER', 'M5').subscribe(() => {});
       expect(StubEventSource.last?.url)
-        .toBe('/api/stream?symbol=SBER&timeframe=M5');
+        .toBe('/api/stream?bars=SBER%3AM5');
       sub.unsubscribe();
     });
 
-    it('parses JSON messages into typed events', () => {
+    it('parses bar-channel messages into typed events', () => {
       const received: StreamEvent[] = [];
       const sub = api.stream('SBER', 'H1').subscribe(ev => received.push(ev));
-      StubEventSource.last!.emit({ kind: 'seed', candles: [] });
-      StubEventSource.last!.emit({ kind: 'bar_update', candle: {
-        ts: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 } });
-      expect(received.map(e => e.kind)).toEqual(['seed', 'bar_update']);
+      StubEventSource.last!.emit('bar', {
+        kind: 'seed', symbol: 'SBER', timeframe: 'H1', candles: [],
+      });
+      StubEventSource.last!.emit('bar', {
+        kind: 'updated', symbol: 'SBER', timeframe: 'H1',
+        candle: { ts: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      });
+      expect(received.map(e => e.kind)).toEqual(['seed', 'updated']);
       sub.unsubscribe();
     });
+
+    it('logs order-channel messages without surfacing them on the bar observable',
+      () => {
+        const received: StreamEvent[] = [];
+        const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+        const sub = api.stream('SBER', 'H1').subscribe(ev => received.push(ev));
+        StubEventSource.last!.emit('order', { kind: 'amount_reserved', payload: {} });
+        expect(received).toEqual([]);
+        expect(debug).toHaveBeenCalledWith('[sse] order',
+          { kind: 'amount_reserved', payload: {} });
+        debug.mockRestore();
+        sub.unsubscribe();
+      });
 
     it('closes the EventSource on unsubscribe', () => {
       const sub = api.stream('SBER', 'H1').subscribe(() => {});

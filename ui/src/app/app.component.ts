@@ -422,21 +422,26 @@ export class AppComponent {
         : s));
   }
 
-  /** Merge an incoming SSE event into the candles signal.
-   *  - `seed`       — replace the whole array (initial snapshot);
-   *  - `bar_update` — patch the trailing bar when its ts matches;
-   *  - `bar_closed` — append a new bar (and drop the oldest to keep [n]). */
+  /** Merge an incoming SSE bar event into the candles signal.
+   *  - `seed`     — replace the whole array (initial snapshot);
+   *  - `updated`  — patch the trailing bar when its ts matches;
+   *  - `closed`   — append a new bar (and drop the oldest to keep [n]).
+   *
+   *  Each event carries [symbol] + [timeframe]; with one feed per
+   *  EventSource we trust the server's filter, but a future multi-feed
+   *  consumer would dispatch on those fields. */
   applyStreamEvent(ev: StreamEvent): void {
     switch (ev.kind) {
       case 'seed':
         console.warn(
-          `[sse] SEED len=${ev.candles.length} ` +
+          `[sse] SEED ${ev.symbol}/${ev.timeframe} len=${ev.candles.length} ` +
           `firstTs=${ev.candles[0]?.ts} ` +
           `lastTs=${ev.candles[ev.candles.length-1]?.ts}`);
         if (ev.candles.length) this.candles.set(ev.candles);
         break;
-      case 'bar_update':
-        console.debug(`[sse] bar_update ts=${ev.candle.ts} close=${ev.candle.close}`);
+      case 'updated':
+        console.debug(`[sse] updated ${ev.symbol}/${ev.timeframe} ` +
+          `ts=${ev.candle.ts} close=${ev.candle.close}`);
         this.candles.update(cs => {
           if (!cs.length) return [ev.candle];
           const last = cs[cs.length - 1];
@@ -447,8 +452,9 @@ export class AppComponent {
           return [...cs, ev.candle];
         });
         break;
-      case 'bar_closed':
-        console.debug(`[sse] bar_closed ts=${ev.candle.ts} close=${ev.candle.close}`);
+      case 'closed':
+        console.debug(`[sse] closed ${ev.symbol}/${ev.timeframe} ` +
+          `ts=${ev.candle.ts} close=${ev.candle.close}`);
         this.candles.update(cs => {
           if (!cs.length) return [ev.candle];
           const last = cs[cs.length - 1];

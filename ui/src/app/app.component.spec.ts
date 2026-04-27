@@ -188,27 +188,29 @@ describe('AppComponent', () => {
       ts, open: close, high: close + 1, low: close - 1, close, volume: 1,
     });
 
+    const key = { symbol: 'SBER@MISX', timeframe: 'H1' as const };
+
     it('replaces the whole array on seed', () => {
       const cmp = fixture.componentInstance;
       const seed = [sampleCandle(1, 100), sampleCandle(2, 101)];
-      cmp.applyStreamEvent({ kind: 'seed', candles: seed });
+      cmp.applyStreamEvent({ kind: 'seed', ...key, candles: seed });
       expect(cmp.candles()).toEqual(seed);
     });
 
-    it('patches trailing bar on bar_update when ts matches', () => {
+    it('patches trailing bar on updated when ts matches', () => {
       const cmp = fixture.componentInstance;
       cmp.candles.set([sampleCandle(1, 100), sampleCandle(2, 101)]);
       const patched = sampleCandle(2, 105);
-      cmp.applyStreamEvent({ kind: 'bar_update', candle: patched });
+      cmp.applyStreamEvent({ kind: 'updated', ...key, candle: patched });
       expect(cmp.candles().at(-1)?.close).toBe(105);
       expect(cmp.candles().length).toBe(2);
     });
 
-    it('appends on bar_closed with a newer ts', () => {
+    it('appends on closed with a newer ts', () => {
       const cmp = fixture.componentInstance;
       cmp.candles.set([sampleCandle(1, 100)]);
       cmp.applyStreamEvent({
-        kind: 'bar_closed', candle: sampleCandle(2, 101),
+        kind: 'closed', ...key, candle: sampleCandle(2, 101),
       });
       expect(cmp.candles().map(c => c.ts)).toEqual([1, 2]);
     });
@@ -220,7 +222,7 @@ describe('AppComponent', () => {
         sampleCandle(1, 10), sampleCandle(2, 11), sampleCandle(3, 12),
       ]);
       cmp.applyStreamEvent({
-        kind: 'bar_closed', candle: sampleCandle(4, 13),
+        kind: 'closed', ...key, candle: sampleCandle(4, 13),
       });
       expect(cmp.candles().map(c => c.ts)).toEqual([2, 3, 4]);
     });

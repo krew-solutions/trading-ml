@@ -154,17 +154,30 @@ export class Api {
     return this.http.delete<Order>(`/api/orders/${encodeURIComponent(cid)}`);
   }
 
-  /** Opens a Server-Sent Events connection. Returns an Observable that
-   *  emits parsed stream events and ties into the given [AbortSignal] for
-   *  cleanup (closing the EventSource when the consumer unsubscribes). */
+  /** Opens a Server-Sent Events connection for the given bar feed.
+   *  The server multiplexes named channels (`event: bar`, `event: order`)
+   *  on a single connection; this method exposes the bar channel,
+   *  pre-filtered to the requested [(symbol, timeframe)] feed.
+   *
+   *  Order events ride the same connection; for now they are logged
+   *  by the underlying handler — when the publisher is wired, callers
+   *  will get a separate observable for them. */
   stream(symbol: string, timeframe: Timeframe): Observable<StreamEvent> {
-    const q = new URLSearchParams({ symbol, timeframe });
+    const q = new URLSearchParams({ bars: `${symbol}:${timeframe}` });
     return new Observable<StreamEvent>(subscriber => {
       const es = new EventSource(`/api/stream?${q}`);
-      es.onmessage = (ev) => {
+      const onBar = (ev: MessageEvent) => {
         try { subscriber.next(parseStreamEvent(JSON.parse(ev.data))); }
         catch (e) { subscriber.error(e); }
       };
+      const onOrder = (ev: MessageEvent) => {
+        // Placeholder until the order publisher is wired end-to-end:
+        // log the envelope so the channel is observable in dev.
+        try { console.debug('[sse] order', JSON.parse(ev.data)); }
+        catch { /* ignore parse errors on the stub channel */ }
+      };
+      es.addEventListener('bar', onBar);
+      es.addEventListener('order', onOrder);
       es.onerror = () => {
         // EventSource auto-reconnects on transient errors; we only
         // propagate when the browser itself marks the connection closed.
@@ -172,28 +185,41 @@ export class Api {
           subscriber.error(new Error('SSE stream closed'));
         }
       };
-      return () => es.close();
+      return () => {
+        es.removeEventListener('bar', onBar);
+        es.removeEventListener('order', onOrder);
+        es.close();
+      };
     });
   }
 }
 
 export type StreamEvent =
-  | { kind: 'seed';        candles: Candle[] }
-  | { kind: 'bar_update';  candle: Candle }
-  | { kind: 'bar_closed';  candle: Candle };
+  | { kind: 'seed';     symbol: string; timeframe: Timeframe; candles: Candle[] }
+  | { kind: 'updated';  symbol: string; timeframe: Timeframe; candle: Candle }
+  | { kind: 'closed';   symbol: string; timeframe: Timeframe; candle: Candle };
 
 type WireStreamEvent =
-  | { kind: 'seed';        candles: WireCandle[] }
-  | { kind: 'bar_update';  candle: WireCandle }
-  | { kind: 'bar_closed';  candle: WireCandle };
+  | { kind: 'seed';     symbol: string; timeframe: Timeframe; candles: WireCandle[] }
+  | { kind: 'updated';  symbol: string; timeframe: Timeframe; candle: WireCandle }
+  | { kind: 'closed';   symbol: string; timeframe: Timeframe; candle: WireCandle };
 
 const parseStreamEvent = (e: WireStreamEvent): StreamEvent => {
   switch (e.kind) {
     case 'seed':
-      return { kind: 'seed', candles: e.candles.map(parseCandle) };
-    case 'bar_update':
-      return { kind: 'bar_update', candle: parseCandle(e.candle) };
-    case 'bar_closed':
-      return { kind: 'bar_closed', candle: parseCandle(e.candle) };
+      return {
+        kind: 'seed', symbol: e.symbol, timeframe: e.timeframe,
+        candles: e.candles.map(parseCandle),
+      };
+    case 'updated':
+      return {
+        kind: 'updated', symbol: e.symbol, timeframe: e.timeframe,
+        candle: parseCandle(e.candle),
+      };
+    case 'closed':
+      return {
+        kind: 'closed', symbol: e.symbol, timeframe: e.timeframe,
+        candle: parseCandle(e.candle),
+      };
   }
 };

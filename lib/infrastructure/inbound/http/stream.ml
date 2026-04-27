@@ -8,20 +8,29 @@
 open Core
 
 type event =
-  | Bar_update of Candle.t (* same ts as last cached bar, OHLCV changed *)
+  | Bar_updated of Candle.t (* same ts as last cached bar, OHLCV changed *)
   | Bar_closed of Candle.t (* a new bar appeared after the last cached *)
 
+(** Encode to SSE wire format with explicit [event:] field — the
+    SSE protocol's native channel mechanism. On the browser side
+    [es.addEventListener("bar", ...)] catches only these messages
+    and inside the handler the [kind] field discriminates
+    [updated] (intra-bar mutation) from [closed] (new bar).
+
+    Both variants share an ordering domain (same instrument,
+    same timeframe), so they ride one channel and a single
+    sequential consumer on the client preserves their order. *)
 let encode_event : event -> string = function
-  | Bar_update c ->
+  | Bar_updated c ->
       let j : Yojson.Safe.t =
-        `Assoc [ ("kind", `String "bar_update"); ("candle", Api.candle_json c) ]
+        `Assoc [ ("kind", `String "updated"); ("candle", Api.candle_json c) ]
       in
-      "data: " ^ Yojson.Safe.to_string j ^ "\n\n"
+      "event: bar\ndata: " ^ Yojson.Safe.to_string j ^ "\n\n"
   | Bar_closed c ->
       let j : Yojson.Safe.t =
-        `Assoc [ ("kind", `String "bar_closed"); ("candle", Api.candle_json c) ]
+        `Assoc [ ("kind", `String "closed"); ("candle", Api.candle_json c) ]
       in
-      "data: " ^ Yojson.Safe.to_string j ^ "\n\n"
+      "event: bar\ndata: " ^ Yojson.Safe.to_string j ^ "\n\n"
 
 type client = { id : int; queue : string Eio.Stream.t }
 
@@ -102,7 +111,7 @@ let last = function
 (** Compute the ordered events to emit given a fresh snapshot and the
     previously-cached candle list. Emits [Bar_closed] for every bar
     strictly newer than the last cached one (chronologically) and
-    [Bar_update] when the trailing bar kept its timestamp but drifted. *)
+    [Bar_updated] when the trailing bar kept its timestamp but drifted. *)
 let diff_and_emit ~cached ~fresh : event list =
   match (last fresh, last cached) with
   | None, _ -> []
@@ -113,7 +122,7 @@ let diff_and_emit ~cached ~fresh : event list =
         fresh
         |> List.filter (fun c -> Int64.compare c.Candle.ts cl.Candle.ts > 0)
         |> List.map (fun c -> Bar_closed c)
-      else if cmp = 0 && not (same_bar fl cl) then [ Bar_update fl ]
+      else if cmp = 0 && not (same_bar fl cl) then [ Bar_updated fl ]
       else []
 
 let poll_interval_seconds (tf : Timeframe.t) : float =
@@ -288,7 +297,7 @@ let push_from_upstream t ~instrument ~timeframe (candle : Candle.t) =
                 s.stale_warned <- false;
                 let event =
                   match last_opt with
-                  | Some cl when Int64.equal cl.Candle.ts candle.ts -> Bar_update candle
+                  | Some cl when Int64.equal cl.Candle.ts candle.ts -> Bar_updated candle
                   | _ -> Bar_closed candle
                 in
                 let cached =

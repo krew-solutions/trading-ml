@@ -56,8 +56,6 @@ let () =
       ("learned policy", Learned_policy_test.tests);
       ("gbt model", Gbt_model_test.tests);
       ("triple barrier", Triple_barrier_test.tests);
-      (* Infrastructure: WebSocket framing — non-broker-specific *)
-      ("ws frame", Websocket_frame_test.tests);
       (* Application: live engine *)
       ("live engine", Live_engine_test.tests);
       ("bt vs live", Differential_test.tests);

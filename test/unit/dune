@@ -2,7 +2,7 @@
  (name unit_runner)
  (libraries core indicators strategies logistic_regression gbt
             triple_barrier engine
-            http_transport broker websocket finam bcs token_store paper
+            http_transport broker finam bcs token_store paper
             live_engine stream eio_stream
             eio eio_main str unix
             alcotest qcheck-core))

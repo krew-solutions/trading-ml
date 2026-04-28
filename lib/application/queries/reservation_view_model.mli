@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Account.Portfolio.reservation}. *)
+(** Read-model DTO for {!Account.Portfolio.Reservation.t}. *)
 
 type t = {
   id : int;
@@ -9,6 +9,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Account.Portfolio.reservation
+type domain = Account.Portfolio.Reservation.t
 
 val of_domain : domain -> t

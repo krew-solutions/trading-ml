@@ -1,4 +1,4 @@
-(** Immutable portfolio: cash + map of open positions + outstanding
+(** Aggregate root: cash + map of open positions + outstanding
     reservations.
 
     Reservations are pending buy/sell intents whose cash/qty impact
@@ -22,49 +22,20 @@
     matching note in [core/candle.mli] — Gospel 0.3.1 doesn't carry
     [model] declarations across files, so each consumer restates it. *)
 
-type position = {
-  instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;  (** signed: positive = long, negative = short *)
-  avg_price : Core.Decimal.t;  (** VWAP entry price *)
-}
-(** Snapshot of an open trading position. *)
+(** Re-exports of peer subdirs. [portfolio.ml] collapses the
+    [portfolio/] namespace per dune's qualified-mode rule, so peer
+    subdirectories are visible outside only through explicit
+    publication here. *)
 
-type reservation = {
-  id : int;
-  side : Core.Side.t;
-  instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;
-      (** Remaining reserved quantity — decreases on
-      {!commit_partial_fill}, hits zero on {!commit_fill}. *)
-  per_unit_cash : Core.Decimal.t;
-      (** For Buy: per-unit cash impact including slippage buffer and
-      fee estimate — set at {!reserve} and never changes. For Sell
-      it's zero (sells free cash, they don't consume it). *)
-}
-(** A pending trade — cash/qty reserved but not yet applied.
-    Scales down on partial fills: [quantity] is the *remaining*
-    reserved amount, [per_unit_cash] is immutable after {!reserve}
-    so proration stays linear. *)
-
-val reserved_cash : reservation -> Core.Decimal.t
-(** [quantity × per_unit_cash]. Earmarked cash still pending
-    (drops as partial fills commit). *)
-
-val reserved_qty : reservation -> Core.Decimal.t
-(** [quantity] for a Sell reservation, [0] for a Buy. Earmarked
-    position qty locking out further sells on the same
-    instrument. *)
-(*@ q = reserved_qty r
-    ensures dec_raw q =
-            (match r.side with
-             | Core.Side.Buy -> 0
-             | Core.Side.Sell -> dec_raw r.quantity) *)
+module Values : module type of Values
+module Events : module type of Events
+module Reservation : module type of Reservation
 
 type t = private {
   cash : Core.Decimal.t;
-  positions : (Core.Instrument.t * position) list;
+  positions : (Core.Instrument.t * Values.Position.t) list;
   realized_pnl : Core.Decimal.t;
-  reservations : reservation list;
+  reservations : Reservation.t list;
 }
 
 val empty : cash:Core.Decimal.t -> t
@@ -73,22 +44,6 @@ val empty : cash:Core.Decimal.t -> t
     ensures p.positions = []
     ensures p.reservations = []
     ensures dec_raw p.realized_pnl = 0 *)
-
-(** {1 Domain events}
-
-    Facts emitted by the aggregate in response to successful
-    state transitions. Integration-level workflows subscribe to
-    these to trigger next steps (e.g. sending an order to the
-    broker after [Amount_reserved]). *)
-
-type amount_reserved = {
-  reservation_id : int;
-  side : Core.Side.t;
-  instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;
-  price : Core.Decimal.t;
-  reserved_cash : Core.Decimal.t;
-}
 
 (** Reasons why the aggregate refuses to reserve — business-rule
     failures, not programming errors. Surfaces at the boundary
@@ -107,7 +62,7 @@ val try_reserve :
   price:Core.Decimal.t ->
   slippage_buffer:float ->
   fee_rate:float ->
-  (t * amount_reserved, reservation_error) result
+  (t * Events.Amount_reserved.t, reservation_error) result
 (** Checked reservation: verifies invariant (sufficient
     [available_cash] for Buy, [available_qty] for Sell), then
     delegates to {!reserve}. Returns new state together with the
@@ -126,18 +81,9 @@ val try_reserve :
                      = List.length p.reservations + 1
             | Error _ -> true *)
 
-type reservation_released = {
-  reservation_id : int;
-  side : Core.Side.t;
-  instrument : Core.Instrument.t;
-}
-(** Event: an earmark was removed without maturing into a fill
-    (e.g. broker rejected the order, operator cancelled before
-    submission). Released cash/qty becomes available again. *)
-
 type release_error = Reservation_not_found of int
 
-val try_release : t -> id:int -> (t * reservation_released, release_error) result
+val try_release : t -> id:int -> (t * Events.Reservation_released.t, release_error) result
 (** Releases a reservation by id, returning new state and the
     event. Returns [Reservation_not_found] if no reservation
     with that id exists — callers that want idempotent behaviour
@@ -152,7 +98,7 @@ val try_release : t -> id:int -> (t * reservation_released, release_error) resul
                 n = id
                 /\ List.for_all (fun res -> res.id <> id) p.reservations *)
 
-val position : t -> Core.Instrument.t -> position option
+val position : t -> Core.Instrument.t -> Values.Position.t option
 
 val fill :
   t ->

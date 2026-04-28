@@ -9,7 +9,7 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Account.Portfolio.reservation
+type domain = Account.Portfolio.Reservation.t
 
 let of_domain (r : domain) : t =
   {

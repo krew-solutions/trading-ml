@@ -1,27 +1,22 @@
 open Core
 
-type position = { instrument : Instrument.t; quantity : Decimal.t; avg_price : Decimal.t }
+(* Re-exports — публичный surface aggregate. portfolio.ml совпадает с
+   именем директории, поэтому dune collapsed-ит namespace в этот файл;
+   peer subdirs снаружи доступны только через явный re-export. *)
+module Values = Values
+module Events = Events
+module Reservation = Reservation
 
-type reservation = {
-  id : int;
-  side : Side.t;
-  instrument : Instrument.t;
-  quantity : Decimal.t; (* remaining *)
-  per_unit_cash : Decimal.t; (* immutable after reserve *)
-}
-
-let reserved_cash r = Decimal.mul r.quantity r.per_unit_cash
-
-let reserved_qty r =
-  match r.side with
-  | Side.Sell -> r.quantity
-  | Buy -> Decimal.zero
+(* Локальные shortcut-алиасы для краткости тела aggregate root. *)
+module Position = Values.Position
+module Amount_reserved = Events.Amount_reserved
+module Reservation_released = Events.Reservation_released
 
 type t = {
   cash : Decimal.t;
-  positions : (Instrument.t * position) list;
+  positions : (Instrument.t * Position.t) list;
   realized_pnl : Decimal.t;
-  reservations : reservation list;
+  reservations : Reservation.t list;
 }
 
 let empty ~cash = { cash; positions = []; realized_pnl = Decimal.zero; reservations = [] }
@@ -30,7 +25,7 @@ let position p instrument =
   List.find_opt (fun (i, _) -> Instrument.equal i instrument) p.positions
   |> Option.map snd
 
-let set_position positions instrument (pos : position) =
+let set_position positions instrument (pos : Position.t) =
   let rest = List.filter (fun (i, _) -> not (Instrument.equal i instrument)) positions in
   if Decimal.is_zero pos.quantity then rest else (instrument, pos) :: rest
 
@@ -54,9 +49,9 @@ let fill (p : t) ~instrument ~side ~quantity ~price ~fee : t =
   let pos', realized =
     match existing with
     | None ->
-        ( ({ instrument; quantity = signed_qty; avg_price = price } : position),
+        ( ({ instrument; quantity = signed_qty; avg_price = price } : Position.t),
           Decimal.zero )
-    | Some (cur : position) ->
+    | Some (cur : Position.t) ->
         let cur_sign = Decimal.compare cur.quantity Decimal.zero in
         let new_sign = Decimal.compare signed_qty Decimal.zero in
         if cur_sign = 0 || cur_sign = new_sign then
@@ -98,24 +93,15 @@ let fill (p : t) ~instrument ~side ~quantity ~price ~fee : t =
     realized_pnl = Decimal.add p.realized_pnl realized;
   }
 
-(** Per-unit cash impact of a future fill for reservation purposes.
-    For Buy: price × (1 + slip) + price × fee_rate. For Sell:
-    zero (sells free cash). Immutable after reserve — proration on
-    partial fills just scales by remaining quantity. *)
-let per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate =
-  match side with
-  | Side.Sell -> Decimal.zero
-  | Buy ->
-      let slip_mult = Decimal.of_float (1.0 +. slippage_buffer) in
-      let fee_mult = Decimal.of_float fee_rate in
-      Decimal.add (Decimal.mul price slip_mult) (Decimal.mul price fee_mult)
-
 let reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate =
-  let per_unit_cash = per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate in
-  let r = { id; side; instrument; quantity; per_unit_cash } in
+  let per_unit_cash =
+    Reservation.per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate
+  in
+  let r : Reservation.t = { id; side; instrument; quantity; per_unit_cash } in
   { p with reservations = r :: p.reservations }
 
-let find_reservation reservations id = List.partition (fun r -> r.id = id) reservations
+let find_reservation reservations id =
+  List.partition (fun (r : Reservation.t) -> r.id = id) reservations
 
 let release p ~id =
   let _matched, rest = find_reservation p.reservations id in
@@ -125,7 +111,7 @@ let commit_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   let matched, rest = find_reservation p.reservations id in
   match matched with
   | [] -> raise Not_found
-  | r :: _ ->
+  | (r : Reservation.t) :: _ ->
       let p' = { p with reservations = rest } in
       fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
         ~price:actual_price ~fee:actual_fee
@@ -134,7 +120,7 @@ let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   let matched, rest = find_reservation p.reservations id in
   match matched with
   | [] -> raise Not_found
-  | r :: _ ->
+  | (r : Reservation.t) :: _ ->
       if Decimal.compare actual_quantity r.quantity > 0 then
         invalid_arg
           "Portfolio.commit_partial_fill: actual_quantity exceeds remaining reserved \
@@ -150,30 +136,30 @@ let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
 
 let available_cash p =
   List.fold_left
-    (fun acc r ->
+    (fun acc (r : Reservation.t) ->
       match r.side with
-      | Buy -> Decimal.sub acc (reserved_cash r)
+      | Buy -> Decimal.sub acc (Reservation.reserved_cash r)
       | Sell -> acc)
     p.cash p.reservations
 
 let available_qty p instrument =
   let base =
     match position p instrument with
-    | Some (pos : position) -> pos.quantity
+    | Some (pos : Position.t) -> pos.quantity
     | None -> Decimal.zero
   in
   List.fold_left
-    (fun acc r ->
+    (fun acc (r : Reservation.t) ->
       if Instrument.equal r.instrument instrument then
         match r.side with
-        | Sell -> Decimal.sub acc (reserved_qty r)
+        | Sell -> Decimal.sub acc (Reservation.reserved_qty r)
         | Buy -> acc
       else acc)
     base p.reservations
 
 let equity p mark =
   List.fold_left
-    (fun acc (_, (pos : position)) ->
+    (fun acc (_, (pos : Position.t)) ->
       let px =
         match mark pos.instrument with
         | Some m -> m
@@ -182,21 +168,14 @@ let equity p mark =
       Decimal.add acc (Decimal.mul pos.quantity px))
     p.cash p.positions
 
-type amount_reserved = {
-  reservation_id : int;
-  side : Side.t;
-  instrument : Instrument.t;
-  quantity : Decimal.t;
-  price : Decimal.t;
-  reserved_cash : Decimal.t;
-}
-
 type reservation_error =
   | Insufficient_cash of { required : Decimal.t; available : Decimal.t }
   | Insufficient_qty of { required : Decimal.t; available : Decimal.t }
 
 let try_reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate =
-  let per_unit_cash = per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate in
+  let per_unit_cash =
+    Reservation.per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate
+  in
   let required =
     match side with
     | Side.Buy -> Decimal.mul quantity per_unit_cash
@@ -218,7 +197,7 @@ let try_reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_r
     let p' =
       reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate
     in
-    let event =
+    let event : Amount_reserved.t =
       {
         reservation_id = id;
         side;
@@ -233,19 +212,15 @@ let try_reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_r
     in
     Ok (p', event)
 
-type reservation_released = {
-  reservation_id : int;
-  side : Side.t;
-  instrument : Instrument.t;
-}
-
 type release_error = Reservation_not_found of int
 
 let try_release p ~id =
   let matched, rest = find_reservation p.reservations id in
   match matched with
   | [] -> Error (Reservation_not_found id)
-  | r :: _ ->
+  | (r : Reservation.t) :: _ ->
       let p' = { p with reservations = rest } in
-      let event = { reservation_id = id; side = r.side; instrument = r.instrument } in
+      let event : Reservation_released.t =
+        { reservation_id = id; side = r.side; instrument = r.instrument }
+      in
       Ok (p', event)

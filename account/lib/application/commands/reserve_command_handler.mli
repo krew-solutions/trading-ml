@@ -9,8 +9,7 @@
     [Invalid_argument]; HTTP is expected to validate up-front, so
     this would only fire on a contract-violating caller. *)
 
-module Amount_reserved =
-  Account_integration_events.Amount_reserved_integration_event
+module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
 module Reservation_rejected =
   Account_integration_events.Reservation_rejected_integration_event
 

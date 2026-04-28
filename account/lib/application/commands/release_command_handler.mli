@@ -9,4 +9,4 @@
 val handle :
   portfolio:Account.Portfolio.t ref ->
   Release_command.t ->
-  (Account.Portfolio.reservation_released, Account.Portfolio.release_error) Rop.t
+  (Account.Portfolio.Events.Reservation_released.t, Account.Portfolio.release_error) Rop.t

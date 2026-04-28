@@ -1,0 +1,19 @@
+(** Why3 companion for [amount_reserved.mli] — Domain Event record.
+    A pure data carrier: structural, no behavioural lemmas. *)
+
+module Amount_reserved
+  use int.Int
+  use decimal.Decimal
+  use side.Side
+
+  type instrument
+
+  type t = {
+    reservation_id : int;
+    side : Side.t;
+    instrument : instrument;
+    quantity : Decimal.t;
+    price : Decimal.t;
+    reserved_cash : Decimal.t;
+  }
+end

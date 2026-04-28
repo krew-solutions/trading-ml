@@ -60,7 +60,7 @@ let check
     else
       let gross =
         List.fold_left
-          (fun acc (_, (pos : Account.Portfolio.position)) ->
+          (fun acc (_, (pos : Account.Portfolio.Values.Position.t)) ->
             let p =
               match mark pos.instrument with
               | Some m -> m

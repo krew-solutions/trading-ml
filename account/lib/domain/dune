@@ -3,10 +3,16 @@
  (public_name trading.account)
  (libraries core))
 
+; Per-aggregate domain layout (see docs/adr/0006): each aggregate is
+; a subdir with values/, entities/, events/. Qualified mode wraps
+; subdir names into the module path: portfolio/values/position.ml
+; becomes Account.Portfolio.Values.Position.
+(include_subdirs qualified)
+
 (rule
  (alias gospel)
  (deps
-  (glob_files *.mli)
+  (glob_files_rec *.mli)
   (glob_files ../../../lib/domain/gospel_stubs/*.mli))
  (action
   (bash
@@ -17,12 +23,14 @@ for f in %{deps}; do
   gospel check -L ../../../lib/domain/gospel_stubs -L . \"$f\"
 done")))
 
-; Why3 deductive verification. -L includes lib/domain/core so the
-; .mlw can `use decimal.Decimal`, `use side.Side` etc.
+; Why3 deductive verification. -L includes lib/domain/core so .mlw
+; files can `use decimal.Decimal`, `use side.Side` etc., and -L .
+; lets aggregate-root .mlw files import their own subdir modules
+; via qualified paths like `use portfolio.entities.reservation.Reservation`.
 (rule
  (alias why3)
  (deps
-  (glob_files *.mlw)
+  (glob_files_rec *.mlw)
   (glob_files ../../../lib/domain/core/*.mlw))
  (action
   (bash

@@ -1,7 +1,7 @@
 module Reservation_released =
   Account_integration_events.Reservation_released_integration_event
 
-let to_integration_event (ev : Account.Portfolio.reservation_released) :
+let to_integration_event (ev : Account.Portfolio.Events.Reservation_released.t) :
     Reservation_released.t =
   {
     reservation_id = ev.reservation_id;
@@ -11,5 +11,5 @@ let to_integration_event (ev : Account.Portfolio.reservation_released) :
 
 let handle
     ~(publish_reservation_released : Reservation_released.t -> unit)
-    (ev : Account.Portfolio.reservation_released) : unit =
+    (ev : Account.Portfolio.Events.Reservation_released.t) : unit =
   publish_reservation_released (to_integration_event ev)

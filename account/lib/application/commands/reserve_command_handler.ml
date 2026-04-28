@@ -1,5 +1,5 @@
-module Amount_reserved =
-  Account_integration_events.Amount_reserved_integration_event
+module Portfolio = Account.Portfolio
+module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
 module Reservation_rejected =
   Account_integration_events.Reservation_rejected_integration_event
 
@@ -9,17 +9,19 @@ let parse_side = function
   | s -> invalid_arg (Printf.sprintf "side: %S" s)
 
 let reservation_error_to_string = function
-  | Account.Portfolio.Insufficient_cash { required; available } ->
+  | Portfolio.Insufficient_cash { required; available } ->
       Printf.sprintf "insufficient cash: required %s, available %s"
         (Core.Decimal.to_string required)
         (Core.Decimal.to_string available)
-  | Account.Portfolio.Insufficient_qty { required; available } ->
+  | Portfolio.Insufficient_qty { required; available } ->
       Printf.sprintf "insufficient quantity: required %s, available %s"
         (Core.Decimal.to_string required)
         (Core.Decimal.to_string available)
 
-let make ~(portfolio : Account.Portfolio.t ref)
-    ~(next_reservation_id : unit -> int) ~(slippage_buffer : float)
+let make
+    ~(portfolio : Portfolio.t ref)
+    ~(next_reservation_id : unit -> int)
+    ~(slippage_buffer : float)
     ~(fee_rate : float)
     ~(publish_amount_reserved : Amount_reserved.t -> unit)
     ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
@@ -30,8 +32,8 @@ let make ~(portfolio : Account.Portfolio.t ref)
   let price = Core.Decimal.of_float cmd.price in
   let id = next_reservation_id () in
   match
-    Account.Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity
-      ~price ~slippage_buffer ~fee_rate
+    Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity ~price
+      ~slippage_buffer ~fee_rate
   with
   | Ok (p', ev) ->
       portfolio := p';

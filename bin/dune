@@ -11,5 +11,5 @@
             broker_commands broker_integration_events
             bus
             logistic_regression triple_barrier
-            http_transport finam bcs acl_common infra_common token_store synthetic paper server log logs
+            http_transport finam bcs acl_common datetime token_store synthetic paper server log logs
             eio_main mirage-crypto-rng.unix unix))

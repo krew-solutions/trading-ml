@@ -74,13 +74,13 @@ let candle_of_json j : Candle.t =
   debug_log_sample ~label:"bar" j;
   let ts =
     match Yojson.Safe.Util.member "timestamp" j with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | `Int n -> Int64.of_int n
     | `Intlit s -> Int64.of_string s
     | `Null -> (
         (* Alternative common names: 'time', 't'. *)
         match Yojson.Safe.Util.member "time" j with
-        | `String s -> Infra_common.Iso8601.parse s
+        | `String s -> Datetime.Iso8601.parse s
         | `Int n -> Int64.of_int n
         | _ -> 0L)
     | _ -> 0L
@@ -254,7 +254,7 @@ let order_of_json (j : Yojson.Safe.t) : Order.t =
   let status = finam_status_of_wire (str "status") in
   let created_ts =
     match member "transact_at" j with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
   {
@@ -306,7 +306,7 @@ let account_trade_of_json (j : Yojson.Safe.t) : account_trade =
   let dec k = try decimal_of_json (member k j) with _ -> Decimal.zero in
   let ts =
     match member "timestamp" j with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
   {

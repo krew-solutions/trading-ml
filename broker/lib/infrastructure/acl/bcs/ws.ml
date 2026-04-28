@@ -131,7 +131,7 @@ let event_of_json (j : Yojson.Safe.t) : event =
           let instrument = instrument_from ~ticker ~class_code in
           let ts =
             match member "dateTime" j with
-            | `String s -> Infra_common.Iso8601.parse s
+            | `String s -> Datetime.Iso8601.parse s
             | _ -> 0L
           in
           let candle =

@@ -9,6 +9,7 @@ let to_integration_event (ev : Account.Portfolio.reservation_released) :
     instrument = Queries.Instrument_view_model.of_domain ev.instrument;
   }
 
-let handle ~(publish_reservation_released : Reservation_released.t -> unit)
+let handle
+    ~(publish_reservation_released : Reservation_released.t -> unit)
     (ev : Account.Portfolio.reservation_released) : unit =
   publish_reservation_released (to_integration_event ev)

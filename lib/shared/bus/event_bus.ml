@@ -1,3 +1,15 @@
+module type S = sig
+  type 'a t
+
+  type subscription
+
+  val publish : 'a t -> 'a -> unit
+
+  val subscribe : 'a t -> ('a -> unit) -> subscription
+
+  val unsubscribe : 'a t -> subscription -> unit
+end
+
 type 'a t = {
   to_string : 'a -> string;
   of_string : string -> 'a;

@@ -476,28 +476,42 @@ let cmd_serve args =
       ~t_of_yojson:Broker_commands.Submit_order_command.t_of_yojson
   in
   let events_amount_reserved =
-    event_bus ~yojson_of_t:Account_integration_events.Amount_reserved_integration_event.yojson_of_t
-      ~t_of_yojson:Account_integration_events.Amount_reserved_integration_event.t_of_yojson
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Amount_reserved_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Amount_reserved_integration_event.t_of_yojson
   in
   let events_reservation_released =
-    event_bus ~yojson_of_t:Account_integration_events.Reservation_released_integration_event.yojson_of_t
-      ~t_of_yojson:Account_integration_events.Reservation_released_integration_event.t_of_yojson
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Reservation_released_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Reservation_released_integration_event.t_of_yojson
   in
   let events_reservation_rejected =
-    event_bus ~yojson_of_t:Account_integration_events.Reservation_rejected_integration_event.yojson_of_t
-      ~t_of_yojson:Account_integration_events.Reservation_rejected_integration_event.t_of_yojson
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Reservation_rejected_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Reservation_rejected_integration_event.t_of_yojson
   in
   let events_order_accepted =
-    event_bus ~yojson_of_t:Broker_integration_events.Order_accepted_integration_event.yojson_of_t
+    event_bus
+      ~yojson_of_t:Broker_integration_events.Order_accepted_integration_event.yojson_of_t
       ~t_of_yojson:Broker_integration_events.Order_accepted_integration_event.t_of_yojson
   in
   let events_order_rejected =
-    event_bus ~yojson_of_t:Broker_integration_events.Order_rejected_integration_event.yojson_of_t
+    event_bus
+      ~yojson_of_t:Broker_integration_events.Order_rejected_integration_event.yojson_of_t
       ~t_of_yojson:Broker_integration_events.Order_rejected_integration_event.t_of_yojson
   in
   let events_order_unreachable =
-    event_bus ~yojson_of_t:Broker_integration_events.Order_unreachable_integration_event.yojson_of_t
-      ~t_of_yojson:Broker_integration_events.Order_unreachable_integration_event.t_of_yojson
+    event_bus
+      ~yojson_of_t:
+        Broker_integration_events.Order_unreachable_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Broker_integration_events.Order_unreachable_integration_event.t_of_yojson
   in
   let portfolio_ref = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 1_000_000)) in
   let next_reservation_id =
@@ -506,13 +520,26 @@ let cmd_serve args =
       incr counter;
       !counter
   in
+  (* Wrap each outbound Event_bus into the matching application-port
+     closure. Application handlers depend on the named ports, not on
+     {!Bus} directly (DIP). *)
+  let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
+  let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
+  let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
   Bus.Command_bus.register_handler reserve_bus
-    (Account_commands.Reserve_command_handler.make ~portfolio:portfolio_ref ~next_reservation_id
-       ~slippage_buffer:0.005 ~fee_rate:0.0005 ~events_amount_reserved
-       ~events_reservation_rejected);
-  Bus.Command_bus.register_handler release_bus
-    (Account_commands.Release_command_handler.make ~portfolio:portfolio_ref
-       ~events_reservation_released);
+    (Account_commands.Reserve_command_handler.make ~portfolio:portfolio_ref
+       ~next_reservation_id ~slippage_buffer:0.005 ~fee_rate:0.0005
+       ~publish_amount_reserved ~publish_reservation_rejected);
+  Bus.Command_bus.register_handler release_bus (fun cmd ->
+      match
+        Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
+          ~publish_reservation_released cmd
+      with
+      | Ok () -> ()
+      (* Idempotent compensation: a duplicated or late rejection
+         event for a reservation that's already been released is
+         silently dropped. *)
+      | Error _ -> ());
   Bus.Command_bus.register_handler submit_order_bus
     (Broker_commands.Submit_order_command_handler.make ~broker:client
        ~events_accepted:events_order_accepted ~events_rejected:events_order_rejected
@@ -527,20 +554,16 @@ let cmd_serve args =
   let events_account_inbound_order_rejected =
     event_bus
       ~yojson_of_t:
-        Account_inbound_integration_events.Order_rejected_integration_event
-        .yojson_of_t
+        Account_inbound_integration_events.Order_rejected_integration_event.yojson_of_t
       ~t_of_yojson:
-        Account_inbound_integration_events.Order_rejected_integration_event
-        .t_of_yojson
+        Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson
   in
   let events_account_inbound_order_unreachable =
     event_bus
       ~yojson_of_t:
-        Account_inbound_integration_events.Order_unreachable_integration_event
-        .yojson_of_t
+        Account_inbound_integration_events.Order_unreachable_integration_event.yojson_of_t
       ~t_of_yojson:
-        Account_inbound_integration_events.Order_unreachable_integration_event
-        .t_of_yojson
+        Account_inbound_integration_events.Order_unreachable_integration_event.t_of_yojson
   in
   let (_ : Bus.Event_bus.subscription) =
     Bus.Event_bus.subscribe events_order_rejected (fun ev ->
@@ -554,21 +577,32 @@ let cmd_serve args =
           Account_inbound_integration_events.Order_unreachable_integration_event.
             { reservation_id = ev.reservation_id; reason = ev.reason })
   in
+  (* Apply functors with the in-memory bus. Swap to Kafka =
+     change [Bus.Event_bus] argument here, no consumer rewrites. *)
+  let module Order_rejected_inbound_handler =
+    Account_inbound_integration_events.Order_rejected_integration_event_handler.Make
+      (Bus.Event_bus)
+  in
+  let module Order_unreachable_inbound_handler =
+    Account_inbound_integration_events.Order_unreachable_integration_event_handler.Make
+      (Bus.Event_bus)
+  in
+  let module Sse_publisher = Server.Publish_order_events.Make (Bus.Event_bus) in
   let (_ : Bus.Event_bus.subscription) =
-    Account_inbound_integration_events.Order_rejected_integration_event_handler.attach
-      ~events:events_account_inbound_order_rejected ~dispatch_release
+    Order_rejected_inbound_handler.attach ~events:events_account_inbound_order_rejected
+      ~dispatch_release
   in
   let (_ : Bus.Event_bus.subscription) =
-    Account_inbound_integration_events.Order_unreachable_integration_event_handler
-    .attach ~events:events_account_inbound_order_unreachable ~dispatch_release
+    Order_unreachable_inbound_handler.attach
+      ~events:events_account_inbound_order_unreachable ~dispatch_release
   in
   let buses : Server.Http.buses =
     { reserve = reserve_bus; submit_order = submit_order_bus }
   in
   let register_publisher (registry : Server.Stream.t) =
-    Server.Publish_order_events.attach registry ~events_amount_reserved
-      ~events_reservation_released ~events_reservation_rejected ~events_order_accepted
-      ~events_order_rejected ~events_order_unreachable
+    Sse_publisher.attach registry ~events_amount_reserved ~events_reservation_released
+      ~events_reservation_rejected ~events_order_accepted ~events_order_rejected
+      ~events_order_unreachable
   in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
   Server.Http.run ?setup:ws_setup ~sw ~env ~port ~broker:client ~buses ~register_publisher

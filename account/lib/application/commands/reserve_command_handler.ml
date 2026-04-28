@@ -1,5 +1,7 @@
-module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
-module Reservation_rejected = Account_integration_events.Reservation_rejected_integration_event
+module Amount_reserved =
+  Account_integration_events.Amount_reserved_integration_event
+module Reservation_rejected =
+  Account_integration_events.Reservation_rejected_integration_event
 
 let parse_side = function
   | "BUY" -> Core.Side.Buy
@@ -16,13 +18,11 @@ let reservation_error_to_string = function
         (Core.Decimal.to_string required)
         (Core.Decimal.to_string available)
 
-let make
-    ~(portfolio : Account.Portfolio.t ref)
-    ~(next_reservation_id : unit -> int)
-    ~(slippage_buffer : float)
+let make ~(portfolio : Account.Portfolio.t ref)
+    ~(next_reservation_id : unit -> int) ~(slippage_buffer : float)
     ~(fee_rate : float)
-    ~(events_amount_reserved : Amount_reserved.t Bus.Event_bus.t)
-    ~(events_reservation_rejected : Reservation_rejected.t Bus.Event_bus.t)
+    ~(publish_amount_reserved : Amount_reserved.t -> unit)
+    ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
     (cmd : Reserve_command.t) : unit =
   let instrument = Core.Instrument.of_qualified cmd.symbol in
   let side = parse_side (String.uppercase_ascii cmd.side) in
@@ -30,12 +30,12 @@ let make
   let price = Core.Decimal.of_float cmd.price in
   let id = next_reservation_id () in
   match
-    Account.Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity ~price
-      ~slippage_buffer ~fee_rate
+    Account.Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity
+      ~price ~slippage_buffer ~fee_rate
   with
   | Ok (p', ev) ->
       portfolio := p';
-      Bus.Event_bus.publish events_amount_reserved
+      publish_amount_reserved
         Amount_reserved.
           {
             reservation_id = ev.reservation_id;
@@ -46,7 +46,7 @@ let make
             reserved_cash = Core.Decimal.to_float ev.reserved_cash;
           }
   | Error err ->
-      Bus.Event_bus.publish events_reservation_rejected
+      publish_reservation_rejected
         Reservation_rejected.
           {
             side = Core.Side.to_string side;

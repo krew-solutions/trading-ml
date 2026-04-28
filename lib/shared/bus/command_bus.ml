@@ -1,3 +1,15 @@
+module type S = sig
+  type 'a t
+
+  exception Already_registered
+
+  exception No_handler
+
+  val register_handler : 'a t -> ('a -> unit) -> unit
+
+  val send : 'a t -> 'a -> unit
+end
+
 type 'a t = {
   to_string : 'a -> string;
   of_string : string -> 'a;

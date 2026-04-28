@@ -1,43 +1,49 @@
-(** In-memory event bus: pub/sub with on-the-wire serialisation.
+(** Event bus abstraction.
 
-    {b Asynchronous.} [publish] serialises the event to a [string]
-    and enqueues it on a bounded [Eio.Stream.t]; control returns to
-    the caller immediately. A daemon fiber owned by the bus drains
-    the queue, deserialises each payload, and dispatches to every
-    subscriber in registration order. Subscribers run inside the
-    dispatch fiber sequentially per event; a raising subscriber is
-    isolated (logged) and the next subscriber still fires.
+    {!S} is the signature any concrete bus must satisfy.
+    Consumers needing transport-agnosticism take [(module S)] /
+    use a functor over [S]; current implementation lives at the
+    top level of this module as the default in-memory in-process
+    bus over {!Eio.Stream} with on-the-wire string serialisation.
 
-    {b Strings on the wire.} The bus models a real network bus
-    (RabbitMQ / NATS / Kafka): values cross the boundary as opaque
-    [string]s, and the producer / consumer contract is the codec
-    pair supplied at {!create}. Events that don't round-trip
-    through their [to_string] / [of_string] simply can't ride this
-    bus — caught at publish time, no [Marshal]-style runtime traps.
+    Future Kafka / NATS / RabbitMQ implementations will be
+    separate modules satisfying [S]; consumers written against
+    [S] swap without rewrites. *)
 
-    {b Subscriptions} are reified as opaque values returned from
-    {!subscribe} so callers can {!unsubscribe} when their lifetime
-    ends. Subscriptions can be added / removed concurrently with
-    publish — internal mutex serialises mutation. *)
+module type S = sig
+  type 'a t
+
+  type subscription
+
+  val publish : 'a t -> 'a -> unit
+  (** Serialise (per the bus's codec) and enqueue. Returns
+      immediately; subscribers run later in the bus's dispatch
+      fiber. *)
+
+  val subscribe : 'a t -> ('a -> unit) -> subscription
+  (** Add a subscriber. Returned handle identifies it for
+      {!unsubscribe}. *)
+
+  val unsubscribe : 'a t -> subscription -> unit
+  (** Remove the subscriber identified by [subscription]. No-op
+      if the handle is unknown. *)
+end
+
+(** {1 Default in-memory implementation} *)
 
 type 'a t
 
 type subscription
 
-val create :
-  sw:Eio.Switch.t -> to_string:('a -> string) -> of_string:(string -> 'a) -> unit -> 'a t
-(** Construct a bus parameterised over a typed payload [a]. The
-    daemon dispatch fiber is spawned on [~sw]; closing the switch
-    stops the fiber. *)
+val publish : 'a t -> 'a -> unit
 
 val subscribe : 'a t -> ('a -> unit) -> subscription
-(** Add a subscriber. Returned handle identifies it for {!unsubscribe}. *)
 
 val unsubscribe : 'a t -> subscription -> unit
-(** Remove the subscriber identified by [subscription]. No-op if
-    the handle is unknown to this bus. *)
 
-val publish : 'a t -> 'a -> unit
-(** Serialise [event] and enqueue. Non-blocking under normal
-    queue depth; blocks the caller fiber if the underlying stream
-    is at capacity (1024). *)
+val create :
+  sw:Eio.Switch.t -> to_string:('a -> string) -> of_string:(string -> 'a) -> unit -> 'a t
+(** Construct an in-memory bus parameterised over a typed payload
+    [a]. The daemon dispatch fiber is spawned on [~sw]; closing
+    the switch stops the fiber. Specific to this implementation —
+    Kafka / NATS variants would have their own [create]. *)

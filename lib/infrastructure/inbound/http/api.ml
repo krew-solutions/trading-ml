@@ -47,7 +47,8 @@ let order_rejected_json
 
 let order_unreachable_json
     (ev : Account_integration_events.Amount_reserved_integration_event.t)
-    (ou : Broker_integration_events.Order_unreachable_integration_event.t) : Yojson.Safe.t =
+    (ou : Broker_integration_events.Order_unreachable_integration_event.t) : Yojson.Safe.t
+    =
   `Assoc
     [
       ("status", `String "broker_unreachable");
@@ -55,7 +56,8 @@ let order_unreachable_json
       ("reason", `String ou.reason);
     ]
 
-let reservation_rejected_json (rj : Account_integration_events.Reservation_rejected_integration_event.t) :
+let reservation_rejected_json
+    (rj : Account_integration_events.Reservation_rejected_integration_event.t) :
     Yojson.Safe.t =
   `Assoc [ ("status", `String "rejected_by_account"); ("reason", `String rj.reason) ]
 

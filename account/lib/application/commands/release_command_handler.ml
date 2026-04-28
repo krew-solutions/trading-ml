@@ -1,10 +1,8 @@
-module Reservation_released =
-  Account_integration_events.Reservation_released_integration_event
-
-let make ~(portfolio : Account.Portfolio.t ref)
-    ~(events_reservation_released : Reservation_released.t Bus.Event_bus.t)
-    (cmd : Release_command.t) : unit =
-  let publish_reservation_released =
-    Bus.Event_bus.publish events_reservation_released
+let handle ~(portfolio : Account.Portfolio.t ref) (cmd : Release_command.t) :
+    (Account.Portfolio.reservation_released, Account.Portfolio.release_error) Rop.t =
+  let open Rop in
+  let* portfolio', domain_event =
+    Account.Portfolio.try_release !portfolio ~id:cmd.reservation_id |> of_result
   in
-  Release_command_workflow.execute ~portfolio ~publish_reservation_released cmd
+  portfolio := portfolio';
+  succeed domain_event

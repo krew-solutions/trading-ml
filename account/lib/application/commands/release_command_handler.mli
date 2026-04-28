@@ -1,17 +1,12 @@
-(** Handler for {!Release_command.t}. Fire-and-forget per the
-    async {!Bus.Command_bus} contract.
+(** Command handler for {!Release_command.t}.
 
-    - {!Account.Portfolio.try_release} returns [Ok] → mutate
-      [~portfolio] ref, publish {!Reservation_released.t}.
-    - Returns [Error (Reservation_not_found _)] → silent no-op
-      (idempotent compensation: a duplicated or late
-      {!Order_rejected.t} for a reservation that's already been
-      released doesn't crash the system). *)
+    Single responsibility: invoke {!Account.Portfolio.try_release}
+    on the shared portfolio ref, mutate it on success, and return
+    the resulting domain event. Does not publish, does not touch
+    integration events — that is the domain-event handler's job
+    composed downstream by {!Release_command_workflow.execute}. *)
 
-module Reservation_released = Account_integration_events.Reservation_released_integration_event
-
-val make :
+val handle :
   portfolio:Account.Portfolio.t ref ->
-  events_reservation_released:Reservation_released.t Bus.Event_bus.t ->
   Release_command.t ->
-  unit
+  (Account.Portfolio.reservation_released, Account.Portfolio.release_error) Rop.t

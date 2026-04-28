@@ -18,7 +18,7 @@ sub-directories. Each aggregate sub-directory contains:
   shape.
 
 Account is the first BC in the project with a real Domain Layer
-(Broker has none, `lib/shared/` has none). Until this ADR the
+(Broker has none, `shared/` has none). Until this ADR the
 Account domain was a single 252-line monolithic file
 `account/lib/domain/portfolio.ml` that bundled the aggregate root
 `Portfolio.t`, the Entity `reservation`, the VO `position`, two

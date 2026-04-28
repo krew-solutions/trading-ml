@@ -13,14 +13,14 @@
  (alias gospel)
  (deps
   (glob_files_rec *.mli)
-  (glob_files ../../../lib/domain/gospel_stubs/*.mli))
+  (glob_files ../../../strategy/lib/domain/gospel_stubs/*.mli))
  (action
   (bash
    "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L ../../../lib/domain/gospel_stubs -L . \"$f\"
+  gospel check -L ../../../strategy/lib/domain/gospel_stubs -L . \"$f\"
 done")))
 
 ; Why3 deductive verification. -L includes lib/domain/core so .mlw
@@ -31,14 +31,14 @@ done")))
  (alias why3)
  (deps
   (glob_files_rec *.mlw)
-  (glob_files ../../../lib/domain/core/*.mlw))
+  (glob_files ../../../strategy/lib/domain/core/*.mlw))
  (action
   (bash
    "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../../../lib/domain/core -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../../../lib/domain/core -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../../../strategy/lib/domain/core -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../strategy/lib/domain/core -P z3 \"$f\" >/dev/null
 done")))
 
 ; gospel-alias is intentionally NOT a runtest dep: gospel 0.3.1

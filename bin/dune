@@ -6,7 +6,10 @@
  (names main export_training_data train_logistic)
  (public_names trading trading_export_training_data trading_train_logistic)
  (package trading)
- (libraries core broker indicators strategies engine live_engine
+ (libraries core account broker indicators strategies engine live_engine
+            account_commands account_integration_events account_inbound_integration_events
+            broker_commands broker_integration_events
+            bus
             logistic_regression triple_barrier
             http_transport finam bcs acl_common infra_common token_store synthetic paper server log logs
             eio_main mirage-crypto-rng.unix unix))

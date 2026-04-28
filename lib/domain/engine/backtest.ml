@@ -95,7 +95,9 @@ let run
   in
   let total_return =
     let init_c = Decimal.to_float config.initial_cash in
-    let fin = Account.Portfolio.equity final_portfolio (fun _ -> None) |> Decimal.to_float in
+    let fin =
+      Account.Portfolio.equity final_portfolio (fun _ -> None) |> Decimal.to_float
+    in
     if init_c = 0.0 then 0.0 else (fin -. init_c) /. init_c
   in
   {

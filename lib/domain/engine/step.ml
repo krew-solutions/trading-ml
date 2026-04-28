@@ -88,8 +88,8 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
            event arrives and calls {!commit_fill} externally. *)
               let portfolio' =
                 if config.auto_commit then
-                  Account.Portfolio.commit_fill portfolio_r ~id:reservation_id ~actual_quantity:q
-                    ~actual_price:price ~actual_fee:fee
+                  Account.Portfolio.commit_fill portfolio_r ~id:reservation_id
+                    ~actual_quantity:q ~actual_price:price ~actual_fee:fee
                 else portfolio_r
               in
               ( {
@@ -108,8 +108,8 @@ let commit_fill state ~reservation_id ~actual_quantity ~actual_price ~actual_fee
 
 let commit_partial_fill state ~reservation_id ~actual_quantity ~actual_price ~actual_fee =
   let portfolio' =
-    Account.Portfolio.commit_partial_fill state.portfolio ~id:reservation_id ~actual_quantity
-      ~actual_price ~actual_fee
+    Account.Portfolio.commit_partial_fill state.portfolio ~id:reservation_id
+      ~actual_quantity ~actual_price ~actual_fee
   in
   { state with portfolio = portfolio' }
 

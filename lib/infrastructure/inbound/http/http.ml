@@ -196,9 +196,59 @@ let sse_expert (registry : Stream.t) ~bar_keys =
       Stream.disconnect registry subscriber;
       Log.info "SSE close id=%d" subscriber.id )
 
+type buses = {
+  reserve : Account_commands.Reserve_command.t Bus.Command_bus.t;
+  submit_order : Broker_commands.Submit_order_command.t Bus.Command_bus.t;
+}
+(** Composition-root bundle threaded into the HTTP layer. Both
+    Command_buses are async fire-and-forget; outcomes for the
+    request flow back as integration events on the corresponding
+    Event_buses. The HTTP response is a 202 with the cross-BC
+    saga key the UI uses to filter SSE updates. *)
+
+(** Project a parsed [place_order_request] into a
+    {!Account_commands.Reserve_command.t}. The [price] is the
+    cash-impact reference for reservation: prefer the kind's own
+    target price (limit / stop) when present; for market orders
+    fall back to the latest broker mark fetched on demand. *)
+let to_reserve_command broker (req : Api.place_order_request) :
+    Account_commands.Reserve_command.t =
+  let price =
+    match req.kind with
+    | Limit p | Stop p -> Decimal.to_float p
+    | Stop_limit { limit; _ } -> Decimal.to_float limit
+    | Market -> (
+        match
+          Broker.bars broker ~n:1 ~instrument:req.instrument ~timeframe:Timeframe.H1
+        with
+        | last :: _ -> Decimal.to_float last.close
+        | [] -> 0.0)
+  in
+  {
+    side = Side.to_string req.side;
+    symbol = Instrument.to_qualified req.instrument;
+    quantity = Decimal.to_float req.quantity;
+    price;
+  }
+
+(** Project a parsed [place_order_request] into a
+    {!Broker_commands.Submit_order_command.t} once Account has
+    surfaced the [reservation_id] (the cross-BC saga key). *)
+let to_submit_order_command ~reservation_id (req : Api.place_order_request) :
+    Broker_commands.Submit_order_command.t =
+  {
+    reservation_id;
+    symbol = Instrument.to_qualified req.instrument;
+    side = Side.to_string req.side;
+    quantity = Decimal.to_float req.quantity;
+    kind = Queries.Order_kind_view_model.of_domain req.kind;
+    tif = Order.tif_to_string req.tif;
+  }
+
 (** Pure routing: given method+path, return (status, action). Kept
     separate from request logging so [handler] can log uniformly. *)
-let route broker registry request body : int * Cohttp_eio.Server.response_action =
+let route ~broker ~buses ~registry request body : int * Cohttp_eio.Server.response_action
+    =
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
   let meth = Cohttp.Request.meth request in
@@ -241,12 +291,18 @@ let route broker registry request body : int * Cohttp_eio.Server.response_action
     | `POST, "/api/orders" ->
         let body = Eio.Flow.read_all body in
         let req = Api.place_order_of_json (Yojson.Safe.from_string body) in
-        let o =
-          Broker.place_order broker ~instrument:req.instrument ~side:req.side
-            ~quantity:req.quantity ~kind:req.kind ~tif:req.tif
-            ~client_order_id:req.client_order_id
-        in
-        ok (json_response (Api.order_json o))
+        Bus.Command_bus.send buses.reserve (to_reserve_command broker req);
+        (* TODO: reservation_id is not synchronously knowable on the
+           async bus — outcomes will arrive on integration-event
+           channels, not back through [send]. The Submit dispatch
+           and the HTTP response shape need a proper saga key
+           (HTTP-generated correlation_id) and an SSE-driven
+           UI flow. Placeholder 202 returned for now. *)
+        ignore (to_submit_order_command, buses.submit_order);
+        ( 202,
+          `Response
+            (json_response ~status:`Accepted (`Assoc [ ("status", `String "accepted") ]))
+        )
     | `GET, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/" ->
         let cid = String.sub path 12 (String.length path - 12) in
         let o = Broker.get_order broker ~client_order_id:cid in
@@ -265,7 +321,7 @@ let route broker registry request body : int * Cohttp_eio.Server.response_action
         (json_response ~status:`Internal_server_error
            (`Assoc [ ("error", `String (Printexc.to_string e)) ])) )
 
-let handler broker registry _conn request body =
+let handler ~broker ~buses ~registry _conn request body =
   let t0 = Unix.gettimeofday () in
   let uri = Cohttp.Request.uri request in
   let meth_str = Cohttp.Code.string_of_method (Cohttp.Request.meth request) in
@@ -273,7 +329,7 @@ let handler broker registry _conn request body =
     let q = Uri.query uri in
     if q = [] then Uri.path uri else Uri.path uri ^ "?" ^ Uri.encoded_of_query q
   in
-  let status, action = route broker registry request body in
+  let status, action = route ~broker ~buses ~registry request body in
   let dt_ms = (Unix.gettimeofday () -. t0) *. 1000. in
   (match action with
   | `Expert _ ->
@@ -300,8 +356,15 @@ let no_live_setup : live_setup =
     bind = (fun _ -> ());
   }
 
-let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~broker () =
-  Eio.Switch.run @@ fun sw ->
+let run
+    ?(setup = fun ~sw:_ -> no_live_setup)
+    ~sw
+    ~env
+    ~port
+    ~broker
+    ~buses
+    ~(register_publisher : Stream.t -> unit)
+    () =
   let s = setup ~sw in
   let fetch ~instrument ~n ~timeframe = fetch_candles broker ~instrument ~n ~timeframe in
   let registry =
@@ -309,11 +372,12 @@ let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~broker () =
       ~fetch ()
   in
   s.bind registry;
+  register_publisher registry;
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw (Eio.Stdenv.net env)
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
   in
   let server =
-    Cohttp_eio.Server.make_response_action ~callback:(handler broker registry) ()
+    Cohttp_eio.Server.make_response_action ~callback:(handler ~broker ~buses ~registry) ()
   in
   Cohttp_eio.Server.run socket server ~on_error:raise

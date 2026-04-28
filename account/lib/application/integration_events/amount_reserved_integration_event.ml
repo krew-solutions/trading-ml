@@ -1,9 +1,9 @@
 type t = {
   reservation_id : int;
-  symbol : string;
   side : string;
+  instrument : Queries.Instrument_view_model.t;
   quantity : float;
-  kind : Queries.Order_kind_view_model.t;
-  tif : string;
+  price : float;
+  reserved_cash : float;
 }
 [@@deriving yojson]

@@ -25,12 +25,12 @@ let test_buy_decreases_cash () =
 let test_partial_close_realizes_pnl () =
   let p = Account.Portfolio.empty ~cash:(d 10000.0) in
   let p =
-    Account.Portfolio.fill p ~instrument:inst ~side:Buy ~quantity:(d 10.0) ~price:(d 100.0)
-      ~fee:Decimal.zero
+    Account.Portfolio.fill p ~instrument:inst ~side:Buy ~quantity:(d 10.0)
+      ~price:(d 100.0) ~fee:Decimal.zero
   in
   let p =
-    Account.Portfolio.fill p ~instrument:inst ~side:Sell ~quantity:(d 5.0) ~price:(d 120.0)
-      ~fee:Decimal.zero
+    Account.Portfolio.fill p ~instrument:inst ~side:Sell ~quantity:(d 5.0)
+      ~price:(d 120.0) ~fee:Decimal.zero
   in
   Alcotest.check dec "realized 5*(120-100)=100" (d 100.0) p.realized_pnl;
   match Account.Portfolio.position p inst with
@@ -56,8 +56,8 @@ let test_flip_from_long_to_short () =
       ~fee:Decimal.zero
   in
   let p =
-    Account.Portfolio.fill p ~instrument:inst ~side:Sell ~quantity:(d 8.0) ~price:(d 110.0)
-      ~fee:Decimal.zero
+    Account.Portfolio.fill p ~instrument:inst ~side:Sell ~quantity:(d 8.0)
+      ~price:(d 110.0) ~fee:Decimal.zero
   in
   (* closes 5 long (realized: 5*10 = 50), remaining 3 short at 110 *)
   Alcotest.check dec "realized" (d 50.0) p.realized_pnl;
@@ -86,8 +86,8 @@ let test_reserve_buy_reduces_available_cash () =
 let test_reserve_sell_does_not_touch_cash () =
   let p = Account.Portfolio.empty ~cash:(d 10_000.0) in
   let p =
-    Account.Portfolio.fill p ~instrument:inst ~side:Buy ~quantity:(d 20.0) ~price:(d 100.0)
-      ~fee:Decimal.zero
+    Account.Portfolio.fill p ~instrument:inst ~side:Buy ~quantity:(d 20.0)
+      ~price:(d 100.0) ~fee:Decimal.zero
   in
   let p =
     Account.Portfolio.reserve p ~id:2 ~side:Sell ~instrument:inst ~quantity:(d 5.0)

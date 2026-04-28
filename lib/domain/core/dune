@@ -33,9 +33,10 @@ for f in %{deps}; do
     || why3 prove -L . -P z3 \"$f\" >/dev/null
 done")))
 
-; Bind formal verification into `dune runtest` so CI runs both alongside
-; the unit-test suite. Keep `dune build` lean — proofs run only when
-; tests do.
+; Bind formal verification into `dune runtest` so CI runs proofs
+; alongside the unit-test suite. gospel-alias is intentionally NOT a
+; runtest dep — see account/lib/domain/dune for rationale; consistency
+; across BCs keeps `dune runtest` reliably green.
 (alias
  (name runtest)
- (deps (alias gospel) (alias why3)))
+ (deps (alias why3)))

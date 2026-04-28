@@ -34,4 +34,4 @@ done")))
 
 (alias
  (name runtest)
- (deps (alias gospel) (alias why3)))
+ (deps (alias why3)))

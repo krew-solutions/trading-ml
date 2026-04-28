@@ -6,6 +6,8 @@
     exposes the whole portfolio as a nested DTO. Callers that
     need only the summary can ignore [portfolio]. *)
 
+module Portfolio_view_model = Account_queries.Portfolio_view_model
+
 type equity_point = { ts : int64; equity : float } [@@deriving yojson]
 
 type t = {

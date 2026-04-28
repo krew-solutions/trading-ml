@@ -35,24 +35,6 @@ module _ :
   Order_view_model
 
 module _ :
-  View_model.S
-    with type t = Position_view_model.t
-     and type domain = Position_view_model.domain =
-  Position_view_model
-
-module _ :
-  View_model.S
-    with type t = Reservation_view_model.t
-     and type domain = Reservation_view_model.domain =
-  Reservation_view_model
-
-module _ :
-  View_model.S
-    with type t = Portfolio_view_model.t
-     and type domain = Portfolio_view_model.domain =
-  Portfolio_view_model
-
-module _ :
   View_model.S with type t = Fill_view_model.t and type domain = Fill_view_model.domain =
   Fill_view_model
 

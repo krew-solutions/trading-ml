@@ -1,4 +1,5 @@
 open Core
+module Portfolio_view_model = Account_queries.Portfolio_view_model
 
 type equity_point = { ts : int64; equity : float } [@@deriving yojson]
 

@@ -1,0 +1,16 @@
+(library
+ (name account_commands)
+ (public_name trading.account.commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  account
+  queries
+  account_integration_events
+  account_domain_event_handlers
+  rop)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

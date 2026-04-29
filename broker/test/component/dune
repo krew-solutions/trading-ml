@@ -1,0 +1,5 @@
+(test
+ (name broker_component_runner)
+ (libraries core finam websocket
+            eio eio_main
+            alcotest))

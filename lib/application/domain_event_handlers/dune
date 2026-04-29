@@ -1,4 +1,0 @@
-(library
- (name domain_event_handlers)
- (public_name trading.domain_event_handlers)
- (libraries core engine rop))

@@ -150,38 +150,124 @@ type t = {
 the pipeline functional (the strategy always returns a signal,
 even if nothing is happening) without producing orders.
 
-## Portfolio
+## Portfolio (Account BC)
 
-Cash + positions + realized PnL + outstanding reservations:
+The Portfolio aggregate lives in the Account Bounded Context
+(`account/lib/domain/portfolio/`) and follows the per-aggregate
+layout established by [ADR 0006](../adr/0006-domain-layer-per-aggregate-layout.md):
+one directory per aggregate, with `values/`, `entities/`, `events/`
+sub-folders and one file per concept.
+
+```
+account/lib/domain/portfolio/
+├── portfolio.ml/.mli/.mlw            ⇒ Account.Portfolio
+├── reservation/
+│   └── reservation.ml/.mli/.mlw      ⇒ Account.Portfolio.Reservation
+├── values/
+│   └── position.ml/.mli/.mlw         ⇒ Account.Portfolio.Values.Position
+└── events/
+    ├── amount_reserved.ml/.mli/.mlw      ⇒ Account.Portfolio.Events.Amount_reserved
+    └── reservation_released.ml/.mli/.mlw ⇒ Account.Portfolio.Events.Reservation_released
+```
+
+Each Entity has its own sub-directory; if an Entity grows VOs,
+events, or nested Entities of its own, the Entity directory
+recursively repeats the aggregate shape (`reservation/values/`,
+`reservation/events/`, etc.). One uniform naming rule applies
+at every level: the directory's main module is the file whose
+name matches the directory (`portfolio/portfolio.ml`,
+`reservation/reservation.ml`, ...). dune's `(include_subdirs
+qualified)` collapses that file into the namespace; the file
+explicitly re-exports the peer sub-directories it wants public
+(`module Values : module type of Values` in `.mli`,
+`module Values = Values` in `.ml`). This is the OCaml/dune
+analogue of Python's `__init__.py` — see
+[ADR 0006](../adr/0006-domain-layer-per-aggregate-layout.md).
+
+### Aggregate root
 
 ```ocaml
-type position = {
-  instrument : Instrument.t;
-  quantity : Decimal.t;   (* signed *)
-  avg_price : Decimal.t;  (* VWAP entry price *)
-}
-
-type reservation = {
-  id : int;
-  side : Side.t;
-  instrument : Instrument.t;
-  quantity : Decimal.t;       (* remaining *)
-  per_unit_cash : Decimal.t;  (* immutable after reserve *)
-}
-
 type t = private {
   cash : Decimal.t;
-  positions : (Instrument.t * position) list;
+  positions : (Instrument.t * Values.Position.t) list;
   realized_pnl : Decimal.t;
-  reservations : reservation list;
+  reservations : Reservation.t list;
 }
 ```
 
 The type is `private` — callers read fields but can't construct
 directly. State transitions go through named operations:
 `fill`, `reserve`, `commit_fill`, `commit_partial_fill`,
-`release`. Each validates its inputs and raises
-`Invalid_argument` on violations.
+`release`. The boundary entry-points `try_reserve` /
+`try_release` return a `(t * DomainEvent.t, error) result` so
+business-rule failures (`Insufficient_cash` / `Insufficient_qty`
+/ `Reservation_not_found`) become typed values rather than
+exceptions.
+
+### VO `Values.Position`
+
+```ocaml
+type t = {
+  instrument : Instrument.t;
+  quantity : Decimal.t;   (* signed *)
+  avg_price : Decimal.t;  (* VWAP entry price *)
+}
+```
+
+Snapshot of an open position. Identified inside the aggregate by
+its `instrument` key — no separate identity, no behaviour beyond
+the data, hence VO.
+
+### Entity `Reservation`
+
+```ocaml
+type t = {
+  id : int;
+  side : Side.t;
+  instrument : Instrument.t;
+  quantity : Decimal.t;       (* remaining *)
+  per_unit_cash : Decimal.t;  (* immutable after construction *)
+}
+
+val reserved_cash : t -> Decimal.t
+val reserved_qty : t -> Decimal.t
+val per_unit_cash_of :
+  side:Side.t -> price:Decimal.t -> slippage_buffer:float -> fee_rate:float -> Decimal.t
+```
+
+Has explicit identity (`id`) and a lifecycle (`reserve →
+commit_partial_fill* → commit_fill | release`), so it's an Entity
+inside the aggregate. The aggregate is the single transactional
+consistency boundary — callers don't manipulate reservations
+directly, they invoke aggregate operations that fold reservations
+in.
+
+### DomainEvents
+
+```ocaml
+(* Events.Amount_reserved.t *)
+type t = {
+  reservation_id : int;
+  side : Side.t;
+  instrument : Instrument.t;
+  quantity : Decimal.t;
+  price : Decimal.t;
+  reserved_cash : Decimal.t;
+}
+
+(* Events.Reservation_released.t *)
+type t = {
+  reservation_id : int;
+  side : Side.t;
+  instrument : Instrument.t;
+}
+```
+
+Past-tense names per CLAUDE.md. Each event is a pure data record
+emitted by the aggregate on a successful state transition; the
+domain-event handler in `application/domain_event_handlers/`
+projects it into the corresponding integration-event DTO and
+publishes via the outbound port.
 
 `reservations` exists to represent the gap between "broker
 accepted our order" and "broker reported a fill". See

@@ -1,4 +1,4 @@
 (library
  (name acl_common)
  (public_name trading.acl_common)
- (libraries core yojson infra_common))
+ (libraries core yojson datetime))

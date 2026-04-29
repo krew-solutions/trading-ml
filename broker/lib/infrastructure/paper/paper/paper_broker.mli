@@ -107,7 +107,7 @@ val on_fill : t -> (fill -> unit) -> unit
     actual broker numbers — Paper is the stand-in for a real WS
     fill stream, with identical semantics on the consumer side. *)
 
-val portfolio : t -> Engine.Portfolio.t
+val portfolio : t -> Account.Portfolio.t
 (** Current paper portfolio (cash + positions + realized PnL).
-    Updated on every fill using {!Engine.Portfolio.fill}. Exposed for
+    Updated on every fill using {!Account.Portfolio.fill}. Exposed for
     diagnostics, CLI order summaries and UI — not part of the port. *)

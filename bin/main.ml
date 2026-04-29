@@ -445,8 +445,175 @@ let cmd_serve args =
         Some (with_engine (bcs_live_setup ~env ~paper_sink:bar_sink rest))
     | Opened_synthetic _ -> None
   in
+  (* Wire the Account / Broker BC choreography. One Command_bus per
+     command type, one Event_bus per integration event type. Single
+     handler per Command_bus (composition-root invariant); Event_buses
+     fan out to compensation subscriber + SSE projector + future audit
+     consumers without those touching each other. *)
+  Eio.Switch.run @@ fun sw ->
+  let cmd_bus (type a) ~yojson_of_t ~t_of_yojson : a Bus.Command_bus.t =
+    Bus.Command_bus.create ~sw
+      ~to_string:(fun (x : a) -> Yojson.Safe.to_string (yojson_of_t x))
+      ~of_string:(fun s -> t_of_yojson (Yojson.Safe.from_string s))
+      ()
+  in
+  let event_bus (type a) ~yojson_of_t ~t_of_yojson : a Bus.Event_bus.t =
+    Bus.Event_bus.create ~sw
+      ~to_string:(fun (x : a) -> Yojson.Safe.to_string (yojson_of_t x))
+      ~of_string:(fun s -> t_of_yojson (Yojson.Safe.from_string s))
+      ()
+  in
+  let reserve_bus =
+    cmd_bus ~yojson_of_t:Account_commands.Reserve_command.yojson_of_t
+      ~t_of_yojson:Account_commands.Reserve_command.t_of_yojson
+  in
+  let release_bus =
+    cmd_bus ~yojson_of_t:Account_commands.Release_command.yojson_of_t
+      ~t_of_yojson:Account_commands.Release_command.t_of_yojson
+  in
+  let submit_order_bus =
+    cmd_bus ~yojson_of_t:Broker_commands.Submit_order_command.yojson_of_t
+      ~t_of_yojson:Broker_commands.Submit_order_command.t_of_yojson
+  in
+  let events_amount_reserved =
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Amount_reserved_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Amount_reserved_integration_event.t_of_yojson
+  in
+  let events_reservation_released =
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Reservation_released_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Reservation_released_integration_event.t_of_yojson
+  in
+  let events_reservation_rejected =
+    event_bus
+      ~yojson_of_t:
+        Account_integration_events.Reservation_rejected_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_integration_events.Reservation_rejected_integration_event.t_of_yojson
+  in
+  let events_order_accepted =
+    event_bus
+      ~yojson_of_t:Broker_integration_events.Order_accepted_integration_event.yojson_of_t
+      ~t_of_yojson:Broker_integration_events.Order_accepted_integration_event.t_of_yojson
+  in
+  let events_order_rejected =
+    event_bus
+      ~yojson_of_t:Broker_integration_events.Order_rejected_integration_event.yojson_of_t
+      ~t_of_yojson:Broker_integration_events.Order_rejected_integration_event.t_of_yojson
+  in
+  let events_order_unreachable =
+    event_bus
+      ~yojson_of_t:
+        Broker_integration_events.Order_unreachable_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Broker_integration_events.Order_unreachable_integration_event.t_of_yojson
+  in
+  let portfolio_ref = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 1_000_000)) in
+  let next_reservation_id =
+    let counter = ref 0 in
+    fun () ->
+      incr counter;
+      !counter
+  in
+  (* Wrap each outbound Event_bus into the matching application-port
+     closure. Application handlers depend on the named ports, not on
+     {!Bus} directly (DIP). *)
+  let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
+  let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
+  let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
+  Bus.Command_bus.register_handler reserve_bus (fun cmd ->
+      match
+        Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
+          ~next_reservation_id ~slippage_buffer:0.005 ~fee_rate:0.0005
+          ~publish_amount_reserved ~publish_reservation_rejected cmd
+      with
+      | Ok () -> ()
+      (* Business-rule failures (insufficient cash/qty) already
+         surfaced as Reservation_rejected integration event by the
+         workflow; the bus handler discards the Rop tail. *)
+      | Error _ -> ());
+  Bus.Command_bus.register_handler release_bus (fun cmd ->
+      match
+        Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
+          ~publish_reservation_released cmd
+      with
+      | Ok () -> ()
+      (* Idempotent compensation: a duplicated or late rejection
+         event for a reservation that's already been released is
+         silently dropped. *)
+      | Error _ -> ());
+  Bus.Command_bus.register_handler submit_order_bus
+    (Broker_commands.Submit_order_command_handler.make ~broker:client
+       ~events_accepted:events_order_accepted ~events_rejected:events_order_rejected
+       ~events_unreachable:events_order_unreachable);
+  let dispatch_release ~reservation_id =
+    Bus.Command_bus.send release_bus Account_commands.Release_command.{ reservation_id }
+  in
+  (* ACL: bridge Broker-typed outbound buses into Account-typed inbound
+     buses. Account stays autonomous from Broker's type definitions —
+     it subscribes only to its own DTO mirrors, and the field-copy
+     here is the entire translation surface. *)
+  let events_account_inbound_order_rejected =
+    event_bus
+      ~yojson_of_t:
+        Account_inbound_integration_events.Order_rejected_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson
+  in
+  let events_account_inbound_order_unreachable =
+    event_bus
+      ~yojson_of_t:
+        Account_inbound_integration_events.Order_unreachable_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Account_inbound_integration_events.Order_unreachable_integration_event.t_of_yojson
+  in
+  let (_ : Bus.Event_bus.subscription) =
+    Bus.Event_bus.subscribe events_order_rejected (fun ev ->
+        Bus.Event_bus.publish events_account_inbound_order_rejected
+          Account_inbound_integration_events.Order_rejected_integration_event.
+            { reservation_id = ev.reservation_id; reason = ev.reason })
+  in
+  let (_ : Bus.Event_bus.subscription) =
+    Bus.Event_bus.subscribe events_order_unreachable (fun ev ->
+        Bus.Event_bus.publish events_account_inbound_order_unreachable
+          Account_inbound_integration_events.Order_unreachable_integration_event.
+            { reservation_id = ev.reservation_id; reason = ev.reason })
+  in
+  (* Apply functors with the in-memory bus. Swap to Kafka =
+     change [Bus.Event_bus] argument here, no consumer rewrites. *)
+  let module Order_rejected_inbound_handler =
+    Account_inbound_integration_events.Order_rejected_integration_event_handler.Make
+      (Bus.Event_bus)
+  in
+  let module Order_unreachable_inbound_handler =
+    Account_inbound_integration_events.Order_unreachable_integration_event_handler.Make
+      (Bus.Event_bus)
+  in
+  let module Sse_publisher = Server.Publish_order_events.Make (Bus.Event_bus) in
+  let (_ : Bus.Event_bus.subscription) =
+    Order_rejected_inbound_handler.attach ~events:events_account_inbound_order_rejected
+      ~dispatch_release
+  in
+  let (_ : Bus.Event_bus.subscription) =
+    Order_unreachable_inbound_handler.attach
+      ~events:events_account_inbound_order_unreachable ~dispatch_release
+  in
+  let buses : Server.Http.buses =
+    { reserve = reserve_bus; submit_order = submit_order_bus }
+  in
+  let register_publisher (registry : Server.Stream.t) =
+    Sse_publisher.attach registry ~events_amount_reserved ~events_reservation_released
+      ~events_reservation_rejected ~events_order_accepted ~events_order_rejected
+      ~events_order_unreachable
+  in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
-  Server.Http.run ?setup:ws_setup ~env ~port ~broker:client ()
+  Server.Http.run ?setup:ws_setup ~sw ~env ~port ~broker:client ~buses ~register_publisher
+    ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
     server (default http://localhost:8080); the same surface the UI

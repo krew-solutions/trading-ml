@@ -1,0 +1,3 @@
+open Core
+
+type t = { reservation_id : int; side : Side.t; instrument : Instrument.t }

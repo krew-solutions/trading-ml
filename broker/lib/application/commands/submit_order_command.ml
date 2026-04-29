@@ -1,5 +1,5 @@
 type t = {
-  client_order_id : string;
+  reservation_id : int;
   symbol : string;
   side : string;
   quantity : float;

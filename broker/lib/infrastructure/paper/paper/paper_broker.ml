@@ -23,7 +23,7 @@ type t = {
   source : Broker.client;
   mutable book : (string * entry) list;
   mutable fills : fill list;
-  mutable portfolio : Engine.Portfolio.t;
+  mutable portfolio : Account.Portfolio.t;
   last_ts : (Instrument.t, int64) Hashtbl.t;
   mutex : Mutex.t;
   fee_rate : float;
@@ -43,7 +43,7 @@ let make
     source;
     book = [];
     fills = [];
-    portfolio = Engine.Portfolio.empty ~cash:initial_cash;
+    portfolio = Account.Portfolio.empty ~cash:initial_cash;
     last_ts = Hashtbl.create 8;
     mutex = Mutex.create ();
     fee_rate;
@@ -179,7 +179,7 @@ let apply_fill t (e : entry) (c : Candle.t) (price_intent : Decimal.t) =
     in
     t.fills <- fill_rec :: t.fills;
     t.portfolio <-
-      Engine.Portfolio.fill t.portfolio ~instrument:o.instrument ~side:o.side
+      Account.Portfolio.fill t.portfolio ~instrument:o.instrument ~side:o.side
         ~quantity:qty ~price ~fee;
     (* Fire synchronous listeners (e.g., Live_engine's commit_fill
        handler). Call them in registration order — reverse the stack

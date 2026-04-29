@@ -1,0 +1,4 @@
+(library
+ (name bus)
+ (public_name trading.bus)
+ (libraries eio logs))

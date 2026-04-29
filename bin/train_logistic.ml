@@ -39,7 +39,7 @@ let usage () =
 
 let parse_date s =
   let s = if String.contains s 'T' then s else s ^ "T00:00:00Z" in
-  Infra_common.Iso8601.parse s
+  Datetime.Iso8601.parse s
 
 (** Look up each comma-separated child name against the registry
     and build a default-param instance. Fails with a precise error

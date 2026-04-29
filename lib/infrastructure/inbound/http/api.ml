@@ -16,77 +16,50 @@ let project (type d) (module V : View_model.S with type domain = d) (x : d) :
     Yojson.Safe.t =
   V.yojson_of_t (V.of_domain x)
 
-(** Stable response shape for the PlaceOrder HTTP endpoint. The
-    workflow's internal event list stays internal — we pick out
-    the terminal business outcome and project only what the UI
-    needs. Adding / renaming a domain event doesn't break the
-    wire contract; only adding a new terminal outcome does.
-
-    [reason] is passed through for now as user-facing feedback.
-    When broker error strings start carrying information that
-    shouldn't leak (internal ids, backend topology, etc.), map
-    them to safe categories here rather than forward verbatim. *)
-let place_order_response_json (events : Workflows.Place_order_workflow.event list) :
-    Yojson.Safe.t =
-  let forwarded =
-    List.find_map
-      (function
-        | Workflows.Place_order_workflow.Order_forwarded e -> Some e
-        | _ -> None)
-      events
-  in
-  let rejected =
-    List.find_map
-      (function
-        | Workflows.Place_order_workflow.Forward_rejected e -> Some e
-        | _ -> None)
-      events
-  in
-  match (forwarded, rejected) with
-  | Some ev, _ ->
-      `Assoc
-        [
-          ("status", `String "placed");
-          ("order", project (module Order_view_model) ev.broker_order);
-        ]
-  | None, Some (Order_rejected_by_broker { client_order_id; reason; _ }) ->
-      `Assoc
-        [
-          ("status", `String "rejected");
-          ("client_order_id", `String client_order_id);
-          ("reason", `String reason);
-        ]
-  | None, Some (Broker_unreachable { client_order_id; reason; _ }) ->
-      `Assoc
-        [
-          ("status", `String "temporary_error");
-          ("client_order_id", `String client_order_id);
-          ("reason", `String reason);
-        ]
-  | None, None ->
-      (* Successful workflow always produces either Order_forwarded
-       or Forward_rejected; this branch is unreachable. *)
-      `Assoc [ ("status", `String "unknown") ]
-
-let place_order_error_json (err : Workflows.Place_order_workflow.error) : Yojson.Safe.t =
-  match err with
-  | Validation_errors errs ->
-      let msgs = List.map Commands.Place_order_command.validation_error_to_string errs in
-      `Assoc
-        [
-          ("kind", `String "invalid_request");
-          ("messages", `List (List.map (fun s -> `String s) msgs));
-        ]
-  | Reservation_rejected e ->
-      `Assoc
-        [
-          ("kind", `String "reservation_rejected");
-          ( "messages",
-            `List [ `String (Commands.Place_order_command.reservation_error_to_string e) ]
-          );
-        ]
-
 let candle_json (c : Candle.t) : Yojson.Safe.t = project (module Candle_view_model) c
+
+(** {1 PlaceOrder HTTP outcomes}
+
+    Each outcome of the [POST /api/orders] flow gets a stable,
+    discriminated JSON shape. The [status] field is the
+    primary discriminator; the rest of the fields are
+    outcome-specific. *)
+
+let order_accepted_json
+    (ev : Account_integration_events.Amount_reserved_integration_event.t)
+    (oa : Broker_integration_events.Order_accepted_integration_event.t) : Yojson.Safe.t =
+  `Assoc
+    [
+      ("status", `String "placed");
+      ("reservation_id", `Int ev.reservation_id);
+      ("order", Order_view_model.yojson_of_t oa.broker_order);
+    ]
+
+let order_rejected_json
+    (ev : Account_integration_events.Amount_reserved_integration_event.t)
+    (orj : Broker_integration_events.Order_rejected_integration_event.t) : Yojson.Safe.t =
+  `Assoc
+    [
+      ("status", `String "rejected_by_broker");
+      ("reservation_id", `Int ev.reservation_id);
+      ("reason", `String orj.reason);
+    ]
+
+let order_unreachable_json
+    (ev : Account_integration_events.Amount_reserved_integration_event.t)
+    (ou : Broker_integration_events.Order_unreachable_integration_event.t) : Yojson.Safe.t
+    =
+  `Assoc
+    [
+      ("status", `String "broker_unreachable");
+      ("reservation_id", `Int ev.reservation_id);
+      ("reason", `String ou.reason);
+    ]
+
+let reservation_rejected_json
+    (rj : Account_integration_events.Reservation_rejected_integration_event.t) :
+    Yojson.Safe.t =
+  `Assoc [ ("status", `String "rejected_by_account"); ("reason", `String rj.reason) ]
 
 let candles_json (cs : Candle.t list) : Yojson.Safe.t =
   `Assoc [ ("candles", `List (List.map candle_json cs)) ]

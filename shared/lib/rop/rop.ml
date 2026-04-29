@@ -45,6 +45,8 @@ let plus add_success add_failure switch1 switch2 x =
   | Ok _, Error f2 -> Error f2
   | Error f1, Error f2 -> Error (add_failure f1 f2)
 
+let ( &&& ) v1 v2 = plus (fun a _ -> a) ( @ ) v1 v2
+
 let ( <!> ) = map
 let ( <*> ) = apply
 let ( >>= ) = bind

@@ -112,6 +112,19 @@ let test_plus_one_failure_short_circuits_to_it () =
   | Error [ "b" ] -> ()
   | _ -> Alcotest.fail "single failure should surface as that failure"
 
+let test_amp_returns_first_success_concatenates_failures () =
+  let v_ok1 _ = Rop.succeed "in" in
+  let v_ok2 _ = Rop.succeed "in" in
+  let v_bad1 _ : (string, string) Rop.t = Rop.fail "name blank" in
+  let v_bad2 _ : (string, string) Rop.t = Rop.fail "email blank" in
+  let open Rop in
+  (match (v_ok1 &&& v_ok2) "in" with
+  | Ok "in" -> ()
+  | _ -> Alcotest.fail "both-success returns first success");
+  match (v_bad1 &&& v_bad2) "in" with
+  | Error [ "name blank"; "email blank" ] -> ()
+  | _ -> Alcotest.fail "both-failure concatenates"
+
 let tests =
   [
     ("either dispatches branches", `Quick, test_either_dispatches_branches);
@@ -130,6 +143,9 @@ let tests =
     ( "plus one failure short-circuits to it",
       `Quick,
       test_plus_one_failure_short_circuits_to_it );
+    ( "&&& returns first success / concats failures",
+      `Quick,
+      test_amp_returns_first_success_concatenates_failures );
     (">>= is bind", `Quick, test_bind_infix_is_bind);
     (">=> composes two switches", `Quick, test_kleisli_composes_two_switches);
     ( ">=> short-circuits on first failure",

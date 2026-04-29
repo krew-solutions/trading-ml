@@ -120,6 +120,14 @@ val of_result : ('a, 'err) result -> ('a, 'err) t
 
 (** {1 Operators} *)
 
+val ( &&& ) : ('x -> ('a, 'err) t) -> ('x -> ('a, 'err) t) -> 'x -> ('a, 'err) t
+(** Validation-flavoured {!plus}: success values from both
+    branches are assumed equivalent (returns the first), failure
+    lists are concatenated. Wlaschin's [&&&]; he recommends
+    defining it locally in each validation module rather than
+    globally — kept here for convenience, override locally if a
+    custom merge is needed. *)
+
 val ( <!> ) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!map}. Applicative entry point: lifts a
     plain function into the Result context. *)

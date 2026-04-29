@@ -33,13 +33,10 @@ let tee f x =
   f x;
   x
 
-let try_catch f exn_handler x =
-  try succeed (f x) with e -> fail (exn_handler e)
+let try_catch f exn_handler x = try succeed (f x) with e -> fail (exn_handler e)
 
 let double_map success_fn failure_fn =
-  either
-    (fun x -> succeed (success_fn x))
-    (fun e -> Error (List.map failure_fn e))
+  either (fun x -> succeed (success_fn x)) (fun e -> Error (List.map failure_fn e))
 
 let plus add_success add_failure switch1 switch2 x =
   match (switch1 x, switch2 x) with

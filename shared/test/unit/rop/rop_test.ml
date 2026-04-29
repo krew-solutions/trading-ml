@@ -69,8 +69,52 @@ let test_kleisli_short_circuits_on_first_failure () =
   | Error [ "stop-at-f" ] -> Alcotest.(check bool) "g not called" false !g_called
   | _ -> Alcotest.fail "first-failure must short-circuit"
 
+let test_either_dispatches_branches () =
+  let s_called = ref 0 in
+  let f_called = ref 0 in
+  let success x =
+    incr s_called;
+    `S x
+  in
+  let failure e =
+    incr f_called;
+    `F e
+  in
+  let r1 = Rop.either success failure (Rop.succeed 42) in
+  let r2 = Rop.either success failure (Rop.fail "boom") in
+  Alcotest.(check int) "success branch ran once" 1 !s_called;
+  Alcotest.(check int) "failure branch ran once" 1 !f_called;
+  match (r1, r2) with
+  | `S 42, `F [ "boom" ] -> ()
+  | _ -> Alcotest.fail "either should route to the corresponding branch"
+
+let test_plus_both_success_merges () =
+  let s1 _ = Rop.succeed [ 1 ] in
+  let s2 _ = Rop.succeed [ 2 ] in
+  let p = Rop.plus ( @ ) ( @ ) s1 s2 in
+  match p () with
+  | Ok [ 1; 2 ] -> ()
+  | _ -> Alcotest.fail "plus should add successes via add_success"
+
+let test_plus_both_failure_accumulates () =
+  let s1 _ : (int, string) Rop.t = Rop.fail "a" in
+  let s2 _ : (int, string) Rop.t = Rop.fail "b" in
+  let p = Rop.plus (fun a _ -> a) ( @ ) s1 s2 in
+  match p () with
+  | Error [ "a"; "b" ] -> ()
+  | Error other -> Alcotest.failf "got [%s]" (String.concat "; " other)
+  | Ok _ -> Alcotest.fail "expected accumulated failure"
+
+let test_plus_one_failure_short_circuits_to_it () =
+  let s1 _ = Rop.succeed 1 in
+  let s2 _ : (int, string) Rop.t = Rop.fail "b" in
+  match Rop.plus ( + ) ( @ ) s1 s2 () with
+  | Error [ "b" ] -> ()
+  | _ -> Alcotest.fail "single failure should surface as that failure"
+
 let tests =
   [
+    ("either dispatches branches", `Quick, test_either_dispatches_branches);
     ("switch lifts to success", `Quick, test_switch_lifts_to_success);
     ( "tee runs side effect and passes through",
       `Quick,
@@ -81,6 +125,11 @@ let tests =
       test_try_catch_routes_exception_to_failure );
     ("double_map on success", `Quick, test_double_map_on_success);
     ("double_map on failure per element", `Quick, test_double_map_on_failure_per_element);
+    ("plus both-success merges", `Quick, test_plus_both_success_merges);
+    ("plus both-failure accumulates", `Quick, test_plus_both_failure_accumulates);
+    ( "plus one failure short-circuits to it",
+      `Quick,
+      test_plus_one_failure_short_circuits_to_it );
     (">>= is bind", `Quick, test_bind_infix_is_bind);
     (">=> composes two switches", `Quick, test_kleisli_composes_two_switches);
     ( ">=> short-circuits on first failure",

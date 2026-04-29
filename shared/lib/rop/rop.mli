@@ -1,14 +1,29 @@
 (** Railway-Oriented Programming: accumulating Result.
 
     Scott Wlaschin's two-track pattern (fsharpforfunandprofit.com/rop)
-    realised as a thin layer over the stdlib {!Stdlib.Result}. The
-    Error branch always carries a [list] so independent failures
-    from parallel validations combine without loss via
-    {!apply}/{!both} — e.g. a form with bad symbol AND bad side
-    AND negative quantity reports all three problems together,
-    not one per round-trip.
+    realised as a thin layer over the stdlib {!Stdlib.Result}.
 
-    Two sets of sugar for pipeline composition:
+    {1 Deviations from Wlaschin's canonical F# version}
+
+    - Failure branch carries a [list], not a single value
+      ([type ('a, 'err) t = ('a, 'err list) result]). Required
+      so independent failures from parallel validations combine
+      without loss via {!apply}/{!both}/{!plus} — e.g. a form
+      with bad symbol AND bad side AND negative quantity reports
+      all three problems together. Knock-on effects: {!plus}
+      takes [add_failure : 'e list -> 'e list -> 'e list] (not
+      [single -> single -> single]); {!double_map} maps the
+      [failure_fn] element-wise across the error list.
+    - {!bind} keeps OCaml's stdlib argument order (two-track
+      first, switch second) for [let*] compatibility, instead of
+      Wlaschin's F# order (switch first). The end-user-facing
+      {!(>>=)} and {!(>=>)} pipe identically to F#.
+    - The applicative pieces ({!apply}, {!both}, {!(<*>)},
+      [let+]/[and+]) are extensions Wlaschin's toolkit doesn't
+      cover; they exploit the list-failure invariant for
+      accumulation.
+
+    {1 Sugar for pipeline composition}
 
     - [let+]/[and+]: applicative — parallel branches, errors
       accumulated. Use for validating many independent fields.
@@ -26,21 +41,74 @@ type ('a, 'err) t = ('a, 'err list) result
     errors. This is a {i type alias} for stdlib Result so values
     pattern-match with plain [Ok] / [Error]. *)
 
+(** {1 Constructors} *)
+
 val succeed : 'a -> ('a, 'err) t
-(** [Ok x]. *)
+(** [Ok x]. Wlaschin's [succeed] / [return] / [pure]. *)
 
 val fail : 'err -> ('a, 'err) t
-(** [Error [e]] — single-element failure list. *)
+(** [Error [e]] — single-element failure list. Wlaschin's [fail]. *)
+
+(** {1 Core eliminator}
+
+    All other adapters are defined in terms of {!either}, mirroring
+    the "complete code" section of Wlaschin's article. *)
+
+val either : ('a -> 'b) -> ('err list -> 'b) -> ('a, 'err) t -> 'b
+(** Apply [success_fn] on the Success branch or [failure_fn] on
+    the Failure branch. Wlaschin's [either]. *)
+
+(** {1 Track adapters and combinators (Wlaschin's toolkit, p.27)}
+
+    F#'s [>>] (normal function composition) is intentionally
+    omitted — it isn't Result-specific, and OCaml's stdlib carries
+    {!Fun.compose} for the same purpose. *)
 
 val map : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
-(** Apply a pure function inside the Success track. *)
+(** Apply a pure function on the Success track. Wlaschin's [map]. *)
+
+val bind : ('a, 'err) t -> ('a -> ('b, 'err) t) -> ('b, 'err) t
+(** Monadic bind: short-circuit on first Error. Wlaschin's [bind]
+    with arguments flipped to OCaml order (two-track first). *)
+
+val switch : ('a -> 'b) -> 'a -> ('b, 'err) t
+(** Lift a plain one-track function into a switch (always-success).
+    Wlaschin's [switch]. *)
+
+val tee : ('a -> unit) -> 'a -> 'a
+(** Turn a dead-end side-effecting function (log, persist) into a
+    one-track pass-through; the input flows through unchanged
+    after the side effect runs. Wlaschin's [tee] / Unix [tee] /
+    "[tap]" in some libraries. *)
+
+val try_catch : ('a -> 'b) -> (exn -> 'err) -> 'a -> ('b, 'err) t
+(** Lift an exception-throwing function into a switch: any
+    exception is routed through [exn_handler] onto the Failure
+    track. Wlaschin's [tryCatch]. *)
+
+val double_map : ('a -> 'b) -> ('err -> 'err2) -> ('a, 'err) t -> ('b, 'err2) t
+(** Bifunctor map: apply [success_fn] on the Success track and
+    [failure_fn] element-wise on every error in the Failure list.
+    Wlaschin's [doubleMap] / "[bimap]" in many libraries. *)
+
+val plus :
+  ('a -> 'a -> 'a) ->
+  ('err list -> 'err list -> 'err list) ->
+  ('x -> ('a, 'err) t) ->
+  ('x -> ('a, 'err) t) ->
+  'x ->
+  ('a, 'err) t
+(** Combine two switch functions in "parallel" over the same
+    input: success values are merged via [add_success], failure
+    lists via [add_failure]. Wlaschin's [plus] (a.k.a. [++],
+    [<+>]). The Wlaschin'ian [&&&] for validation falls out as
+    [plus (fun a _ -> a) ( @ )]. *)
+
+(** {1 Applicative extensions (no Wlaschin counterpart)} *)
 
 val apply : ('a -> 'b, 'err) t -> ('a, 'err) t -> ('b, 'err) t
 (** Apply a wrapped function to a wrapped value. On two Errors,
     concatenates their lists — this is the core of accumulation. *)
-
-val bind : ('a, 'err) t -> ('a -> ('b, 'err) t) -> ('b, 'err) t
-(** Monadic bind: short-circuit on first Error. *)
 
 val both : ('a, 'err) t -> ('b, 'err) t -> ('a * 'b, 'err) t
 (** Pair two results, accumulating errors if both fail. Plumbing
@@ -50,33 +118,7 @@ val of_result : ('a, 'err) result -> ('a, 'err) t
 (** Lift a stdlib Result into Rop by wrapping the single error
     in a singleton list. *)
 
-(** {1 Wlaschin-canonical adapters and combinators}
-
-    The toolkit from "Railway oriented programming"
-    (fsharpforfunandprofit.com/posts/recipe-part2/), p.27 table.
-    F#'s [>>] (normal function composition) is intentionally
-    omitted — it isn't Result-specific, and OCaml's stdlib carries
-    {!Fun.compose} for the same purpose. *)
-
-val switch : ('a -> 'b) -> 'a -> ('b, 'err) t
-(** Adapter that lifts a plain one-track function into a switch
-    function (always-success). Wlaschin's [switch]. *)
-
-val tee : ('a -> unit) -> 'a -> 'a
-(** Adapter that turns a dead-end side-effecting function (e.g.
-    log, persist) into a one-track pass-through. The input flows
-    through unchanged after the side effect runs. Wlaschin's
-    [tee] / Unix [tee] / "[tap]" in some libraries. *)
-
-val try_catch : ('a -> 'b) -> (exn -> 'err) -> 'a -> ('b, 'err) t
-(** Adapter that lifts an exception-throwing function into a
-    switch function: the exception is caught and routed to the
-    Failure track via the supplied handler. Wlaschin's [tryCatch]. *)
-
-val double_map : ('a -> 'b) -> ('err -> 'err2) -> ('a, 'err) t -> ('b, 'err2) t
-(** Bifunctor map: apply [success_fn] on the Success track and
-    [failure_fn] element-wise on every error in the Failure list.
-    Wlaschin's [doubleMap] / "[bimap]" in many libraries. *)
+(** {1 Operators} *)
 
 val ( <!> ) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!map}. Applicative entry point: lifts a

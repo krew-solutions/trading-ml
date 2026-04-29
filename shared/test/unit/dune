@@ -1,6 +1,6 @@
 (test
  (name shared_unit_runner)
- (libraries bus alcotest eio eio_main))
+ (libraries bus rop alcotest eio eio_main))
 
 ; Same flatten convention as account/test/unit/. Filenames globally
 ; unique so the flat namespace doesn't collide.

@@ -2,4 +2,8 @@
 
 let () =
   Alcotest.run "trading-shared-unit"
-    [ ("command_bus", Command_bus_test.tests); ("event_bus", Event_bus_test.tests) ]
+    [
+      ("command_bus", Command_bus_test.tests);
+      ("event_bus", Event_bus_test.tests);
+      ("rop", Rop_test.tests);
+    ]

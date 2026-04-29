@@ -50,6 +50,34 @@ val of_result : ('a, 'err) result -> ('a, 'err) t
 (** Lift a stdlib Result into Rop by wrapping the single error
     in a singleton list. *)
 
+(** {1 Wlaschin-canonical adapters and combinators}
+
+    The toolkit from "Railway oriented programming"
+    (fsharpforfunandprofit.com/posts/recipe-part2/), p.27 table.
+    F#'s [>>] (normal function composition) is intentionally
+    omitted — it isn't Result-specific, and OCaml's stdlib carries
+    {!Fun.compose} for the same purpose. *)
+
+val switch : ('a -> 'b) -> 'a -> ('b, 'err) t
+(** Adapter that lifts a plain one-track function into a switch
+    function (always-success). Wlaschin's [switch]. *)
+
+val tee : ('a -> unit) -> 'a -> 'a
+(** Adapter that turns a dead-end side-effecting function (e.g.
+    log, persist) into a one-track pass-through. The input flows
+    through unchanged after the side effect runs. Wlaschin's
+    [tee] / Unix [tee] / "[tap]" in some libraries. *)
+
+val try_catch : ('a -> 'b) -> (exn -> 'err) -> 'a -> ('b, 'err) t
+(** Adapter that lifts an exception-throwing function into a
+    switch function: the exception is caught and routed to the
+    Failure track via the supplied handler. Wlaschin's [tryCatch]. *)
+
+val double_map : ('a -> 'b) -> ('err -> 'err2) -> ('a, 'err) t -> ('b, 'err2) t
+(** Bifunctor map: apply [success_fn] on the Success track and
+    [failure_fn] element-wise on every error in the Failure list.
+    Wlaschin's [doubleMap] / "[bimap]" in many libraries. *)
+
 val ( <!> ) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!map}. Applicative entry point: lifts a
     plain function into the Result context. *)
@@ -57,6 +85,15 @@ val ( <!> ) : ('a -> 'b) -> ('a, 'err) t -> ('b, 'err) t
 val ( <*> ) : ('a -> 'b, 'err) t -> ('a, 'err) t -> ('b, 'err) t
 (** Infix alias for {!apply}. Each additional argument in an
     applicative chain. *)
+
+val ( >>= ) : ('a, 'err) t -> ('a -> ('b, 'err) t) -> ('b, 'err) t
+(** Infix alias for {!bind} — pipes a two-track value into a
+    switch function. Wlaschin's [>>=]. *)
+
+val ( >=> ) : ('a -> ('b, 'err) t) -> ('b -> ('c, 'err) t) -> 'a -> ('c, 'err) t
+(** Switch (Kleisli) composition: chain two switch functions into
+    a new switch function. Equivalent to [fun x -> f x >>= g].
+    Wlaschin's [>=>]. *)
 
 val ( let+ ) : ('a, 'err) t -> ('a -> 'b) -> ('b, 'err) t
 (** Applicative let-binding. Use with [and+] for parallel

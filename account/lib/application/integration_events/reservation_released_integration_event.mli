@@ -10,3 +10,7 @@ type t = {
   instrument : Queries.Instrument_view_model.t;
 }
 [@@deriving yojson]
+
+type domain = Account.Portfolio.Events.Reservation_released.t
+
+val of_domain : domain -> t

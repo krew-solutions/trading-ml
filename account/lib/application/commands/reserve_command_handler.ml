@@ -1,58 +1,20 @@
-module Portfolio = Account.Portfolio
-module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
-module Reservation_rejected =
-  Account_integration_events.Reservation_rejected_integration_event
-
-let parse_side = function
-  | "BUY" -> Core.Side.Buy
-  | "SELL" -> Core.Side.Sell
-  | s -> invalid_arg (Printf.sprintf "side: %S" s)
-
-let reservation_error_to_string = function
-  | Portfolio.Insufficient_cash { required; available } ->
-      Printf.sprintf "insufficient cash: required %s, available %s"
-        (Core.Decimal.to_string required)
-        (Core.Decimal.to_string available)
-  | Portfolio.Insufficient_qty { required; available } ->
-      Printf.sprintf "insufficient quantity: required %s, available %s"
-        (Core.Decimal.to_string required)
-        (Core.Decimal.to_string available)
-
-let make
-    ~(portfolio : Portfolio.t ref)
-    ~(next_reservation_id : unit -> int)
+let handle
+    ~(portfolio : Account.Portfolio.t ref)
+    ~(id : int)
+    ~(side : Core.Side.t)
+    ~(instrument : Core.Instrument.t)
+    ~(quantity : Core.Decimal.t)
+    ~(price : Core.Decimal.t)
     ~(slippage_buffer : float)
-    ~(fee_rate : float)
-    ~(publish_amount_reserved : Amount_reserved.t -> unit)
-    ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
-    (cmd : Reserve_command.t) : unit =
-  let instrument = Core.Instrument.of_qualified cmd.symbol in
-  let side = parse_side (String.uppercase_ascii cmd.side) in
-  let quantity = Core.Decimal.of_float cmd.quantity in
-  let price = Core.Decimal.of_float cmd.price in
-  let id = next_reservation_id () in
-  match
-    Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity ~price
+    ~(fee_rate : float) :
+    ( Account.Portfolio.Events.Amount_reserved.t,
+      Account.Portfolio.reservation_error )
+    Rop.t =
+  let open Rop in
+  let* portfolio', domain_event =
+    Account.Portfolio.try_reserve !portfolio ~id ~side ~instrument ~quantity ~price
       ~slippage_buffer ~fee_rate
-  with
-  | Ok (p', ev) ->
-      portfolio := p';
-      publish_amount_reserved
-        Amount_reserved.
-          {
-            reservation_id = ev.reservation_id;
-            side = Core.Side.to_string ev.side;
-            instrument = Queries.Instrument_view_model.of_domain ev.instrument;
-            quantity = Core.Decimal.to_float ev.quantity;
-            price = Core.Decimal.to_float ev.price;
-            reserved_cash = Core.Decimal.to_float ev.reserved_cash;
-          }
-  | Error err ->
-      publish_reservation_rejected
-        Reservation_rejected.
-          {
-            side = Core.Side.to_string side;
-            instrument = Queries.Instrument_view_model.of_domain instrument;
-            quantity = Core.Decimal.to_float quantity;
-            reason = reservation_error_to_string err;
-          }
+    |> of_result
+  in
+  portfolio := portfolio';
+  succeed domain_event

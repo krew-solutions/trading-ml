@@ -1,24 +1,22 @@
-(** Handler for {!Reserve_command.t}. Dispatches outcomes via
-    publisher function-types supplied by the composition root —
-    success path through [~publish_amount_reserved], invariant
-    violation through [~publish_reservation_rejected]. The
-    handler does NOT depend on {!Bus.Event_bus}; composition root
-    supplies the closures.
+(** Command handler for {!Reserve_command.t}.
 
-    {b Parse failure} (bad symbol, bad side string) raises
-    [Invalid_argument]; HTTP is expected to validate up-front, so
-    this would only fire on a contract-violating caller. *)
+    Single responsibility: invoke {!Account.Portfolio.try_reserve}
+    on the shared portfolio ref, mutate it on success, and return
+    the resulting domain event. Does not publish, does not touch
+    integration events — that is the workflow's job composed by
+    {!Reserve_command_workflow.execute}.
 
-module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
-module Reservation_rejected =
-  Account_integration_events.Reservation_rejected_integration_event
+    Inputs are already-parsed domain values; raw {!Reserve_command.t}
+    parsing happens upstream in the workflow so this handler stays
+    a pure transition over [Account.Portfolio.t]. *)
 
-val make :
+val handle :
   portfolio:Account.Portfolio.t ref ->
-  next_reservation_id:(unit -> int) ->
+  id:int ->
+  side:Core.Side.t ->
+  instrument:Core.Instrument.t ->
+  quantity:Core.Decimal.t ->
+  price:Core.Decimal.t ->
   slippage_buffer:float ->
   fee_rate:float ->
-  publish_amount_reserved:(Amount_reserved.t -> unit) ->
-  publish_reservation_rejected:(Reservation_rejected.t -> unit) ->
-  Reserve_command.t ->
-  unit
+  (Account.Portfolio.Events.Amount_reserved.t, Account.Portfolio.reservation_error) Rop.t

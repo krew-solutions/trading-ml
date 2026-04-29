@@ -526,10 +526,17 @@ let cmd_serve args =
   let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
   let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
   let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
-  Bus.Command_bus.register_handler reserve_bus
-    (Account_commands.Reserve_command_handler.make ~portfolio:portfolio_ref
-       ~next_reservation_id ~slippage_buffer:0.005 ~fee_rate:0.0005
-       ~publish_amount_reserved ~publish_reservation_rejected);
+  Bus.Command_bus.register_handler reserve_bus (fun cmd ->
+      match
+        Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
+          ~next_reservation_id ~slippage_buffer:0.005 ~fee_rate:0.0005
+          ~publish_amount_reserved ~publish_reservation_rejected cmd
+      with
+      | Ok () -> ()
+      (* Business-rule failures (insufficient cash/qty) already
+         surfaced as Reservation_rejected integration event by the
+         workflow; the bus handler discards the Rop tail. *)
+      | Error _ -> ());
   Bus.Command_bus.register_handler release_bus (fun cmd ->
       match
         Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref

@@ -1,6 +1,6 @@
 (** Integration event: Account refused to reserve — invariant
     violation (insufficient cash for a buy, insufficient quantity
-    for a sell). Published by {!Reserve_command_handler} when
+    for a sell). Published by {!Reserve_command_workflow} when
     {!Account.Portfolio.try_reserve} returns
     [Insufficient_cash] / [Insufficient_qty].
 

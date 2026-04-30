@@ -1,0 +1,5 @@
+(library
+ (name account_inbound_http)
+ (public_name trading.account.inbound_http)
+ (libraries core account account_commands bus inbound_http
+            cohttp cohttp-eio eio yojson uri))

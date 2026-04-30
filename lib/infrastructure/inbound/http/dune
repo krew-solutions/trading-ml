@@ -1,8 +1,7 @@
 (library
  (name server)
  (public_name trading.server)
- (libraries core account broker indicators strategies engine log
-            queries bus
-            account_commands account_integration_events
-            broker_commands broker_integration_events
+ (libraries core broker indicators strategies engine log
+            queries bus inbound_http
+            account_integration_events broker_integration_events
             cohttp-eio eio eio.unix yojson uri))

@@ -603,17 +603,24 @@ let cmd_serve args =
     Order_unreachable_inbound_handler.attach
       ~events:events_account_inbound_order_unreachable ~dispatch_release
   in
-  let buses : Server.Http.buses =
-    { reserve = reserve_bus; submit_order = submit_order_bus }
+  let market_price ~instrument =
+    match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
+    | last :: _ -> Decimal.to_float last.close
+    | [] -> 0.0
   in
+  let account_handler =
+    Account_inbound_http.Http.make_handler ~reserve_bus ~market_price
+  in
+  let bc_handlers = [ account_handler ] in
+  ignore submit_order_bus;
   let register_publisher (registry : Server.Stream.t) =
     Sse_publisher.attach registry ~events_amount_reserved ~events_reservation_released
       ~events_reservation_rejected ~events_order_accepted ~events_order_rejected
       ~events_order_unreachable
   in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
-  Server.Http.run ?setup:ws_setup ~sw ~env ~port ~broker:client ~buses ~register_publisher
-    ()
+  Server.Http.run ?setup:ws_setup ~bc_handlers ~sw ~env ~port ~broker:client
+    ~register_publisher ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
     server (default http://localhost:8080); the same surface the UI

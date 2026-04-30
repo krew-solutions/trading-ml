@@ -4,9 +4,9 @@ type t = {
   ts : int64;
   instrument : Instrument_view_model.t;
   side : string;
-  quantity : float;
-  price : float;
-  fee : float;
+  quantity : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  price : string;
+  fee : string;
   reason : string;
 }
 [@@deriving yojson]

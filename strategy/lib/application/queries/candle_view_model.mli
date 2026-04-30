@@ -1,17 +1,19 @@
 (** Read-model DTO for {!Core.Candle.t}.
 
     OHLCV as primitives: [ts] is a unix epoch-seconds int64,
-    prices/volume are floats. No {!Core.Decimal.t} — precision
-    is lost at the boundary, deliberately, since the UI works in
-    float anyway. *)
+    prices/volume are decimal strings accepted by
+    {!Core.Decimal.of_string} — bit-exact round-trip with the
+    domain. The UI parses them with its own decimal library;
+    [Number(x)] would lose precision the same way OCaml's
+    {!Core.Decimal.of_float} does. *)
 
 type t = {
   ts : int64;
-  open_ : float; [@key "open"]
-  high : float;
-  low : float;
-  close : float;
-  volume : float;
+  open_ : string; [@key "open"]
+  high : string;
+  low : string;
+  close : string;
+  volume : string;
 }
 [@@deriving yojson]
 

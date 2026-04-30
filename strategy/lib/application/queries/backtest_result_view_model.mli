@@ -8,14 +8,15 @@
 
 module Portfolio_view_model = Account_queries.Portfolio_view_model
 
-type equity_point = { ts : int64; equity : float } [@@deriving yojson]
+type equity_point = { ts : int64; equity : string } [@@deriving yojson]
+(** [equity] is a decimal string accepted by {!Core.Decimal.of_string}. *)
 
 type t = {
   num_trades : int;
-  total_return : float;
-  max_drawdown : float;
-  final_cash : float;
-  realized_pnl : float;
+  total_return : float;  (** Domain ratio (e.g. [0.12]) — not Decimal-derived. *)
+  max_drawdown : float;  (** Domain ratio — not Decimal-derived. *)
+  final_cash : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  realized_pnl : string;
   portfolio : Portfolio_view_model.t;
   fills : Fill_view_model.t list;
   equity_curve : equity_point list;

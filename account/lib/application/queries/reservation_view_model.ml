@@ -4,8 +4,8 @@ type t = {
   id : int;
   side : string;
   instrument : Instrument_view_model.t;
-  quantity : float;
-  per_unit_cash : float;
+  quantity : string;
+  per_unit_cash : string;
 }
 [@@deriving yojson]
 
@@ -16,6 +16,6 @@ let of_domain (r : domain) : t =
     id = r.id;
     side = Side.to_string r.side;
     instrument = Instrument_view_model.of_domain r.instrument;
-    quantity = Decimal.to_float r.quantity;
-    per_unit_cash = Decimal.to_float r.per_unit_cash;
+    quantity = Decimal.to_string r.quantity;
+    per_unit_cash = Decimal.to_string r.per_unit_cash;
   }

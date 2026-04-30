@@ -4,8 +4,8 @@ type t = {
   id : int;
   side : string;
   instrument : Instrument_view_model.t;
-  quantity : float;
-  per_unit_cash : float;
+  quantity : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  per_unit_cash : string;
 }
 [@@deriving yojson]
 

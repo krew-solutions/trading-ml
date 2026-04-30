@@ -21,7 +21,7 @@ module type S = sig
 
   val of_domain : domain -> t
   (** Total projection. A valid [domain] always produces a
-      valid [t]; precision loss ([Decimal.t] → [float]) is
-      accepted as the cost of crossing the boundary into
-      primitives. *)
+      valid [t]. Decimal-valued fields are projected via
+      {!Core.Decimal.to_string} so the wire form round-trips
+      bit-exactly through {!Core.Decimal.of_string}. *)
 end

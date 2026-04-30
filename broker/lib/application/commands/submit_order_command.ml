@@ -2,7 +2,7 @@ type t = {
   reservation_id : int;
   symbol : string;
   side : string;
-  quantity : float;
+  quantity : string;
   kind : Queries.Order_kind_view_model.t;
   tif : string;
 }

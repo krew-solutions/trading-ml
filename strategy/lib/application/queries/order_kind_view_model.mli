@@ -7,9 +7,11 @@
 
 type t = {
   type_ : string; [@key "type"]
-  price : float option;
-  stop_price : float option;
-  limit_price : float option;
+  price : string option;
+      (** Decimal string accepted by {!Core.Decimal.of_string}.
+          [Some] for [LIMIT] / [STOP], [None] for [MARKET] / [STOP_LIMIT]. *)
+  stop_price : string option;  (** [Some] for [STOP_LIMIT], [None] otherwise. *)
+  limit_price : string option;  (** [Some] for [STOP_LIMIT], [None] otherwise. *)
 }
 [@@deriving yojson]
 

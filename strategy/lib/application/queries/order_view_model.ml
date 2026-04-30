@@ -6,9 +6,9 @@ type t = {
   client_order_id : string;
   instrument : Instrument_view_model.t;
   side : string;
-  quantity : float;
-  filled : float;
-  remaining : float;
+  quantity : string;
+  filled : string;
+  remaining : string;
   kind : Order_kind_view_model.t;
   tif : string;
   status : string;
@@ -25,9 +25,9 @@ let of_domain (o : domain) : t =
     client_order_id = o.client_order_id;
     instrument = Instrument_view_model.of_domain o.instrument;
     side = Side.to_string o.side;
-    quantity = Decimal.to_float o.quantity;
-    filled = Decimal.to_float o.filled;
-    remaining = Decimal.to_float o.remaining;
+    quantity = Decimal.to_string o.quantity;
+    filled = Decimal.to_string o.filled;
+    remaining = Decimal.to_string o.remaining;
     kind = Order_kind_view_model.of_domain o.kind;
     tif = Order.tif_to_string o.tif;
     status = Order.status_to_string o.status;

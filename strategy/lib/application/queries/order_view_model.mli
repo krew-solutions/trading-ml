@@ -6,9 +6,9 @@ type t = {
   client_order_id : string;
   instrument : Instrument_view_model.t;
   side : string;
-  quantity : float;
-  filled : float;
-  remaining : float;
+  quantity : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  filled : string;
+  remaining : string;
   kind : Order_kind_view_model.t;
   tif : string;
   status : string;

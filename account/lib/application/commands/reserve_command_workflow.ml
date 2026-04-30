@@ -29,8 +29,8 @@ let execute
   let open Rop in
   let instrument = Core.Instrument.of_qualified cmd.symbol in
   let side = parse_side (String.uppercase_ascii cmd.side) in
-  let quantity = Core.Decimal.of_float cmd.quantity in
-  let price = Core.Decimal.of_float cmd.price in
+  let quantity = Core.Decimal.of_string cmd.quantity in
+  let price = Core.Decimal.of_string cmd.price in
   let id = next_reservation_id () in
   match
     Reserve_command_handler.handle ~portfolio ~id ~side ~instrument ~quantity ~price
@@ -48,7 +48,7 @@ let execute
               {
                 side = Core.Side.to_string side;
                 instrument = Queries.Instrument_view_model.of_domain instrument;
-                quantity = Core.Decimal.to_float quantity;
+                quantity = Core.Decimal.to_string quantity;
                 reason = reservation_error_to_string err;
               })
         errs;

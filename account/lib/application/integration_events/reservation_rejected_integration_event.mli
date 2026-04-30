@@ -11,7 +11,7 @@
 type t = {
   side : string;
   instrument : Queries.Instrument_view_model.t;
-  quantity : float;
+  quantity : string;  (** Decimal string — see {!Reserve_command.t}. *)
   reason : string;
 }
 [@@deriving yojson]

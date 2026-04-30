@@ -14,12 +14,13 @@
 
 open Core
 
-type market_price_port = instrument:Instrument.t -> float
+type market_price_port = instrument:Instrument.t -> Decimal.t
 (** Latest mark used to compute the cash earmark for a [Market]
     order. The Account BC does not query upstream for it — the
     composition root supplies a closure that knows how to fetch a
     price (typically over the configured broker), so Account stays
-    unaware of broker types. *)
+    unaware of broker types. Returns [Decimal.t] for bit-exact
+    round-trip with the on-wire decimal-string representation. *)
 
 val make_handler :
   reserve_bus:Account_commands.Reserve_command.t Bus.Command_bus.t ->

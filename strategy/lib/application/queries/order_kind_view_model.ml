@@ -2,9 +2,9 @@ open Core
 
 type t = {
   type_ : string; [@key "type"]
-  price : float option;
-  stop_price : float option;
-  limit_price : float option;
+  price : string option;
+  stop_price : string option;
+  limit_price : string option;
 }
 [@@deriving yojson]
 
@@ -16,14 +16,14 @@ let of_domain (k : domain) : t =
   | Limit p ->
       {
         type_ = "LIMIT";
-        price = Some (Decimal.to_float p);
+        price = Some (Decimal.to_string p);
         stop_price = None;
         limit_price = None;
       }
   | Stop p ->
       {
         type_ = "STOP";
-        price = Some (Decimal.to_float p);
+        price = Some (Decimal.to_string p);
         stop_price = None;
         limit_price = None;
       }
@@ -31,6 +31,6 @@ let of_domain (k : domain) : t =
       {
         type_ = "STOP_LIMIT";
         price = None;
-        stop_price = Some (Decimal.to_float stop);
-        limit_price = Some (Decimal.to_float limit);
+        stop_price = Some (Decimal.to_string stop);
+        limit_price = Some (Decimal.to_string limit);
       }

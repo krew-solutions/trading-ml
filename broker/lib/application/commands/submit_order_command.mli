@@ -23,7 +23,7 @@ type t = {
       (** Qualified instrument: [TICKER@MIC[/BOARD]] —
         {!Core.Instrument.of_qualified} round-trips it. *)
   side : string;  (** ["BUY"] | ["SELL"]. *)
-  quantity : float;
+  quantity : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
   kind : Queries.Order_kind_view_model.t;
   tif : string;  (** ["GTC"] | ["DAY"] | ["IOC"] | ["FOK"]. *)
 }

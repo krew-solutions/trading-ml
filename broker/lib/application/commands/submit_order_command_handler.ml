@@ -20,23 +20,23 @@ let parse_kind (k : Queries.Order_kind_view_model.t) : Order.kind =
   | "MARKET" -> Market
   | "LIMIT" -> (
       match k.price with
-      | Some p -> Limit (Decimal.of_float p)
+      | Some p -> Limit (Decimal.of_string p)
       | None -> invalid_arg "LIMIT: missing price")
   | "STOP" -> (
       match k.price with
-      | Some p -> Stop (Decimal.of_float p)
+      | Some p -> Stop (Decimal.of_string p)
       | None -> invalid_arg "STOP: missing price")
   | "STOP_LIMIT" -> (
       match (k.stop_price, k.limit_price) with
       | Some s, Some l ->
-          Stop_limit { stop = Decimal.of_float s; limit = Decimal.of_float l }
+          Stop_limit { stop = Decimal.of_string s; limit = Decimal.of_string l }
       | _ -> invalid_arg "STOP_LIMIT: missing stop_price/limit_price")
   | other -> invalid_arg (Printf.sprintf "kind: %S" other)
 
 let parse_args (cmd : Submit_order_command.t) =
   ( Instrument.of_qualified cmd.symbol,
     parse_side (String.uppercase_ascii cmd.side),
-    Decimal.of_float cmd.quantity,
+    Decimal.of_string cmd.quantity,
     parse_kind cmd.kind,
     parse_tif (String.uppercase_ascii cmd.tif) )
 

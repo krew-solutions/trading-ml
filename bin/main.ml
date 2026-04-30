@@ -605,8 +605,8 @@ let cmd_serve args =
   in
   let market_price ~instrument =
     match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
-    | last :: _ -> Decimal.to_float last.close
-    | [] -> 0.0
+    | last :: _ -> last.close
+    | [] -> Decimal.zero
   in
   let account_handler =
     Account_inbound_http.Http.make_handler ~reserve_bus ~market_price
@@ -644,11 +644,11 @@ let format_order (j : Yojson.Safe.t) : string =
   let cid = j |> member "client_order_id" |> to_string in
   let symbol = j |> member "instrument" |> to_string in
   let side = j |> member "side" |> to_string in
-  let qty = j |> member "quantity" |> to_float in
-  let filled = j |> member "filled" |> to_float in
+  let qty = j |> member "quantity" |> to_string in
+  let filled = j |> member "filled" |> to_string in
   let status = j |> member "status" |> to_string in
   let kind = j |> member "kind" |> member "type" |> to_string in
-  Printf.sprintf "%-24s %-14s %-4s qty=%-8g filled=%-8g %-6s %s" cid symbol side qty
+  Printf.sprintf "%-24s %-14s %-4s qty=%-8s filled=%-8s %-6s %s" cid symbol side qty
     filled kind status
 
 let cmd_orders_list ~env ~host () =
@@ -674,7 +674,7 @@ let cmd_orders_place ~env ~host args =
     [
       ("symbol", `String (get "symbol"));
       ("side", `String (String.uppercase_ascii (get "side")));
-      ("quantity", `Float (float_of_string (get "qty")));
+      ("quantity", `String (get "qty"));
       ("client_order_id", `String (get "cid"));
       ("tif", `String (Option.value (optional "tif") ~default:"DAY"));
     ]
@@ -683,18 +683,14 @@ let cmd_orders_place ~env ~host args =
     let k = String.uppercase_ascii (Option.value (optional "kind") ~default:"MARKET") in
     match k with
     | "MARKET" -> `Assoc [ ("type", `String "MARKET") ]
-    | "LIMIT" ->
-        `Assoc
-          [ ("type", `String "LIMIT"); ("price", `Float (float_of_string (get "price"))) ]
-    | "STOP" ->
-        `Assoc
-          [ ("type", `String "STOP"); ("price", `Float (float_of_string (get "price"))) ]
+    | "LIMIT" -> `Assoc [ ("type", `String "LIMIT"); ("price", `String (get "price")) ]
+    | "STOP" -> `Assoc [ ("type", `String "STOP"); ("price", `String (get "price")) ]
     | "STOP_LIMIT" ->
         `Assoc
           [
             ("type", `String "STOP_LIMIT");
-            ("stop_price", `Float (float_of_string (get "stop")));
-            ("limit_price", `Float (float_of_string (get "price")));
+            ("stop_price", `String (get "stop"));
+            ("limit_price", `String (get "price"));
           ]
     | other ->
         Printf.eprintf "unknown --kind %s\n" other;

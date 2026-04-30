@@ -1,6 +1,6 @@
 open Core
 
-type market_price_port = instrument:Instrument.t -> float
+type market_price_port = instrument:Instrument.t -> Decimal.t
 
 type place_order_request = {
   instrument : Instrument.t;
@@ -67,14 +67,14 @@ let to_reserve_command (market_price : market_price_port) (req : place_order_req
     Account_commands.Reserve_command.t =
   let price =
     match req.kind with
-    | Limit p | Stop p -> Decimal.to_float p
-    | Stop_limit { limit; _ } -> Decimal.to_float limit
-    | Market -> market_price ~instrument:req.instrument
+    | Limit p | Stop p -> Decimal.to_string p
+    | Stop_limit { limit; _ } -> Decimal.to_string limit
+    | Market -> Decimal.to_string (market_price ~instrument:req.instrument)
   in
   {
     side = Side.to_string req.side;
     symbol = Instrument.to_qualified req.instrument;
-    quantity = Decimal.to_float req.quantity;
+    quantity = Decimal.to_string req.quantity;
     price;
   }
 

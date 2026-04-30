@@ -5,6 +5,7 @@ import {
   HttpTestingController, provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { Api, type StreamEvent } from './api.service';
+import { Decimal } from './decimal';
 
 describe('Api', () => {
   let api: Api;
@@ -96,7 +97,9 @@ describe('Api', () => {
       });
       StubEventSource.last!.emit('bar', {
         kind: 'updated', symbol: 'SBER', timeframe: 'H1',
-        candle: { ts: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+        candle: {
+          ts: 1, open: '1', high: '1', low: '1', close: '1', volume: '1',
+        },
       });
       expect(received.map(e => e.kind)).toEqual(['seed', 'updated']);
       sub.unsubscribe();
@@ -132,49 +135,71 @@ describe('Api', () => {
     });
   });
 
-  it('GETs /api/orders and returns the list', () => {
-    const sample = {
+  it('GETs /api/orders and parses the wire-string monetary fields', () => {
+    /* Wire shape from the OCaml backend: monetary fields are decimal
+       strings; absent kind-prices are explicit JSON `null` (matching
+       ppx_yojson_conv's `string option` serialisation). */
+    const wire = {
       client_order_id: 'cid-1', id: 'cid-1', instrument: 'SBER@MISX',
-      side: 'BUY' as const, quantity: 10, filled: 0, remaining: 10,
-      status: 'New', tif: 'DAY', kind: { type: 'MARKET' as const }, ts: 0,
+      side: 'BUY' as const, quantity: '10', filled: '0', remaining: '10',
+      status: 'New', tif: 'DAY',
+      kind: { type: 'LIMIT' as const, price: '100.10',
+              stop_price: null, limit_price: null }, ts: 0,
     };
-    let got: unknown;
-    api.orders().subscribe(r => (got = r.orders));
-    httpCtrl.expectOne('/api/orders').flush({ orders: [sample] });
-    expect(got).toEqual([sample]);
+    let got: { orders: { quantity: Decimal; kind: { type: string; price?: Decimal } }[] } | undefined;
+    api.orders().subscribe(r => (got = r));
+    httpCtrl.expectOne('/api/orders').flush({ orders: [wire] });
+    expect(got!.orders[0].quantity.toString()).toBe('10');
+    expect(got!.orders[0].kind.type).toBe('LIMIT');
+    expect(got!.orders[0].kind.price!.toString()).toBe('100.1');
   });
 
-  it('POSTs /api/orders with the place-order body', () => {
-    api.placeOrder({
-      symbol: 'SBER@MISX', side: 'BUY', quantity: 10,
-      client_order_id: 'cid-2', kind: { type: 'MARKET' },
-    }).subscribe();
-    const req = httpCtrl.expectOne('/api/orders');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body.client_order_id).toBe('cid-2');
-    req.flush({
-      client_order_id: 'cid-2', id: 'cid-2', instrument: 'SBER@MISX',
-      side: 'BUY', quantity: 10, filled: 0, remaining: 10,
-      status: 'New', tif: 'DAY', kind: { type: 'MARKET' }, ts: 0,
+  it('POSTs /api/orders with monetary fields serialised as decimal strings',
+    () => {
+      api.placeOrder({
+        symbol: 'SBER@MISX', side: 'BUY', quantity: 10,
+        client_order_id: 'cid-2',
+        kind: { type: 'LIMIT', price: 100.1 },
+      }).subscribe();
+      const req = httpCtrl.expectOne('/api/orders');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body.client_order_id).toBe('cid-2');
+      expect(req.request.body.quantity).toBe('10');
+      expect(req.request.body.kind).toEqual({
+        type: 'LIMIT', price: '100.1', stop_price: null, limit_price: null,
+      });
+      req.flush({
+        client_order_id: 'cid-2', id: 'cid-2', instrument: 'SBER@MISX',
+        side: 'BUY', quantity: '10', filled: '0', remaining: '10',
+        status: 'New', tif: 'DAY',
+        kind: { type: 'MARKET', price: null, stop_price: null, limit_price: null },
+        ts: 0,
+      });
     });
-  });
 
   it('DELETEs /api/orders/:cid on cancel', () => {
-    api.cancelOrder('cid-3').subscribe();
+    let got: { quantity: Decimal; status: string } | undefined;
+    api.cancelOrder('cid-3').subscribe(o => (got = o));
     const req = httpCtrl.expectOne('/api/orders/cid-3');
     expect(req.request.method).toBe('DELETE');
     req.flush({
       client_order_id: 'cid-3', id: 'cid-3', instrument: 'SBER@MISX',
-      side: 'BUY', quantity: 10, filled: 0, remaining: 0,
-      status: 'Cancelled', tif: 'DAY', kind: { type: 'MARKET' }, ts: 0,
+      side: 'BUY', quantity: '10', filled: '0', remaining: '0',
+      status: 'Cancelled', tif: 'DAY',
+      kind: { type: 'MARKET', price: null, stop_price: null, limit_price: null },
+      ts: 0,
     });
+    expect(got!.quantity.toString()).toBe('10');
+    expect(got!.status).toBe('Cancelled');
   });
 
-  it('POSTs /api/backtest with JSON body', () => {
+  it('POSTs /api/backtest and parses the result', () => {
+    let got: { realized_pnl: Decimal; equity_curve: { ts: number; equity: Decimal }[] }
+      | undefined;
     api.backtest({
       symbol: 'GAZP', strategy: 'SMA_Crossover',
       params: { fast: 10 }, n: 200,
-    }).subscribe();
+    }).subscribe(r => (got = r));
     const req = httpCtrl.expectOne('/api/backtest');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
@@ -183,7 +208,12 @@ describe('Api', () => {
     });
     req.flush({
       num_trades: 0, total_return: 0, max_drawdown: 0,
-      final_cash: 0, realized_pnl: 0, equity_curve: [], fills: [],
+      final_cash: '1000000', realized_pnl: '12.34',
+      equity_curve: [{ ts: 1, equity: '1000000' }],
+      fills: [],
     });
+    expect(got!.realized_pnl.toString()).toBe('12.34');
+    expect(got!.equity_curve.map(p => ({ ts: p.ts, equity: p.equity.toString() })))
+      .toEqual([{ ts: 1, equity: '1000000' }]);
   });
 });

@@ -8,7 +8,7 @@
 type t = {
   type_ : string; [@key "type"]
   price : string option;
-      (** Decimal string accepted by {!Core.Decimal.of_string}.
+      (** Decimal string accepted by {!Decimal.of_string}.
           [Some] for [LIMIT] / [STOP], [None] for [MARKET] / [STOP_LIMIT]. *)
   stop_price : string option;  (** [Some] for [STOP_LIMIT], [None] otherwise. *)
   limit_price : string option;  (** [Some] for [STOP_LIMIT], [None] otherwise. *)

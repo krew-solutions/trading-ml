@@ -529,10 +529,9 @@ let cmd_serve args =
   Bus.Command_bus.register_handler reserve_bus (fun cmd ->
       match
         Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
-          ~next_reservation_id
-          ~slippage_buffer:(Decimal.of_string "0.005")
-          ~fee_rate:(Decimal.of_string "0.0005")
-          ~publish_amount_reserved ~publish_reservation_rejected cmd
+          ~next_reservation_id ~slippage_buffer:(Decimal.of_string "0.005")
+          ~fee_rate:(Decimal.of_string "0.0005") ~publish_amount_reserved
+          ~publish_reservation_rejected cmd
       with
       | Ok () -> ()
       (* Business-rule failures (insufficient cash/qty) already

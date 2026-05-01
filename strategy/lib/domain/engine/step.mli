@@ -79,9 +79,9 @@ val advance_strategy : config -> state -> Candle.t -> state
 val commit_fill :
   state ->
   reservation_id:int ->
-  actual_quantity:Core.Decimal.t ->
-  actual_price:Core.Decimal.t ->
-  actual_fee:Core.Decimal.t ->
+  actual_quantity:Decimal.t ->
+  actual_price:Decimal.t ->
+  actual_fee:Decimal.t ->
   state
 (** Settle a reservation fully with actual broker numbers. Used in
     Live mode when a broker fill event arrives with
@@ -95,9 +95,9 @@ val commit_fill :
 val commit_partial_fill :
   state ->
   reservation_id:int ->
-  actual_quantity:Core.Decimal.t ->
-  actual_price:Core.Decimal.t ->
-  actual_fee:Core.Decimal.t ->
+  actual_quantity:Decimal.t ->
+  actual_price:Decimal.t ->
+  actual_fee:Decimal.t ->
   state
 (** Partially settle a reservation — shrinks the reservation by
     [actual_quantity] and applies that slice as a fill. When the

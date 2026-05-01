@@ -23,22 +23,24 @@ for f in %{deps}; do
   gospel check -L ../../../strategy/lib/domain/gospel_stubs -L . \"$f\"
 done")))
 
-; Why3 deductive verification. -L includes lib/domain/core so .mlw
-; files can `use decimal.Decimal`, `use side.Side` etc., and -L .
-; lets aggregate-root .mlw files import their own subdir modules
-; via qualified paths like `use portfolio.entities.reservation.Reservation`.
+; Why3 deductive verification. -L includes:
+;   - lib/domain/core   (use side.Side, instrument.Instrument, ...)
+;   - shared/lib/decimal (use decimal.Decimal — moved out of core)
+;   - .                 (own subdirs via qualified paths like
+;                        `use portfolio.reservation.reservation.Reservation`)
 (rule
  (alias why3)
  (deps
   (glob_files_rec *.mlw)
-  (glob_files ../../../strategy/lib/domain/core/*.mlw))
+  (glob_files ../../../strategy/lib/domain/core/*.mlw)
+  (glob_files ../../../shared/lib/decimal/*.mlw))
  (action
   (bash
    "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../../../strategy/lib/domain/core -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../../../strategy/lib/domain/core -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
 done")))
 
 ; gospel-alias is intentionally NOT a runtest dep: gospel 0.3.1

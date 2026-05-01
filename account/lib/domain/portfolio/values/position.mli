@@ -4,6 +4,6 @@
 
 type t = {
   instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;  (** signed: positive = long, negative = short *)
-  avg_price : Core.Decimal.t;  (** VWAP entry price *)
+  quantity : Decimal.t;  (** signed: positive = long, negative = short *)
+  avg_price : Decimal.t;  (** VWAP entry price *)
 }

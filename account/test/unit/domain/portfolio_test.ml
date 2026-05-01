@@ -75,8 +75,10 @@ let test_reserve_buy_reduces_available_cash () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:1 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:(d 0.01) (* 1% — reserve qty*price*1.01 *)
-      ~fee_rate:(d 0.001) (* 0.1% fee estimate *)
+      ~price:(d 100.0)
+      ~slippage_buffer:(d 0.01) (* 1% — reserve qty*price*1.01 *)
+      ~fee_rate:(d 0.001)
+    (* 0.1% fee estimate *)
   in
   Alcotest.(check bool) "cash unchanged" true (Decimal.compare p.cash (d 10_000.0) = 0);
   (* reserved = 10 * 100 * 1.01 = 1010, fee = 10 * 100 * 0.001 = 1,

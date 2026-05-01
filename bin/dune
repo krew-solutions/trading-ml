@@ -6,7 +6,7 @@
  (names main export_training_data train_logistic)
  (public_names trading trading_export_training_data trading_train_logistic)
  (package trading)
- (libraries core account broker indicators strategies engine live_engine
+ (libraries core decimal account broker indicators strategies engine live_engine
             account_commands account_integration_events account_inbound_integration_events
             account_inbound_http
             broker_commands broker_integration_events

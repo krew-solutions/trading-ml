@@ -11,26 +11,24 @@ let parse_side = function
 let reservation_error_to_string = function
   | Portfolio.Insufficient_cash { required; available } ->
       Printf.sprintf "insufficient cash: required %s, available %s"
-        (Core.Decimal.to_string required)
-        (Core.Decimal.to_string available)
+        (Decimal.to_string required) (Decimal.to_string available)
   | Portfolio.Insufficient_qty { required; available } ->
       Printf.sprintf "insufficient quantity: required %s, available %s"
-        (Core.Decimal.to_string required)
-        (Core.Decimal.to_string available)
+        (Decimal.to_string required) (Decimal.to_string available)
 
 let execute
     ~(portfolio : Portfolio.t ref)
     ~(next_reservation_id : unit -> int)
-    ~(slippage_buffer : Core.Decimal.t)
-    ~(fee_rate : Core.Decimal.t)
+    ~(slippage_buffer : Decimal.t)
+    ~(fee_rate : Decimal.t)
     ~(publish_amount_reserved : Amount_reserved.t -> unit)
     ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
     (cmd : Reserve_command.t) : (unit, Portfolio.reservation_error) Rop.t =
   let open Rop in
   let instrument = Core.Instrument.of_qualified cmd.symbol in
   let side = parse_side (String.uppercase_ascii cmd.side) in
-  let quantity = Core.Decimal.of_string cmd.quantity in
-  let price = Core.Decimal.of_string cmd.price in
+  let quantity = Decimal.of_string cmd.quantity in
+  let price = Decimal.of_string cmd.price in
   let id = next_reservation_id () in
   match
     Reserve_command_handler.handle ~portfolio ~id ~side ~instrument ~quantity ~price
@@ -48,7 +46,7 @@ let execute
               {
                 side = Core.Side.to_string side;
                 instrument = Queries.Instrument_view_model.of_domain instrument;
-                quantity = Core.Decimal.to_string quantity;
+                quantity = Decimal.to_string quantity;
                 reason = reservation_error_to_string err;
               })
         errs;

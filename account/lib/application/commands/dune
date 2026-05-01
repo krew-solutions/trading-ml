@@ -4,7 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
-  core
+  core decimal
   account
   queries
   account_integration_events

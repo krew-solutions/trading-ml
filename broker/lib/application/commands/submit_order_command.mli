@@ -2,7 +2,7 @@
     upstream broker."
 
     Wire-format DTO — primitives + view-model DTOs, no
-    {!Core.Instrument.t} / {!Core.Side.t} / {!Core.Decimal.t}.
+    {!Core.Instrument.t} / {!Core.Side.t} / {!Decimal.t}.
     Compile-time guarantee via [@@deriving yojson]: the message
     that travels on the InMemory bus today serialises as-is on a
     real (network) bus tomorrow.
@@ -23,7 +23,7 @@ type t = {
       (** Qualified instrument: [TICKER@MIC[/BOARD]] —
         {!Core.Instrument.of_qualified} round-trips it. *)
   side : string;  (** ["BUY"] | ["SELL"]. *)
-  quantity : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  quantity : string;  (** Decimal string accepted by {!Decimal.of_string}. *)
   kind : Queries.Order_kind_view_model.t;
   tif : string;  (** ["GTC"] | ["DAY"] | ["IOC"] | ["FOK"]. *)
 }

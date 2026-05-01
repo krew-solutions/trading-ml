@@ -5,5 +5,6 @@ let () =
     [
       ("command_bus", Command_bus_test.tests);
       ("event_bus", Event_bus_test.tests);
+      ("decimal", Decimal_test.tests);
       ("rop", Rop_test.tests);
     ]

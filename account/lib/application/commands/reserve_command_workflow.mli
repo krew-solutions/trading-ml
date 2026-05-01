@@ -32,8 +32,8 @@ module Reservation_rejected =
 val execute :
   portfolio:Account.Portfolio.t ref ->
   next_reservation_id:(unit -> int) ->
-  slippage_buffer:Core.Decimal.t ->
-  fee_rate:Core.Decimal.t ->
+  slippage_buffer:Decimal.t ->
+  fee_rate:Decimal.t ->
   publish_amount_reserved:(Amount_reserved.t -> unit) ->
   publish_reservation_rejected:(Reservation_rejected.t -> unit) ->
   Reserve_command.t ->

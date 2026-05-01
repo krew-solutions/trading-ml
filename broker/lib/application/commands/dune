@@ -4,7 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
-  core
+  core decimal
   queries
   broker
   broker_integration_events

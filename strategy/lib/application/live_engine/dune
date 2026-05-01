@@ -1,4 +1,4 @@
 (library
  (name live_engine)
  (public_name trading.live_engine)
- (libraries core account broker strategies engine log stream eio_stream eio))
+ (libraries core decimal account broker strategies engine log stream eio_stream eio))

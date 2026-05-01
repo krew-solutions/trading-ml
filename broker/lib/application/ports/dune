@@ -1,4 +1,4 @@
 (library
  (name broker)
  (public_name trading.broker)
- (libraries core))
+ (libraries core decimal))

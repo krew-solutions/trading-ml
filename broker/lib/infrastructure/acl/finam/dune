@@ -1,7 +1,7 @@
 (library
  (name finam)
  (public_name trading.finam)
- (libraries core broker http_transport websocket log acl_common datetime
+ (libraries core decimal broker http_transport websocket log acl_common datetime
             eio eio.unix yojson uri uuidm
             tls tls-eio x509
             base64 digestif digestif.c))

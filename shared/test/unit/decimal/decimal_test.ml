@@ -1,5 +1,3 @@
-open Core
-
 let d = Decimal.of_float
 
 let eq_dec x y = Float.abs (Decimal.to_float x -. Decimal.to_float y) < 1e-6

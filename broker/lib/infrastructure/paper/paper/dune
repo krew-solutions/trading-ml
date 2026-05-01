@@ -1,4 +1,4 @@
 (library
  (name paper)
  (public_name trading.paper)
- (libraries core account broker engine))
+ (libraries core decimal account broker engine))

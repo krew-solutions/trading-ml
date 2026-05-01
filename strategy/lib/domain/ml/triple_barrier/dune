@@ -1,4 +1,4 @@
 (library
  (name triple_barrier)
  (public_name trading.triple_barrier)
- (libraries core))
+ (libraries core decimal))

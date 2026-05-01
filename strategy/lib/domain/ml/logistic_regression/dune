@@ -1,4 +1,4 @@
 (library
  (name logistic_regression)
  (public_name trading.logistic_regression)
- (libraries core strategies yojson))
+ (libraries core decimal strategies yojson))

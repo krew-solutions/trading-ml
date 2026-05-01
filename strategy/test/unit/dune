@@ -1,6 +1,6 @@
 (test
  (name unit_runner)
- (libraries core indicators strategies logistic_regression gbt
+ (libraries core decimal indicators strategies logistic_regression gbt
             triple_barrier engine
             broker finam bcs token_store paper
             live_engine stream eio_stream

@@ -1,6 +1,6 @@
 (test
  (name account_unit_runner)
- (libraries core account alcotest qcheck-core))
+ (libraries core decimal account alcotest qcheck-core))
 
 ; Same flatten convention as broker/test/unit/. Filenames globally
 ; unique so the flat namespace doesn't collide.

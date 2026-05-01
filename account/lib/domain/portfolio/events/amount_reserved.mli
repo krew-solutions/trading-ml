@@ -8,7 +8,7 @@ type t = {
   reservation_id : int;
   side : Core.Side.t;
   instrument : Core.Instrument.t;
-  quantity : Core.Decimal.t;
-  price : Core.Decimal.t;
-  reserved_cash : Core.Decimal.t;
+  quantity : Decimal.t;
+  price : Decimal.t;
+  reserved_cash : Decimal.t;
 }

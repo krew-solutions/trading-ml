@@ -3,10 +3,10 @@ let handle
     ~(id : int)
     ~(side : Core.Side.t)
     ~(instrument : Core.Instrument.t)
-    ~(quantity : Core.Decimal.t)
-    ~(price : Core.Decimal.t)
-    ~(slippage_buffer : Core.Decimal.t)
-    ~(fee_rate : Core.Decimal.t) :
+    ~(quantity : Decimal.t)
+    ~(price : Decimal.t)
+    ~(slippage_buffer : Decimal.t)
+    ~(fee_rate : Decimal.t) :
     ( Account.Portfolio.Events.Amount_reserved.t,
       Account.Portfolio.reservation_error )
     Rop.t =

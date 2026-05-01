@@ -30,7 +30,7 @@ let on_candle st instrument (c : Candle.t) =
   match bands bb with
   | None -> (st, Signal.hold ~ts:c.Candle.ts ~instrument)
   | Some (lower, middle, upper) ->
-      let close = Core.Decimal.to_float c.Candle.close in
+      let close = Decimal.to_float c.Candle.close in
       let action, position, reason =
         match st.position with
         | Flat when close > upper -> (Signal.Enter_long, Long, "close above upper band")

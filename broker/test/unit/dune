@@ -1,7 +1,7 @@
 (test
  (name broker_unit_runner)
  (libraries
-  core
+  core decimal
   broker
   http_transport
   websocket

@@ -79,9 +79,13 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
               in
               let reservation_id = state.reservation_seq in
               let portfolio_r =
+                (* Engine config.fee_rate is still float (separate scope from
+                   the account-side Decimal-typed slippage_buffer/fee_rate
+                   refactor); convert at the call site for now. *)
                 Account.Portfolio.reserve state.portfolio ~id:reservation_id ~side
-                  ~instrument:config.instrument ~quantity:q ~price ~slippage_buffer:0.0
-                  ~fee_rate:config.fee_rate
+                  ~instrument:config.instrument ~quantity:q ~price
+                  ~slippage_buffer:Decimal.zero
+                  ~fee_rate:(Decimal.of_float config.fee_rate)
               in
               (* [auto_commit]: Backtest commits immediately (no broker
            latency); Live leaves the reservation open until a fill

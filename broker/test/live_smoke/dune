@@ -6,7 +6,7 @@
 
 (executable
  (name live_smoke_runner)
- (libraries core finam bcs broker http_transport
+ (libraries core decimal finam bcs broker http_transport
             eio eio_main mirage-crypto-rng.unix
             str alcotest))
 

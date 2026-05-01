@@ -1,7 +1,7 @@
 (library
  (name engine)
  (public_name trading.engine)
- (libraries core account indicators strategies stream))
+ (libraries core decimal account indicators strategies stream))
 
 (rule
  (alias gospel)
@@ -17,19 +17,21 @@ for f in %{deps}; do
   gospel check -L ../gospel_stubs -L gospel_stubs -L . \"$f\"
 done")))
 
-; Why3 deductive verification. -L includes core/ so engine .mlw files
-; can `use decimal.Decimal`, `use side.Side` etc.
+; Why3 deductive verification. -L includes:
+;   - ../core              (use side.Side, instrument.Instrument, ...)
+;   - shared/lib/decimal   (use decimal.Decimal — moved out of core)
 (rule
  (alias why3)
  (deps
   (glob_files *.mlw)
-  (glob_files ../core/*.mlw))
+  (glob_files ../core/*.mlw)
+  (glob_files ../../../../shared/lib/decimal/*.mlw))
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../core -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../core -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../core -L ../../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../core -L ../../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
 done")))
 
 (alias

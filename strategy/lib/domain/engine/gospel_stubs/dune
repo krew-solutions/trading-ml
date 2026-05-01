@@ -2,13 +2,14 @@
  (target core.mli)
  (deps
   %{project_root}/tools/gospel_wrap.sh
-  (glob_files ../../core/*.mli))
+  (glob_files ../../core/*.mli)
+  (glob_files ../../../../../shared/lib/decimal/*.mli))
  (action
   (with-stdout-to %{target}
    (run %{project_root}/tools/gospel_wrap.sh
         %{dep:../../core/board.mli}
         %{dep:../../core/candle.mli}
-        %{dep:../../core/decimal.mli}
+        %{dep:../../../../../shared/lib/decimal/decimal.mli}
         %{dep:../../core/instrument.mli}
         %{dep:../../core/isin.mli}
         %{dep:../../core/mic.mli}

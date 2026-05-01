@@ -1,9 +1,7 @@
-(** JSON encoding/decoding helpers for {!Core.Decimal.t} at the
+(** JSON encoding/decoding helpers for {!Decimal.t} at the
     broker wire boundary. Lives in ACL, not in [core], because
     decimal JSON encoding is entirely a wire-format concern — the
     domain type itself knows nothing about JSON. *)
-
-open Core
 
 val yojson_of_t : Decimal.t -> Yojson.Safe.t
 (** Canonical string encoding used by most broker APIs. *)

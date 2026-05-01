@@ -6,7 +6,7 @@
     loses nothing across the wire. *)
 
 type t = {
-  cash : string;  (** Decimal string accepted by {!Core.Decimal.of_string}. *)
+  cash : string;  (** Decimal string accepted by {!Decimal.of_string}. *)
   realized_pnl : string;
   positions : Position_view_model.t list;
   reservations : Reservation_view_model.t list;

@@ -1,5 +1,3 @@
-open Core
-
 type t = {
   cash : string;
   realized_pnl : string;

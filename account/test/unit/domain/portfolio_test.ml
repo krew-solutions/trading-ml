@@ -75,8 +75,8 @@ let test_reserve_buy_reduces_available_cash () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:1 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:0.01 (* 1% — reserve qty*price*1.01 *)
-      ~fee_rate:0.001 (* 0.1% fee estimate *)
+      ~price:(d 100.0) ~slippage_buffer:(d 0.01) (* 1% — reserve qty*price*1.01 *)
+      ~fee_rate:(d 0.001) (* 0.1% fee estimate *)
   in
   Alcotest.(check bool) "cash unchanged" true (Decimal.compare p.cash (d 10_000.0) = 0);
   (* reserved = 10 * 100 * 1.01 = 1010, fee = 10 * 100 * 0.001 = 1,
@@ -93,7 +93,7 @@ let test_reserve_sell_does_not_touch_cash () =
   in
   let p =
     Portfolio.reserve p ~id:2 ~side:Sell ~instrument:inst ~quantity:(d 5.0)
-      ~price:(d 100.0) ~slippage_buffer:0.0 ~fee_rate:0.0
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
   in
   Alcotest.(check (float 1e-6)) "cash unchanged" 8000.0 (Decimal.to_float p.cash);
   Alcotest.(check (float 1e-6))
@@ -107,7 +107,7 @@ let test_commit_fill_removes_reservation () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:3 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:0.01 ~fee_rate:0.001
+      ~price:(d 100.0) ~slippage_buffer:(d 0.01) ~fee_rate:(d 0.001)
   in
   (* Commit with actual numbers slightly different from reservation. *)
   let p =
@@ -126,7 +126,7 @@ let test_release_removes_reservation_without_touching_cash () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:4 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:0.01 ~fee_rate:0.001
+      ~price:(d 100.0) ~slippage_buffer:(d 0.01) ~fee_rate:(d 0.001)
   in
   let p = Portfolio.release p ~id:4 in
   Alcotest.(check (float 1e-6)) "cash untouched" 10_000.0 (Decimal.to_float p.cash);
@@ -148,7 +148,7 @@ let test_commit_partial_fill_shrinks_reservation () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:10 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:0.0 ~fee_rate:0.0
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
   in
   (* Available_cash = 10000 - 10 * 100 = 9000. *)
   Alcotest.(check (float 1e-6))
@@ -184,7 +184,7 @@ let test_commit_partial_fill_over_reserve_raises () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:11 ~side:Buy ~instrument:inst ~quantity:(d 5.0)
-      ~price:(d 100.0) ~slippage_buffer:0.0 ~fee_rate:0.0
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
   in
   Alcotest.check_raises "overfill raises"
     (Invalid_argument
@@ -200,11 +200,11 @@ let test_multiple_reservations_stack () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:5 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
-      ~price:(d 100.0) ~slippage_buffer:0.0 ~fee_rate:0.0
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
   in
   let p =
     Portfolio.reserve p ~id:6 ~side:Buy ~instrument:inst ~quantity:(d 20.0)
-      ~price:(d 100.0) ~slippage_buffer:0.0 ~fee_rate:0.0
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
   in
   (* total reserved: 1000 + 2000 = 3000 *)
   Alcotest.(check (float 1e-6))

@@ -60,8 +60,8 @@ val try_reserve :
   instrument:Core.Instrument.t ->
   quantity:Core.Decimal.t ->
   price:Core.Decimal.t ->
-  slippage_buffer:float ->
-  fee_rate:float ->
+  slippage_buffer:Core.Decimal.t ->
+  fee_rate:Core.Decimal.t ->
   (t * Events.Amount_reserved.t, reservation_error) result
 (** Checked reservation: verifies invariant (sufficient
     [available_cash] for Buy, [available_qty] for Sell), then
@@ -124,8 +124,8 @@ val reserve :
   instrument:Core.Instrument.t ->
   quantity:Core.Decimal.t ->
   price:Core.Decimal.t ->
-  slippage_buffer:float ->
-  fee_rate:float ->
+  slippage_buffer:Core.Decimal.t ->
+  fee_rate:Core.Decimal.t ->
   t
 (** Create a pending reservation identified by [id]. The caller
     chooses [id] — typically a monotonic counter — and uses the

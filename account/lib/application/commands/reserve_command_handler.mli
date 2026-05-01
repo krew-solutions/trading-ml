@@ -17,6 +17,6 @@ val handle :
   instrument:Core.Instrument.t ->
   quantity:Core.Decimal.t ->
   price:Core.Decimal.t ->
-  slippage_buffer:float ->
-  fee_rate:float ->
+  slippage_buffer:Core.Decimal.t ->
+  fee_rate:Core.Decimal.t ->
   (Account.Portfolio.Events.Amount_reserved.t, Account.Portfolio.reservation_error) Rop.t

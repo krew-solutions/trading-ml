@@ -42,11 +42,13 @@ val reserved_qty : t -> Core.Decimal.t
 val per_unit_cash_of :
   side:Core.Side.t ->
   price:Core.Decimal.t ->
-  slippage_buffer:float ->
-  fee_rate:float ->
+  slippage_buffer:Core.Decimal.t ->
+  fee_rate:Core.Decimal.t ->
   Core.Decimal.t
 (** Per-unit cash impact of a future fill for reservation purposes.
     For Buy: [price × (1 + slippage_buffer) + price × fee_rate]. For
     Sell: zero (sells free cash). Used as a factory helper for
     [t.per_unit_cash] — immutable after construction so partial-fill
-    proration just scales by remaining quantity. *)
+    proration just scales by remaining quantity. [slippage_buffer]
+    and [fee_rate] are {!Core.Decimal.t} (not [float]) so the
+    arithmetic stays in the verified Decimal domain end-to-end. *)

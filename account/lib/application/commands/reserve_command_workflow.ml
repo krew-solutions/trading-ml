@@ -21,8 +21,8 @@ let reservation_error_to_string = function
 let execute
     ~(portfolio : Portfolio.t ref)
     ~(next_reservation_id : unit -> int)
-    ~(slippage_buffer : float)
-    ~(fee_rate : float)
+    ~(slippage_buffer : Core.Decimal.t)
+    ~(fee_rate : Core.Decimal.t)
     ~(publish_amount_reserved : Amount_reserved.t -> unit)
     ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
     (cmd : Reserve_command.t) : (unit, Portfolio.reservation_error) Rop.t =

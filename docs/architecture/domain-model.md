@@ -263,7 +263,8 @@ type t = {
 }
 ```
 
-Past-tense names per CLAUDE.md. Each event is a pure data record
+Past-tense names by project convention (events name what happened,
+commands name an imperative). Each event is a pure data record
 emitted by the aggregate on a successful state transition; the
 domain-event handler in `application/domain_event_handlers/`
 projects it into the corresponding integration-event DTO and

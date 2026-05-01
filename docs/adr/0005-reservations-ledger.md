@@ -36,12 +36,12 @@ fills deterministically at open[T+1] with no rejections. Moving
 to real brokers (Finam, BCS), the problems would surface
 immediately.
 
-The user proposal (verbatim): *"сумма, необходимая для покупки
-(стоимость ценных бумаг + некий процент на проскальзываение
-если заявка рыночная (а не лимитная) + комиссия) должна обрести
-статус pending. Эта сумма резервируется, но не списывается. При
-получении события от брокера происходит фактическое списание
-суммы."*
+The proposed mechanism: the cash required for a buy — the
+position value plus a slippage allowance (only for market orders,
+since limit orders fix the price) plus the commission estimate —
+should enter a *pending* state. The amount is **reserved** against
+the available cash but **not** debited. On the corresponding
+broker fill event, the actual debit replaces the reservation.
 
 ## Decision
 
@@ -215,6 +215,6 @@ same P&L, same order counts.
 - Phase B.4 commit: "Partial fill commits".
 - [Reservations doc](../architecture/reservations.md).
 - [Live engine doc](../architecture/live-engine.md).
-- User discussion log (prior session): the phrase *"сумма
-  резервируется, но не списывается"* — this ADR implements
+- Prior-session design discussion: the proposed mechanism was
+  "the amount is reserved but not debited" — this ADR implements
   exactly that.

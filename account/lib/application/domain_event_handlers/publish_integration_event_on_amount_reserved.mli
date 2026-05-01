@@ -1,11 +1,12 @@
 (** Domain-event handler for {!Account.Portfolio.Events.Amount_reserved}.
 
-    Per CLAUDE.md: "Отправка Domain Event за пределы Bounded
-    Context осуществляется обработчиком доменного события, который
-    конвертирует Domain Event в Integration Event и передает его в
-    реализацию Hexagonal Port." Symmetric counterpart of
-    {!Publish_integration_event_on_reservation_released} on the
-    successful-reservation path. *)
+    Bounded-context boundary discipline: a Domain Event leaves the
+    BC only via a domain-event handler that translates it into an
+    Integration Event DTO and hands the DTO to a Hexagonal Port. No
+    direct publishing of domain values across the boundary. This
+    handler is the successful-reservation half of that mechanism;
+    {!Publish_integration_event_on_reservation_released} is its
+    symmetric counterpart on the release path. *)
 
 module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
 

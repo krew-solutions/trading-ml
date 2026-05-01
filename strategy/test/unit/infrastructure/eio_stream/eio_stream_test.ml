@@ -14,7 +14,8 @@ let test_take_bounds_infinite_stream () =
   let s = Eio.Stream.create 64 in
   List.iter (Eio.Stream.add s) [ 10; 20; 30; 40; 50 ];
   let seq = Eio_stream.of_eio_stream s in
-  (* take 3 из бесконечного Seq — не зависает, возвращает первые три. *)
+  (* `take 3` over an unbounded Seq must not block; it returns the
+     first three elements and stops. *)
   let three = seq |> Stream.take 3 |> Stream.to_list in
   Alcotest.(check (list int)) "take 3" [ 10; 20; 30 ] three
 

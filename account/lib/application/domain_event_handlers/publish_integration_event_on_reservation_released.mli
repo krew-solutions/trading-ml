@@ -1,11 +1,12 @@
 (** Domain-event handler for {!Account.Portfolio.Events.Reservation_released}.
 
-    Per CLAUDE.md: "Отправка Domain Event за пределы Bounded
-    Context осуществляется обработчиком доменного события, который
-    конвертирует Domain Event в Integration Event и передает его в
-    реализацию Hexagonal Port." This module is exactly that: it
-    projects the domain event into the outbound integration-event
-    DTO and hands the DTO to the supplied publisher port. *)
+    Bounded-context boundary discipline: a Domain Event leaves the
+    BC only via a domain-event handler that translates it into an
+    Integration Event DTO and hands the DTO to a Hexagonal Port. No
+    direct publishing of domain values across the boundary. This
+    module projects the release-path domain event into the outbound
+    integration-event DTO and hands it to the supplied publisher
+    port. *)
 
 module Reservation_released =
   Account_integration_events.Reservation_released_integration_event

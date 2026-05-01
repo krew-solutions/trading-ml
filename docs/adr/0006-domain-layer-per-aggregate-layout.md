@@ -5,8 +5,8 @@
 
 ## Context
 
-CLAUDE.md (Domain Layer section) requires that every Bounded Context
-arrange its `domain/` directory as a list of aggregate
+The project's Domain Layer convention is that every Bounded
+Context arranges its `domain/` directory as a list of aggregate
 sub-directories. Each aggregate sub-directory contains:
 
 - `values/` — ValueObjects;
@@ -24,7 +24,7 @@ Account domain was a single 252-line monolithic file
 `Portfolio.t`, the Entity `reservation`, the VO `position`, two
 DomainEvents (`amount_reserved`, `reservation_released`), and two
 business-rule error types — exactly the kind of mixing the
-CLAUDE.md schema is designed to forbid.
+above schema is designed to forbid.
 
 The reorganisation of Account establishes the canonical pattern
 that the next BC with a domain layer must follow.
@@ -160,9 +160,9 @@ re-export is more canonical and gives encapsulation by default.
 
 ### Flat layout, all files at `account/lib/domain/` root
 
-What we had before. Conflicts with CLAUDE.md, mixes VOs / Entities
-/ Events / aggregate root in one namespace, doesn't scale to a
-second aggregate.
+What we had before. Conflicts with the per-aggregate convention,
+mixes VOs / Entities / Events / aggregate root in one namespace,
+doesn't scale to a second aggregate.
 
 ### `entities/` umbrella sub-directory
 
@@ -171,10 +171,11 @@ sub-directory next to `values/` and `events/`. Rejected because:
 the aggregate root is itself an Entity (chosen as the
 transactional consistency boundary), so splitting "the root
 Entity" from "the other Entities" via different directory
-placement is semantically incoherent; Vernon (IDDD), Evans (DDD
-blue book), and Stöckl (go-iddd) keep the aggregate root and its
-supporting Entities at the same level; CLAUDE.md was explicitly
-amended to require **a separate directory per Entity**.
+placement is semantically incoherent; Vernon (IDDD) and Evans
+(DDD blue book) keep the aggregate root and its supporting
+Entities at the same level; the project convention is therefore
+**a separate directory per Entity**, with the aggregate root
+sitting alongside the Entities it composes.
 
 ### One dune-library per sub-directory
 
@@ -234,8 +235,6 @@ library and lets the collapse rule do useful work.
 
 ## References
 
-- CLAUDE.md, section "Domain Layer".
-- Plan file: `/home/ivan/.claude/plans/graceful-cooking-thimble.md`.
 - Vernon, *Implementing Domain-Driven Design*, ch. 10
   (Aggregates) for the conceptual decomposition.
 - Wlaschin, *Domain Modeling Made Functional*, ch. 4–9 for the

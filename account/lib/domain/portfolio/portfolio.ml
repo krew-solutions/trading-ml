@@ -1,13 +1,14 @@
 open Core
 
-(* Re-exports — публичный surface aggregate. portfolio.ml совпадает с
-   именем директории, поэтому dune collapsed-ит namespace в этот файл;
-   peer subdirs снаружи доступны только через явный re-export. *)
+(* Re-exports define the aggregate's public surface. dune's
+   `(include_subdirs qualified)` collapses peer sub-directories into
+   this file (matching the directory name), so they reach the
+   outside only through these explicit aliases. *)
 module Values = Values
 module Events = Events
 module Reservation = Reservation
 
-(* Локальные shortcut-алиасы для краткости тела aggregate root. *)
+(* Local shortcuts to keep the aggregate-root body terse. *)
 module Position = Values.Position
 module Amount_reserved = Events.Amount_reserved
 module Reservation_released = Events.Reservation_released

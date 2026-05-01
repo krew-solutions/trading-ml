@@ -89,12 +89,6 @@ Moving the ACL into the ACL adapters (`lib/infrastructure/acl/*`)
 and keeping the domain in pure terms of `Instrument.t` etc.
 eliminates this.
 
-See [`reference_hexagonal.md`][hex-memory] in the working
-memory for reading notes on Cockburn's original paper and
-Stöckl's go-iddd reference implementation.
-
-[hex-memory]: ../../../.claude/projects/-home-ivan-emacsway-apps-trading/memory/reference_hexagonal.md
-
 ## Consequences
 
 **Easier**:
@@ -132,7 +126,5 @@ Stöckl's go-iddd reference implementation.
 - Alistair Cockburn, ["Hexagonal
   architecture"](https://alistair.cockburn.us/hexagonal-architecture/),
   2005.
-- Matthias Stöckl, [go-iddd](https://github.com/AntonStoeckl/go-iddd)
-  — a Go reference implementation of hexagonal + DDD.
 - [Domain model overview](../architecture/domain-model.md).
 - [Architecture overview](../architecture/overview.md).

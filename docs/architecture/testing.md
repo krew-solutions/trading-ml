@@ -3,10 +3,7 @@
 The repository has 238 OCaml unit tests and 89 UI (Vitest) tests
 that run on every push. The layout separates **unit** tests (fast,
 no IO, mirror `lib/`) from **integration-shaped** suites that cut
-across modules. See [memory on test layout][test-layout] for the
-rationale.
-
-[test-layout]: ../../../.claude/projects/-home-ivan-emacsway-apps-trading/memory/project_test_layout.md
+across modules — the rationale is captured below.
 
 ## Directory layout
 

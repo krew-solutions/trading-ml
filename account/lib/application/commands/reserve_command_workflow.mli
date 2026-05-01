@@ -1,29 +1,27 @@
-(** ROP pipeline for processing {!Reserve_command.t}.
+(** ROP pipeline for {!Reserve_command.t}.
 
-    Composes parsing, command handler and domain-event handler:
-    {ol
-    {- Parse the wire-shaped {!Reserve_command.t} into domain
-       values (side, instrument, quantity, price). Parse failure
-       (bad symbol, bad side string) raises [Invalid_argument];
-       HTTP is expected to validate up-front, so this would only
-       fire on a contract-violating caller.}
-    {- {!Reserve_command_handler.handle} — runs the command,
-       yields an {!Account.Portfolio.Events.Amount_reserved.t}
-       domain event on success or a
-       {!Account.Portfolio.reservation_error} on invariant
-       violation (insufficient cash for a buy, insufficient
-       quantity for a sell).}
-    {- {!Account_domain_event_handlers.Publish_integration_event_on_amount_reserved.handle}
-       — projects the domain event into the outbound
-       integration-event DTO and calls [~publish_amount_reserved].}
-    }
+    Composes {!Reserve_command_handler.handle} with the
+    success-path {!Amount_reserved} projection and the
+    failure-path {!Reservation_rejected} projection.
 
-    On the failure track, projects the [reservation_error] into a
-    {!Reservation_rejected_integration_event.t} and calls
-    [~publish_reservation_rejected]; the same error list is also
-    propagated through the [Rop.t] return so the caller (command
-    bus, tests) can branch. Symmetric with
-    {!Release_command_workflow.execute}. *)
+    The handler does the entire reservation step internally
+    (parse, invariant check, mutate, yield event); the workflow
+    only routes the outcome to the correct integration-event
+    publisher.
+
+    {1 Failure-track behaviour}
+
+    - {!Reserve_command_handler.Reservation} — a well-formed
+      attempt rejected by the aggregate invariant: project to
+      {!Reservation_rejected.t} and call
+      [~publish_reservation_rejected].
+    - {!Reserve_command_handler.Validation} — a malformed wire
+      payload that never reached the aggregate: nothing is
+      published (semantically there is no "rejection" — this is
+      a contract violation by the caller and only surfaces via
+      the [Rop.t] tail).
+
+    Symmetric with {!Release_command_workflow.execute}. *)
 
 module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
 module Reservation_rejected =
@@ -37,4 +35,4 @@ val execute :
   publish_amount_reserved:(Amount_reserved.t -> unit) ->
   publish_reservation_rejected:(Reservation_rejected.t -> unit) ->
   Reserve_command.t ->
-  (unit, Account.Portfolio.reservation_error) Rop.t
+  (unit, Reserve_command_handler.handle_error) Rop.t

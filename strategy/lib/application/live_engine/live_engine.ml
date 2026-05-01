@@ -7,7 +7,7 @@ type config = {
   initial_cash : Decimal.t;
   limits : Engine.Risk.limits;
   tif : Order.time_in_force;
-  fee_rate : float;
+  fee_rate : Decimal.t;
   reconcile_every : int;
   max_drawdown_pct : float;
   rate_limit : (int * float) option;

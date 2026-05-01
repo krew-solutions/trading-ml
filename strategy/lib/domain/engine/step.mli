@@ -24,7 +24,7 @@ open Core
 type config = {
   limits : Risk.limits;
   instrument : Instrument.t;
-  fee_rate : float;
+  fee_rate : Decimal.t;
   auto_commit : bool;
       (** When [true], {!execute_pending} applies the fill to the
       portfolio immediately after reserving (atomic reserve+commit

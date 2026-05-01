@@ -28,10 +28,14 @@ type result = {
   num_trades : int;
 }
 
-type config = { initial_cash : Decimal.t; fee_rate : float; limits : Risk.limits }
+type config = { initial_cash : Decimal.t; fee_rate : Decimal.t; limits : Risk.limits }
 
 let default_config ?(initial_cash = Decimal.of_int 1_000_000) () =
-  { initial_cash; fee_rate = 0.0005; limits = Risk.default_limits ~equity:initial_cash }
+  {
+    initial_cash;
+    fee_rate = Decimal.of_string "0.0005";
+    limits = Risk.default_limits ~equity:initial_cash;
+  }
 
 let max_drawdown equity_curve =
   match equity_curve with

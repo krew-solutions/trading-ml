@@ -52,7 +52,7 @@ let sine_candles n =
         ~close:(d px) ~volume:(d_int 1000))
 
 let equity_init = d_int 1_000_000
-let fee_rate = 0.0005
+let fee_rate = Decimal.of_string "0.0005"
 
 let run_backtest instrument candles =
   let cfg : Engine.Backtest.config =

@@ -32,7 +32,7 @@ type config = {
   initial_cash : Decimal.t;
   limits : Engine.Risk.limits;
   tif : Order.time_in_force;
-  fee_rate : float;
+  fee_rate : Decimal.t;
       (** Commission multiplier on fill notional — mirrors
       {!Engine.Backtest.config.fee_rate} so a live-engine run with
       the same value produces the same Portfolio P&L as a backtest

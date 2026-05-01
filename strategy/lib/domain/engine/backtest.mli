@@ -31,8 +31,10 @@ type result = {
 }
 (** Summary of a completed backtest run. *)
 
-type config = { initial_cash : Decimal.t; fee_rate : float; limits : Risk.limits }
-(** Backtest configuration. *)
+type config = { initial_cash : Decimal.t; fee_rate : Decimal.t; limits : Risk.limits }
+(** Backtest configuration. [fee_rate] is a multiplier on fill
+    notional ([qty × price × fee_rate]); kept as {!Decimal.t} so
+    the fill arithmetic stays in the verified Decimal domain. *)
 
 val default_config : ?initial_cash:Decimal.t -> unit -> config
 (** Sensible defaults: 1M cash, 5 bps fees, standard risk limits. *)

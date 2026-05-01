@@ -1,0 +1,4 @@
+(library
+ (name workflow_engine)
+ (public_name trading.workflow_engine)
+ (libraries log))

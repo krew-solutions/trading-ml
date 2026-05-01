@@ -1,6 +1,6 @@
 (test
  (name shared_unit_runner)
- (libraries bus decimal rop alcotest qcheck-core eio eio_main))
+ (libraries bus decimal rop workflow_engine alcotest qcheck-core eio eio_main))
 
 ; Same flatten convention as account/test/unit/. Filenames globally
 ; unique so the flat namespace doesn't collide.

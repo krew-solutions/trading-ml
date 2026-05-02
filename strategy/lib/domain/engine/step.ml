@@ -4,6 +4,7 @@ type config = {
   limits : Risk.limits;
   instrument : Instrument.t;
   fee_rate : Decimal.t;
+  margin_policy : Account.Portfolio.Margin_policy.t;
   auto_commit : bool;
 }
 
@@ -80,6 +81,7 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
                 Account.Portfolio.reserve state.portfolio ~id:reservation_id ~side
                   ~instrument:config.instrument ~quantity:q ~price
                   ~slippage_buffer:Decimal.zero ~fee_rate:config.fee_rate
+                  ~margin_policy:config.margin_policy
               in
               (* [auto_commit]: Backtest commits immediately (no broker
            latency); Live leaves the reservation open until a fill

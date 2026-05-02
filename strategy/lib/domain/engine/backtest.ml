@@ -77,6 +77,9 @@ let run
       limits = config.limits;
       instrument;
       fee_rate = config.fee_rate;
+      margin_policy =
+        Account.Portfolio.Margin_policy.constant ~margin_pct:(Decimal.of_string "0.5")
+          ~haircut:(Decimal.of_string "0.5");
       auto_commit = true;
       (* synthetic fill — no broker latency *)
     }

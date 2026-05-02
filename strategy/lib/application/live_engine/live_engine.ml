@@ -58,6 +58,9 @@ let make (cfg : config) : t =
       limits = cfg.limits;
       instrument = cfg.instrument;
       fee_rate = cfg.fee_rate;
+      margin_policy =
+        Account.Portfolio.Margin_policy.constant ~margin_pct:(Decimal.of_string "0.5")
+          ~haircut:(Decimal.of_string "0.5");
       auto_commit = false;
       (* Live defers commit until the broker reports a fill via
        {!on_fill_event}. Reservations stay open until then and

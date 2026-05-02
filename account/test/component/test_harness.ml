@@ -31,6 +31,8 @@ type ctx = {
   next_reservation_id : unit -> int;
   slippage_buffer : Decimal.t;
   fee_rate : Decimal.t;
+  margin_policy : Account.Portfolio.Margin_policy.t;
+  mark : Core.Instrument.t -> Decimal.t option;
   amount_reserved_pub : Amount_reserved_ie.t list ref;
   reservation_rejected_pub : Reservation_rejected_ie.t list ref;
   reservation_released_pub : Reservation_released_ie.t list ref;
@@ -44,12 +46,24 @@ let make_id_counter () =
     incr r;
     !r
 
+(* Default policy for component tests: 50% margin, 50% haircut on every
+   instrument. Scenarios that need different terms substitute via
+   [with_margin_policy]. *)
+let default_margin_policy : Account.Portfolio.Margin_policy.t =
+ fun _ -> { margin_pct = Decimal.of_string "0.5"; haircut = Decimal.of_string "0.5" }
+
+(* Default mark callback: no live price stream — the domain falls
+   back to position avg_price when computing buying_power. *)
+let default_mark : Core.Instrument.t -> Decimal.t option = fun _ -> None
+
 let fresh_ctx () =
   {
     portfolio = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 10_000));
     next_reservation_id = make_id_counter ();
     slippage_buffer = Decimal.of_string "0.01";
     fee_rate = Decimal.of_string "0.001";
+    margin_policy = default_margin_policy;
+    mark = default_mark;
     amount_reserved_pub = ref [];
     reservation_rejected_pub = ref [];
     reservation_released_pub = ref [];
@@ -65,6 +79,10 @@ let with_slippage ctx ~buffer = { ctx with slippage_buffer = Decimal.of_string b
 
 let with_fee_rate ctx ~rate = { ctx with fee_rate = Decimal.of_string rate }
 
+let with_margin_policy ctx ~policy = { ctx with margin_policy = policy }
+
+let with_mark ctx ~mark = { ctx with mark }
+
 let reserve ctx ~side ~symbol ~quantity ~price =
   let cmd : Account_commands.Reserve_command.t = { side; symbol; quantity; price } in
   let publish_amount_reserved e =
@@ -76,7 +94,8 @@ let reserve ctx ~side ~symbol ~quantity ~price =
   let result =
     Reserve_wf.execute ~portfolio:ctx.portfolio
       ~next_reservation_id:ctx.next_reservation_id ~slippage_buffer:ctx.slippage_buffer
-      ~fee_rate:ctx.fee_rate ~publish_amount_reserved ~publish_reservation_rejected cmd
+      ~fee_rate:ctx.fee_rate ~margin_policy:ctx.margin_policy ~mark:ctx.mark
+      ~publish_amount_reserved ~publish_reservation_rejected cmd
   in
   { ctx with last_reserve_result = Some result }
 

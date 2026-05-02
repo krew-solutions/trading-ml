@@ -5,22 +5,25 @@
     has been *committed to availability* but not yet *applied to
     cash/positions*. They exist because live brokers acknowledge
     orders and fill them at different times — between "we sent the
-    order" and "broker reports the fill", the funds must be treated
-    as unavailable (otherwise the strategy can happily send a second
-    order that would collectively overspend).
+    order" and "broker reports the fill", the funds (or qty) must
+    be treated as unavailable so the strategy cannot collectively
+    overcommit.
 
-    Backtest doesn't have that latency gap, so it does
+    A reservation can carry a {b cover} part (closes the
+    opposite-side existing position) and an {b open} part (opens
+    or grows a same-side position). Cover does not block cash;
+    open blocks margin via [per_unit_collateral]. See
+    [reservation/reservation.mli] for the per-Entity invariants.
+
+    Backtest doesn't have the broker-RTT latency gap, so it does
     [reserve → commit_fill] atomically per tick; Live does
-    [reserve → broker RTT → commit_fill] with reconciliation. Same
-    API, different timing.
+    [reserve → broker RTT → commit_fill] with reconciliation.
+    Same API, different timing.
 
     Gospel preconditions on the transition operations document
     the safety obligations callers must satisfy. *)
 
 (*@ function dec_raw (d : Decimal.t) : integer *)
-(** Local alias for [Decimal.t]'s scaled-integer projection. See the
-    matching note in [core/candle.mli] — Gospel 0.3.1 doesn't carry
-    [model] declarations across files, so each consumer restates it. *)
 
 (** Re-exports of peer subdirs. [portfolio.ml] collapses the
     [portfolio/] namespace per dune's qualified-mode rule, so peer
@@ -30,6 +33,7 @@
 module Values : module type of Values
 module Events : module type of Events
 module Reservation : module type of Reservation
+module Margin_policy : module type of Margin_policy
 
 type t = private {
   cash : Decimal.t;
@@ -48,10 +52,15 @@ val empty : cash:Decimal.t -> t
 (** Reasons why the aggregate refuses to reserve — business-rule
     failures, not programming errors. Surfaces at the boundary
     of the first-stage handler so callers can react (reject the
-    command, log, surface to user). *)
+    command, log, surface to user).
+
+    [Insufficient_margin] fires on the Sell-open path when the
+    open portion's collateral would exceed [buying_power]; for a
+    Buy that is wholly cash-bounded, [Insufficient_cash] fires
+    instead. *)
 type reservation_error =
   | Insufficient_cash of { required : Decimal.t; available : Decimal.t }
-  | Insufficient_qty of { required : Decimal.t; available : Decimal.t }
+  | Insufficient_margin of { required : Decimal.t; available : Decimal.t }
 
 val try_reserve :
   t ->
@@ -62,14 +71,20 @@ val try_reserve :
   price:Decimal.t ->
   slippage_buffer:Decimal.t ->
   fee_rate:Decimal.t ->
+  margin_policy:Margin_policy.t ->
+  mark:(Core.Instrument.t -> Decimal.t option) ->
   (t * Events.Amount_reserved.t, reservation_error) result
-(** Checked reservation: verifies invariant (sufficient
-    [available_cash] for Buy, [available_qty] for Sell), then
-    delegates to {!reserve}. Returns new state together with the
-    [Amount_reserved] event that reflects the transition, or a
-    typed [reservation_error] if the invariant is violated. *)
+(** Checked reservation. For Buy: bounded by [available_cash]; the
+    margin model does not extend Buy a haircut-based buying power
+    in this round. For Sell: splits into a cover portion (bounded
+    by the existing long quantity, no cash blocked) and an open
+    portion (no qty bound, collateral
+    [open_qty × price × margin_pct] checked against
+    [buying_power]). Returns the new state plus the
+    [Amount_reserved] event reflecting the transition, or a typed
+    [reservation_error] on rejection. *)
 (*@ r = try_reserve p ~id ~side ~instrument ~quantity ~price
-                    ~slippage_buffer ~fee_rate
+                    ~slippage_buffer ~fee_rate ~margin_policy ~mark
     ensures match r with
             | Ok (p', ev) ->
                 ev.reservation_id = id
@@ -126,18 +141,21 @@ val reserve :
   price:Decimal.t ->
   slippage_buffer:Decimal.t ->
   fee_rate:Decimal.t ->
+  margin_policy:Margin_policy.t ->
   t
-(** Create a pending reservation identified by [id]. The caller
-    chooses [id] — typically a monotonic counter — and uses the
-    same [id] for the corresponding [commit_fill] or [release].
+(** Unchecked reservation: builds the cover/open split from current
+    position and pushes the reservation onto the list without
+    verifying the buying-power constraint. The caller is responsible
+    for the business-rule check; prefer [try_reserve] in the
+    workflow path.
 
-    For [Buy]: reserves [qty × price × (1 + slippage_buffer)] cash
-    plus a fee estimate [qty × price × fee_rate]; [cash]
-    is unchanged, but [available_cash] drops.
+    For [Buy]: reserves [qty × (price × (1 + slippage_buffer) +
+    price × fee_rate)] cash; [cash] is unchanged but
+    [available_cash] drops.
 
-    For [Sell]: reserves [qty] units of the instrument's position;
-    [positions] is unchanged, but [available_qty] for that
-    instrument drops. *)
+    For [Sell]: cover_qty closes the long up to [position_qty]; the
+    open_qty remainder reserves
+    [open_qty × price × margin_pct] collateral. *)
 
 val commit_fill :
   t ->
@@ -158,32 +176,41 @@ val commit_partial_fill :
   actual_price:Decimal.t ->
   actual_fee:Decimal.t ->
   t
-(** Settle part of reservation [id]. Shrinks the reservation by
-    [actual_quantity] (its [reserved_cash] / [reserved_qty] scale
-    down proportionally) and applies a {!fill} for that slice; the
-    reservation stays open for the remaining amount. When the
-    remaining quantity reaches zero the reservation is removed
-    automatically (equivalent to {!commit_fill}).
+(** Settle part of reservation [id]. Cover-first attribution:
+    [actual_quantity] depletes [cover_qty] before [open_qty], so the
+    open portion's collateral block stays in place as long as
+    possible. The reservation is removed automatically when both
+    [cover_qty] and [open_qty] reach zero (equivalent to
+    {!commit_fill}).
 
     Raises [Not_found] when the id is absent. Raises
     [Invalid_argument] if [actual_quantity] exceeds the
-    reservation's current [reserved_qty] (for sells) or if the
-    caller tries to fill more than originally reserved (for buys). *)
+    reservation's combined remaining quantity. *)
 
 val release : t -> id:int -> t
 (** Drop reservation [id] with no other state change — used on
     cancel/reject. No-op if the reservation is absent. *)
 
 val available_cash : t -> Decimal.t
-(** [cash - Σ(r.reserved_cash for Buy reservations)]. What the
-    strategy can still spend without overlapping with inflight
-    orders. *)
+(** [cash − Σ reserved_cash r for all r in reservations]. What
+    the strategy can still spend without overlapping with inflight
+    cash-blocking reservations (Buy reservations and Sell-open
+    portions). *)
 
 val available_qty : t -> Core.Instrument.t -> Decimal.t
-(** Signed position quantity after subtracting reservations for
-    that instrument's pending sells (resp. buys for short covers).
-    Returns [Decimal.zero] if there's no position and no
-    reservation. *)
+(** Signed position quantity after subtracting cover_qty for that
+    instrument's pending sells. The open portion of a Sell does
+    not consume position quantity (a short can grow without
+    consuming long-side qty), so it is not counted here. *)
+
+val buying_power :
+  t ->
+  margin_policy:Margin_policy.t ->
+  mark:(Core.Instrument.t -> Decimal.t option) ->
+  Decimal.t
+(** [available_cash + Σ |position_qty| × mark × haircut]. The cap
+    against which the open portion of a Sell is checked. When [mark]
+    returns [None], the position's [avg_price] is used as fallback. *)
 
 val equity : t -> (Core.Instrument.t -> Decimal.t option) -> Decimal.t
 (** Mark-to-market equity = cash + Σ quantity·mark_price.

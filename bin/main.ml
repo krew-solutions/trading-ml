@@ -526,12 +526,24 @@ let cmd_serve args =
   let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
   let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
   let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
+  (* Stubbed margin policy: every instrument gets the same 50% initial
+     margin and 50% haircut. Replaced with a static per-instrument
+     table or a live broker rate source when those land. *)
+  let margin_policy : Account.Portfolio.Margin_policy.t =
+   fun _instrument ->
+    { margin_pct = Decimal.of_string "0.5"; haircut = Decimal.of_string "0.5" }
+  in
+  (* Stubbed mark callback: no live price stream wired yet. The
+     domain falls back to each position's avg_price when [None] is
+     returned, which keeps buying-power computations grounded in
+     entry cost until a real mark source is plugged in. *)
+  let mark : Core.Instrument.t -> Decimal.t option = fun _ -> None in
   Bus.Command_bus.register_handler reserve_bus (fun cmd ->
       match
         Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
           ~next_reservation_id ~slippage_buffer:(Decimal.of_string "0.005")
-          ~fee_rate:(Decimal.of_string "0.0005") ~publish_amount_reserved
-          ~publish_reservation_rejected cmd
+          ~fee_rate:(Decimal.of_string "0.0005") ~margin_policy ~mark
+          ~publish_amount_reserved ~publish_reservation_rejected cmd
       with
       | Ok () -> ()
       (* Business-rule failures (insufficient cash/qty) already

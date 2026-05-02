@@ -18,8 +18,8 @@ let reservation_error_to_string = function
   | Account.Portfolio.Insufficient_cash { required; available } ->
       Printf.sprintf "insufficient cash: required %s, available %s"
         (Decimal.to_string required) (Decimal.to_string available)
-  | Account.Portfolio.Insufficient_qty { required; available } ->
-      Printf.sprintf "insufficient quantity: required %s, available %s"
+  | Account.Portfolio.Insufficient_margin { required; available } ->
+      Printf.sprintf "insufficient margin: required %s, available %s"
         (Decimal.to_string required) (Decimal.to_string available)
 
 type validated_reserve_command = {
@@ -74,6 +74,8 @@ let handle
     ~(next_reservation_id : unit -> int)
     ~(slippage_buffer : Decimal.t)
     ~(fee_rate : Decimal.t)
+    ~(margin_policy : Account.Portfolio.Margin_policy.t)
+    ~(mark : Core.Instrument.t -> Decimal.t option)
     (cmd : Reserve_command.t) :
     (Account.Portfolio.Events.Amount_reserved.t, handle_error) Rop.t =
   match validate cmd with
@@ -82,7 +84,8 @@ let handle
       let id = next_reservation_id () in
       match
         Account.Portfolio.try_reserve !portfolio ~id ~side:v.side ~instrument:v.instrument
-          ~quantity:v.quantity ~price:v.price ~slippage_buffer ~fee_rate
+          ~quantity:v.quantity ~price:v.price ~slippage_buffer ~fee_rate ~margin_policy
+          ~mark
       with
       | Ok (portfolio', domain_event) ->
           portfolio := portfolio';

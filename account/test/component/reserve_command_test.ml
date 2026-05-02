@@ -1,9 +1,9 @@
 (** BDD specification for placing a reservation on the portfolio.
 
-    Covers the happy path (cash earmarked, the reservation is
-    announced) and the refusal scenarios — insufficient cash,
-    insufficient quantity for sells, malformed instrument, and
-    multiple malformed fields reported together. *)
+    Covers the happy paths (cash earmarked / margin earmarked / cover
+    against existing position) and the refusal scenarios — insufficient
+    cash on a buy, insufficient margin on a short open, malformed
+    instrument, multiple malformed fields reported together. *)
 
 module Gherkin = Gherkin_edsl
 open Test_harness
@@ -137,34 +137,94 @@ let buy_rejected_for_insufficient_cash =
             (List.length !(ctx.amount_reserved_pub)));
     ]
 
-let sell_rejected_without_position =
-  Gherkin.scenario "A sell is refused when the portfolio doesn't hold the instrument"
+let sell_against_long_is_reserved_against_position =
+  Gherkin.scenario
+    "A sell against an existing long is reserved against the position, not against \
+     buying power"
     fresh_ctx
     [
-      Gherkin.given "a portfolio with cash but no open positions" (fun ctx ->
+      Gherkin.given "a portfolio holding a long position of 20 SBER@MISX at avg 100"
+        (fun ctx ->
+          let p = !(ctx.portfolio) in
+          let inst = Core.Instrument.of_qualified "SBER@MISX" in
+          ctx.portfolio :=
+            Account.Portfolio.fill p ~instrument:inst ~side:Core.Side.Buy
+              ~quantity:(Decimal.of_int 20) ~price:(Decimal.of_int 100) ~fee:Decimal.zero;
+          ctx);
+      Gherkin.when_ "a sell of 5 SBER@MISX at 100 is requested" (fun ctx ->
+          ctx |> reserve ~side:"SELL" ~symbol:"SBER@MISX" ~quantity:"5" ~price:"100");
+      Gherkin.then_ "the request is accepted" (fun ctx ->
+          match ctx.last_reserve_result with
+          | Some (Ok ()) -> ()
+          | _ -> Alcotest.fail "expected acceptance");
+      Gherkin.then_ "the reservation is announced with reserved_cash zero" (fun ctx ->
+          match !(ctx.amount_reserved_pub) with
+          | [ ie ] ->
+              Alcotest.(check string) "side" "SELL" ie.side;
+              Alcotest.(check string) "reserved_cash" "0" ie.reserved_cash
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected one reservation announcement, got %d"
+                   (List.length other)));
+    ]
+
+let sell_with_no_position_opens_a_short =
+  Gherkin.scenario
+    "A sell with no existing position opens a short, blocking margin from buying power"
+    fresh_ctx
+    [
+      Gherkin.given "a portfolio with 10 000 cash and no positions" (fun ctx ->
           ctx |> with_cash ~cash:"10000");
       Gherkin.when_ "a sell of 10 SBER@MISX at 100 is requested" (fun ctx ->
           ctx |> reserve ~side:"SELL" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
-      Gherkin.then_ "the request is refused for insufficient quantity" (fun ctx ->
+      Gherkin.then_ "the request is accepted" (fun ctx ->
+          match ctx.last_reserve_result with
+          | Some (Ok ()) -> ()
+          | _ -> Alcotest.fail "expected acceptance");
+      Gherkin.then_ "the reservation is announced and carries the blocked margin"
+        (fun ctx ->
+          match !(ctx.amount_reserved_pub) with
+          | [ ie ] ->
+              Alcotest.(check string) "side" "SELL" ie.side;
+              (* margin_pct = 0.5 -> 10 * 100 * 0.5 = 500 *)
+              Alcotest.(check string) "reserved_cash" "500" ie.reserved_cash
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected one reservation announcement, got %d"
+                   (List.length other)));
+      Gherkin.then_ "the spendable cash drops by the blocked margin" (fun ctx ->
+          let avail = Account.Portfolio.available_cash !(ctx.portfolio) in
+          dec_eq "available_cash" (Decimal.of_int 9_500) avail);
+    ]
+
+let sell_refused_when_buying_power_insufficient =
+  Gherkin.scenario "A short is refused when buying power is insufficient" fresh_ctx
+    [
+      Gherkin.given "a portfolio with only 200 cash and no positions" (fun ctx ->
+          ctx |> with_cash ~cash:"200");
+      Gherkin.when_ "a sell of 10 SBER@MISX at 100 is requested" (fun ctx ->
+          ctx |> reserve ~side:"SELL" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
+      Gherkin.then_ "the request is refused for insufficient margin" (fun ctx ->
           match ctx.last_reserve_result with
           | Some
               (Error
                  [
                    Reserve_h.Reservation
                      {
-                       error = Account.Portfolio.Insufficient_qty _;
+                       error = Account.Portfolio.Insufficient_margin _;
                        attempted = { side = Core.Side.Sell; _ };
                      };
                  ]) -> ()
           | _ -> Alcotest.fail "unexpected response shape");
-      Gherkin.then_ "a refusal is announced and the reason mentions quantity" (fun ctx ->
+      Gherkin.then_ "a refusal is announced and the reason mentions insufficient margin"
+        (fun ctx ->
           match !(ctx.reservation_rejected_pub) with
           | [ ie ] ->
               Alcotest.(check string) "side" "SELL" ie.side;
               Alcotest.(check bool)
-                (Printf.sprintf "reason mentions insufficient quantity (got %S)" ie.reason)
+                (Printf.sprintf "reason mentions insufficient margin (got %S)" ie.reason)
                 true
-                (contains_substring ~needle:"insufficient quantity" ie.reason)
+                (contains_substring ~needle:"insufficient margin" ie.reason)
           | other ->
               Alcotest.fail
                 (Printf.sprintf "expected one refusal announcement, got %d"
@@ -240,7 +300,9 @@ let feature =
       buy_succeeds;
       successive_buys_get_monotonic_ids;
       buy_rejected_for_insufficient_cash;
-      sell_rejected_without_position;
+      sell_against_long_is_reserved_against_position;
+      sell_with_no_position_opens_a_short;
+      sell_refused_when_buying_power_insufficient;
       malformed_symbol_emits_no_ie;
       validation_errors_accumulate;
     ]

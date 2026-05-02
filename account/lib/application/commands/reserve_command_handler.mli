@@ -44,7 +44,7 @@ type validated_reserve_command = {
 (** Post-parse intermediate form. Wlaschin's [ValidatedX]:
     syntax has been parsed into domain types, but the
     {!Account.Portfolio} invariants (sufficient cash, sufficient
-    quantity) have not yet been checked. Surfaced on the
+    margin) have not yet been checked. Surfaced on the
     {!Reservation} failure track so the workflow can populate
     the rejection integration event with attempt context. *)
 
@@ -68,6 +68,8 @@ val handle :
   next_reservation_id:(unit -> int) ->
   slippage_buffer:Decimal.t ->
   fee_rate:Decimal.t ->
+  margin_policy:Account.Portfolio.Margin_policy.t ->
+  mark:(Core.Instrument.t -> Decimal.t option) ->
   Reserve_command.t ->
   (Account.Portfolio.Events.Amount_reserved.t, handle_error) Rop.t
 (** Parse the wire-format command, attempt the reservation

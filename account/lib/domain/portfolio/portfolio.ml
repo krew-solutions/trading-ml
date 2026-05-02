@@ -7,6 +7,7 @@ open Core
 module Values = Values
 module Events = Events
 module Reservation = Reservation
+module Margin_policy = Margin_policy
 
 (* Local shortcuts to keep the aggregate-root body terse. *)
 module Position = Values.Position
@@ -25,6 +26,11 @@ let empty ~cash = { cash; positions = []; realized_pnl = Decimal.zero; reservati
 let position p instrument =
   List.find_opt (fun (i, _) -> Instrument.equal i instrument) p.positions
   |> Option.map snd
+
+let position_qty p instrument =
+  match position p instrument with
+  | Some (pos : Position.t) -> pos.quantity
+  | None -> Decimal.zero
 
 let set_position positions instrument (pos : Position.t) =
   let rest = List.filter (fun (i, _) -> not (Instrument.equal i instrument)) positions in
@@ -94,11 +100,55 @@ let fill (p : t) ~instrument ~side ~quantity ~price ~fee : t =
     realized_pnl = Decimal.add p.realized_pnl realized;
   }
 
-let reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate =
-  let per_unit_cash =
-    Reservation.per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate
+(* Cover-vs-open split for a reservation, given the aggregate's
+   current position. Cover_qty is bounded by the long-side quantity
+   only on Sell; Buy treats the whole quantity as open in this round
+   (Buy-on-margin / closing a short with cash discount is out of
+   scope). *)
+let split_cover_open ~side ~position_qty ~quantity =
+  match side with
+  | Side.Buy -> (Decimal.zero, quantity)
+  | Sell ->
+      let max_cover = Decimal.max Decimal.zero position_qty in
+      let cover = Decimal.min quantity max_cover in
+      let open_ = Decimal.sub quantity cover in
+      (cover, open_)
+
+let resolve_per_unit_collateral
+    ~side
+    ~price
+    ~slippage_buffer
+    ~fee_rate
+    ~margin_policy
+    ~instrument
+    ~open_qty =
+  match side with
+  | Side.Buy -> Reservation.per_unit_collateral_for_buy ~price ~slippage_buffer ~fee_rate
+  | Sell ->
+      if Decimal.is_zero open_qty then Decimal.zero
+      else
+        let { Margin_policy.margin_pct; haircut = _ } = margin_policy instrument in
+        Reservation.per_unit_collateral_for_sell_open ~price ~margin_pct
+
+let reserve
+    p
+    ~id
+    ~side
+    ~instrument
+    ~quantity
+    ~price
+    ~slippage_buffer
+    ~fee_rate
+    ~margin_policy =
+  let pos_qty = position_qty p instrument in
+  let cover_qty, open_qty = split_cover_open ~side ~position_qty:pos_qty ~quantity in
+  let per_unit_collateral =
+    resolve_per_unit_collateral ~side ~price ~slippage_buffer ~fee_rate ~margin_policy
+      ~instrument ~open_qty
   in
-  let r : Reservation.t = { id; side; instrument; quantity; per_unit_cash } in
+  let r : Reservation.t =
+    { id; side; instrument; cover_qty; open_qty; per_unit_collateral }
+  in
   { p with reservations = r :: p.reservations }
 
 let find_reservation reservations id =
@@ -122,14 +172,22 @@ let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   match matched with
   | [] -> raise Not_found
   | (r : Reservation.t) :: _ ->
-      if Decimal.compare actual_quantity r.quantity > 0 then
+      let total_remaining = Decimal.add r.cover_qty r.open_qty in
+      if Decimal.compare actual_quantity total_remaining > 0 then
         invalid_arg
           "Portfolio.commit_partial_fill: actual_quantity exceeds remaining reserved \
            quantity";
-      let new_remaining = Decimal.sub r.quantity actual_quantity in
+      (* Cover-first attribution: a partial fill consumes the cover
+         portion before the open portion. The open portion is what
+         actually releases collateral as it commits, so depleting it
+         last keeps collateral block stable for as long as possible. *)
+      let cover_consumed = Decimal.min actual_quantity r.cover_qty in
+      let open_consumed = Decimal.sub actual_quantity cover_consumed in
+      let new_cover = Decimal.sub r.cover_qty cover_consumed in
+      let new_open = Decimal.sub r.open_qty open_consumed in
       let reservations' =
-        if Decimal.is_zero new_remaining then rest
-        else { r with quantity = new_remaining } :: rest
+        if Decimal.is_zero new_cover && Decimal.is_zero new_open then rest
+        else { r with cover_qty = new_cover; open_qty = new_open } :: rest
       in
       let p' = { p with reservations = reservations' } in
       fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
@@ -137,18 +195,11 @@ let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
 
 let available_cash p =
   List.fold_left
-    (fun acc (r : Reservation.t) ->
-      match r.side with
-      | Buy -> Decimal.sub acc (Reservation.reserved_cash r)
-      | Sell -> acc)
+    (fun acc (r : Reservation.t) -> Decimal.sub acc (Reservation.reserved_cash r))
     p.cash p.reservations
 
 let available_qty p instrument =
-  let base =
-    match position p instrument with
-    | Some (pos : Position.t) -> pos.quantity
-    | None -> Decimal.zero
-  in
+  let base = position_qty p instrument in
   List.fold_left
     (fun acc (r : Reservation.t) ->
       if Instrument.equal r.instrument instrument then
@@ -157,6 +208,22 @@ let available_qty p instrument =
         | Buy -> acc
       else acc)
     base p.reservations
+
+let buying_power p ~margin_policy ~mark =
+  let position_value =
+    List.fold_left
+      (fun acc (instrument, (pos : Position.t)) ->
+        let mark_or_avg =
+          match mark instrument with
+          | Some m -> m
+          | None -> pos.avg_price
+        in
+        let { Margin_policy.haircut; margin_pct = _ } = margin_policy instrument in
+        let abs_qty = Decimal.abs pos.quantity in
+        Decimal.add acc (Decimal.mul (Decimal.mul abs_qty mark_or_avg) haircut))
+      Decimal.zero p.positions
+  in
+  Decimal.add (available_cash p) position_value
 
 let equity p mark =
   List.fold_left
@@ -171,45 +238,44 @@ let equity p mark =
 
 type reservation_error =
   | Insufficient_cash of { required : Decimal.t; available : Decimal.t }
-  | Insufficient_qty of { required : Decimal.t; available : Decimal.t }
+  | Insufficient_margin of { required : Decimal.t; available : Decimal.t }
 
-let try_reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate =
-  let per_unit_cash =
-    Reservation.per_unit_cash_of ~side ~price ~slippage_buffer ~fee_rate
+let try_reserve
+    p
+    ~id
+    ~side
+    ~instrument
+    ~quantity
+    ~price
+    ~slippage_buffer
+    ~fee_rate
+    ~margin_policy
+    ~mark =
+  let pos_qty = position_qty p instrument in
+  let cover_qty, open_qty = split_cover_open ~side ~position_qty:pos_qty ~quantity in
+  let per_unit_collateral =
+    resolve_per_unit_collateral ~side ~price ~slippage_buffer ~fee_rate ~margin_policy
+      ~instrument ~open_qty
   in
-  let required =
+  let required = Decimal.mul open_qty per_unit_collateral in
+  let check_passes, err =
     match side with
-    | Side.Buy -> Decimal.mul quantity per_unit_cash
-    | Sell -> quantity
+    | Buy ->
+        let av = available_cash p in
+        (Decimal.compare required av <= 0, Insufficient_cash { required; available = av })
+    | Sell ->
+        let bp = buying_power p ~margin_policy ~mark in
+        ( Decimal.compare required bp <= 0,
+          Insufficient_margin { required; available = bp } )
   in
-  let available =
-    match side with
-    | Buy -> available_cash p
-    | Sell -> available_qty p instrument
-  in
-  if Decimal.compare required available > 0 then
-    let err =
-      match side with
-      | Buy -> Insufficient_cash { required; available }
-      | Sell -> Insufficient_qty { required; available }
-    in
-    Error err
+  if not check_passes then Error err
   else
-    let p' =
-      reserve p ~id ~side ~instrument ~quantity ~price ~slippage_buffer ~fee_rate
+    let r : Reservation.t =
+      { id; side; instrument; cover_qty; open_qty; per_unit_collateral }
     in
+    let p' = { p with reservations = r :: p.reservations } in
     let event : Amount_reserved.t =
-      {
-        reservation_id = id;
-        side;
-        instrument;
-        quantity;
-        price;
-        reserved_cash =
-          (match side with
-          | Buy -> required
-          | Sell -> Decimal.zero);
-      }
+      { reservation_id = id; side; instrument; quantity; price; reserved_cash = required }
     in
     Ok (p', event)
 

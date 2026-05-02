@@ -1,7 +1,7 @@
 (** Why3 companion for [reservation.mli] — Entity invariants.
-    Models [reserved_qty] as a pure function of [side] and proves the
-    two case-analytic post-conditions stated in the .mli's Gospel
-    annotation. *)
+    Models [reserved_qty] as a pure function of [side] and [cover_qty],
+    proving the case-analytic post-condition stated in the .mli's
+    Gospel annotation. *)
 
 module Reservation
   use int.Int
@@ -16,22 +16,23 @@ module Reservation
     id : int;
     side : Side.t;
     instrument : instrument;
-    quantity : Decimal.t;
-    per_unit_cash : Decimal.t;
+    cover_qty : Decimal.t;
+    open_qty : Decimal.t;
+    per_unit_collateral : Decimal.t;
   }
 
-  (** [reserved_qty] per [.mli]: zero on Buy, full quantity on Sell. *)
+  (** [reserved_qty] per [.mli]: zero on Buy, cover_qty on Sell. *)
   function reserved_qty (r: t) : Decimal.t =
     match r.side with
     | Side.Buy  -> Decimal.zero
-    | Side.Sell -> r.quantity
+    | Side.Sell -> r.cover_qty
     end
 
   lemma reserved_qty_buy_is_zero :
     forall r: t. r.side = Side.Buy ->
       raw (reserved_qty r) = 0
 
-  lemma reserved_qty_sell_is_quantity :
+  lemma reserved_qty_sell_is_cover :
     forall r: t. r.side = Side.Sell ->
-      raw (reserved_qty r) = raw r.quantity
+      raw (reserved_qty r) = raw r.cover_qty
 end

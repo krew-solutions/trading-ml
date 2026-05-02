@@ -1,4 +1,5 @@
 module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
+
 module Reservation_rejected =
   Account_integration_events.Reservation_rejected_integration_event
 
@@ -7,12 +8,14 @@ let execute
     ~(next_reservation_id : unit -> int)
     ~(slippage_buffer : Decimal.t)
     ~(fee_rate : Decimal.t)
+    ~(margin_policy : Account.Portfolio.Margin_policy.t)
+    ~(mark : Core.Instrument.t -> Decimal.t option)
     ~(publish_amount_reserved : Amount_reserved.t -> unit)
     ~(publish_reservation_rejected : Reservation_rejected.t -> unit)
     (cmd : Reserve_command.t) : (unit, Reserve_command_handler.handle_error) Rop.t =
   match
     Reserve_command_handler.handle ~portfolio ~next_reservation_id ~slippage_buffer
-      ~fee_rate cmd
+      ~fee_rate ~margin_policy ~mark cmd
   with
   | Ok domain_event ->
       Account_domain_event_handlers.Publish_integration_event_on_amount_reserved.handle

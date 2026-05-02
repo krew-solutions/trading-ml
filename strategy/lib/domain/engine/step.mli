@@ -25,6 +25,10 @@ type config = {
   limits : Risk.limits;
   instrument : Instrument.t;
   fee_rate : Decimal.t;
+  margin_policy : Account.Portfolio.Margin_policy.t;
+      (** Per-instrument margin terms used when reserving Sell-open
+          (short) portions. The reference engine plugs in a constant
+          policy via {!Account.Portfolio.Margin_policy.constant}. *)
   auto_commit : bool;
       (** When [true], {!execute_pending} applies the fill to the
       portfolio immediately after reserving (atomic reserve+commit

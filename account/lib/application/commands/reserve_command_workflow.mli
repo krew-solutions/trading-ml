@@ -24,6 +24,7 @@
     Symmetric with {!Release_command_workflow.execute}. *)
 
 module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
+
 module Reservation_rejected =
   Account_integration_events.Reservation_rejected_integration_event
 
@@ -32,6 +33,8 @@ val execute :
   next_reservation_id:(unit -> int) ->
   slippage_buffer:Decimal.t ->
   fee_rate:Decimal.t ->
+  margin_policy:Account.Portfolio.Margin_policy.t ->
+  mark:(Core.Instrument.t -> Decimal.t option) ->
   publish_amount_reserved:(Amount_reserved.t -> unit) ->
   publish_reservation_rejected:(Reservation_rejected.t -> unit) ->
   Reserve_command.t ->

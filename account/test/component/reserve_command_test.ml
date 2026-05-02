@@ -5,6 +5,7 @@
     [Reservation]) and the happy path. *)
 
 module Gherkin = Gherkin_edsl
+module H = Test_harness.Reserve_h
 open Test_harness
 
 let dec_eq label expected actual =
@@ -31,7 +32,7 @@ let buy_succeeds =
       Gherkin.when_ "a BUY for 10 SBER@MISX at 100 is submitted" (fun ctx ->
           ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
       Gherkin.then_ "an Amount_reserved event is emitted" (fun ctx ->
-          match ctx.last_event with
+          match ctx.last_reserve_event with
           | None -> Alcotest.fail "expected Amount_reserved"
           | Some ev ->
               Alcotest.(check int) "reservation_id" 1 ev.reservation_id;
@@ -56,13 +57,13 @@ let reservation_ids_are_monotonic =
       Gherkin.when_ "the first BUY is reserved" (fun ctx ->
           ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"1" ~price:"100");
       Gherkin.then_ "its id is 1" (fun ctx ->
-          match ctx.last_event with
+          match ctx.last_reserve_event with
           | Some ev -> Alcotest.(check int) "first id" 1 ev.reservation_id
           | None -> Alcotest.fail "expected first event");
       Gherkin.when_ "a second BUY is reserved" (fun ctx ->
           ctx |> reserve ~side:"BUY" ~symbol:"GAZP@MISX" ~quantity:"1" ~price:"100");
       Gherkin.then_ "its id is 2" (fun ctx ->
-          match ctx.last_event with
+          match ctx.last_reserve_event with
           | Some ev -> Alcotest.(check int) "second id" 2 ev.reservation_id
           | None -> Alcotest.fail "expected second event");
     ]
@@ -75,7 +76,7 @@ let buy_rejected_for_insufficient_cash =
       Gherkin.when_ "a BUY for 10 SBER@MISX at 100 is submitted" (fun ctx ->
           ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
       Gherkin.then_ "the handler returns Reservation/Insufficient_cash" (fun ctx ->
-          match ctx.last_errors with
+          match ctx.last_reserve_errors with
           | Some
               [
                 H.Reservation
@@ -87,7 +88,7 @@ let buy_rejected_for_insufficient_cash =
           | Some _ -> Alcotest.fail "wrong error variant"
           | None -> Alcotest.fail "expected an error");
       Gherkin.then_ "no event was emitted" (fun ctx ->
-          Alcotest.(check bool) "no event" true (Option.is_none ctx.last_event));
+          Alcotest.(check bool) "no event" true (Option.is_none ctx.last_reserve_event));
     ]
 
 let sell_rejected_without_position =
@@ -98,7 +99,7 @@ let sell_rejected_without_position =
       Gherkin.when_ "a SELL for 10 SBER@MISX at 100 is submitted" (fun ctx ->
           ctx |> reserve ~side:"SELL" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
       Gherkin.then_ "the handler returns Reservation/Insufficient_qty" (fun ctx ->
-          match ctx.last_errors with
+          match ctx.last_reserve_errors with
           | Some
               [
                 H.Reservation
@@ -118,7 +119,7 @@ let malformed_symbol_fails_validation =
       Gherkin.when_ "a BUY with a bare ticker (no @MIC) is submitted" (fun ctx ->
           ctx |> reserve ~side:"BUY" ~symbol:"SBER" ~quantity:"1" ~price:"100");
       Gherkin.then_ "the handler returns Validation/Invalid_symbol" (fun ctx ->
-          match ctx.last_errors with
+          match ctx.last_reserve_errors with
           | Some [ H.Validation (H.Invalid_symbol "SBER") ] -> ()
           | Some _ -> Alcotest.fail "wrong error variant"
           | None -> Alcotest.fail "expected an error");
@@ -137,7 +138,7 @@ let validation_errors_accumulate =
         (fun ctx ->
           ctx |> reserve ~side:"NOPE" ~symbol:"SBER@MISX" ~quantity:"0" ~price:"100");
       Gherkin.then_ "both Invalid_side and Non_positive_quantity are surfaced" (fun ctx ->
-          match ctx.last_errors with
+          match ctx.last_reserve_errors with
           | Some errs ->
               let has_invalid_side =
                 List.exists

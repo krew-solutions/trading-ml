@@ -35,11 +35,24 @@ val sub : t -> t -> t
 (*@ r = sub a b
     ensures r.raw = a.raw - b.raw *)
 
+exception Decimal_overflow
+(** Raised by {!mul} / {!div} when the mathematically-exact result
+    does not fit in the int64 representation. Distinct from
+    {!Division_by_zero}: it signals "this result is unrepresentable",
+    not "this operation is undefined". The pre-Int128 implementation
+    silently wrapped on overflow; raising here turns a corruption
+    bug into a loud failure. *)
+
 val mul : t -> t -> t
-(** Result is rescaled back to [scale]. *)
+(** Result is rescaled back to [scale]. Raises {!Decimal_overflow}
+    when [|a.raw * b.raw / unit_| > Int64.max_int]. The intermediate
+    [a.raw * b.raw] is computed in 128-bit arithmetic, so no overflow
+    short of the final narrow-back step is possible. *)
 
 val div : t -> t -> t
-(** Raises [Division_by_zero] if [b] is [zero]. *)
+(** Raises [Division_by_zero] if [b] is [zero]. Raises
+    {!Decimal_overflow} when [|a.raw * unit_ / b.raw| > Int64.max_int].
+    The intermediate [a.raw * unit_] is computed in 128-bit arithmetic. *)
 (*@ r = div a b
     raises Division_by_zero -> b.raw = 0 *)
 

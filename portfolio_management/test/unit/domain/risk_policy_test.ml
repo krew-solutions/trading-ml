@@ -75,12 +75,14 @@ let test_negative_qty_preserves_sign () =
 
 let test_gross_pass_scales_legs_proportionally () =
   let limits =
-    Risk.Values.Risk_limits.make ~max_per_instrument_notional:(dec 1_000)
-      ~max_gross_exposure:(dec 300)
+    Risk.Values.Risk_limits.make ~max_per_instrument_notional:(dec 100_000)
+      ~max_gross_exposure:(dec 30_000)
   in
-  let mark = mark_const_table [ (inst "SBER@MISX", dec 1); (inst "LKOH@MISX", dec 1) ] in
-  (* Per-instrument: each leg 500 ≤ 1 000 OK. Gross sum: 500 + 500 =
-     1 000 > 300 → scale by 0.3. *)
+  let mark =
+    mark_const_table [ (inst "SBER@MISX", dec 100); (inst "LKOH@MISX", dec 100) ]
+  in
+  (* Per-instrument: each leg 500 × 100 = 50 000 ≤ 100 000 OK. Gross
+     sum 100 000 > 30 000 → scale by 0.3. *)
   let prop =
     proposal
       ~positions:

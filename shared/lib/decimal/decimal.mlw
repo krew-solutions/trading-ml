@@ -10,6 +10,7 @@
 
 module Decimal
   use int.Int
+  use int.ComputerDivision
   use bool.Bool
 
   type t
@@ -40,6 +41,34 @@ module Decimal
   predicate is_zero (a: t) = raw a = 0
   predicate is_positive (a: t) = raw a > 0
   predicate is_negative (a: t) = raw a < 0
+
+  (** [unit_], [int64_max] are concrete bounds used to state the
+      preconditions of [mul] / [div]. *)
+  function unit_ : int = 100000000        (* 10^8 *)
+  function int64_max : int = 9223372036854775807
+
+  (** [mul] / [div] are partial — they may raise [Decimal_overflow] on
+      the OCaml side when the mathematically-exact result does not fit
+      in int64. Logically we model them as functions whose output is
+      well-defined when the precondition holds and unconstrained
+      otherwise. The OCaml implementation is widened to 128-bit
+      intermediate arithmetic, so the only failure mode is the final
+      narrow-back. *)
+
+  function mul_d (a b: t) : t
+
+  axiom mul_raw : forall a b: t.
+    let exact = div (raw a * raw b) unit_ in
+    -int64_max <= exact <= int64_max ->
+    raw (mul_d a b) = exact
+
+  function div_d (a b: t) : t
+
+  axiom div_raw : forall a b: t.
+    raw b <> 0 ->
+    let exact = div (raw a * unit_) (raw b) in
+    -int64_max <= exact <= int64_max ->
+    raw (div_d a b) = exact
 
   (** Derived algebraic laws — proved by [alt-ergo] from the axioms above. *)
 

@@ -1,0 +1,17 @@
+(** Why3 companion for [target_position.mli] — VO record with no
+    behavioural lemmas; included for structural parity with the OCaml
+    side and as an anchor for downstream invariants in
+    [target_portfolio.mlw]. *)
+
+module Target_position
+  use decimal.Decimal
+
+  type book_id
+  type instrument
+
+  type t = {
+    book_id    : book_id;
+    instrument : instrument;
+    target_qty : Decimal.t;
+  }
+end

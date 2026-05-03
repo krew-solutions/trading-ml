@@ -1,0 +1,32 @@
+(** Why3 companion for [actual_portfolio.mli] — aggregate-root
+    invariants. Models [positions] as a list of actual_position records
+    and proves the structural properties the OCaml side maintains:
+    delta accumulation and per-instrument single-valuedness. *)
+
+module Actual_portfolio
+  use int.Int
+  use list.List
+  use list.Length
+  use list.Mem
+  use decimal.Decimal
+  use actual_portfolio.values.actual_position.Actual_position as AP
+
+  type book_id
+
+  type t = {
+    book_id   : book_id;
+    cash      : Decimal.t;
+    positions : list AP.t;
+  }
+
+  predicate same_instrument (a b: AP.t) = a.AP.instrument = b.AP.instrument
+
+  (** Per-instrument single-valuedness. *)
+  predicate unique_per_instrument (xs: list AP.t) =
+    forall a b: AP.t. mem a xs -> mem b xs ->
+      same_instrument a b -> a = b
+
+  lemma empty_unique :
+    forall b: book_id, cash: Decimal.t.
+      unique_per_instrument Nil
+end

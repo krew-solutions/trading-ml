@@ -1,0 +1,16 @@
+(** Why3 companion for [actual_cash_changed.mli] — Domain Event record.
+    Pure data carrier; no behavioural lemmas. *)
+
+module Actual_cash_changed
+  use int.Int
+  use decimal.Decimal
+
+  type book_id
+
+  type t = {
+    book_id     : book_id;
+    delta       : Decimal.t;
+    new_balance : Decimal.t;
+    occurred_at : int;
+  }
+end

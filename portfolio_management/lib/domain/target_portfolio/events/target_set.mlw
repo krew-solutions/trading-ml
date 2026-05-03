@@ -1,0 +1,23 @@
+(** Why3 companion for [target_set.mli] — Domain Event record.
+    Pure data carrier; no behavioural lemmas. *)
+
+module Target_set
+  use int.Int
+  use list.List
+  use decimal.Decimal
+
+  type book_id
+  type instrument
+
+  type change = {
+    instrument   : instrument;
+    previous_qty : Decimal.t;
+    new_qty      : Decimal.t;
+  }
+
+  type t = {
+    book_id     : book_id;
+    proposed_at : int;
+    changed     : list change;
+  }
+end

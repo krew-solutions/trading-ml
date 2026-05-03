@@ -1,0 +1,23 @@
+(** Why3 companion for [risk_limits.mli] — VO with two invariants. *)
+
+module Risk_limits
+  use int.Int
+  use decimal.Decimal
+
+  type t = {
+    max_per_instrument_notional : Decimal.t;
+    max_gross_exposure          : Decimal.t;
+  }
+
+  predicate well_formed (l: t) =
+    raw l.max_per_instrument_notional >= 0 /\
+    raw l.max_gross_exposure >= 0
+
+  lemma well_formed_per_instrument_nonneg :
+    forall l: t. well_formed l ->
+      raw l.max_per_instrument_notional >= 0
+
+  lemma well_formed_gross_nonneg :
+    forall l: t. well_formed l ->
+      raw l.max_gross_exposure >= 0
+end

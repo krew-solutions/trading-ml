@@ -1,0 +1,16 @@
+(library
+ (name portfolio_management_commands)
+ (public_name trading.portfolio_management.commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  datetime
+  rop
+  portfolio_management
+  portfolio_management_queries
+  portfolio_management_integration_events
+  portfolio_management_domain_event_handlers)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

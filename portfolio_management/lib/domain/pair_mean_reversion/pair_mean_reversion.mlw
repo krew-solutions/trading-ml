@@ -1,0 +1,29 @@
+(** Why3 companion for [pair_mean_reversion.mli] — hysteresis property
+    of the direction-transition function. The OCaml implementation
+    realises this in [next_direction]. *)
+
+module Pair_mean_reversion
+  use real.RealInfix
+  use real.Abs as RA
+  use pair_mean_reversion.values.pair_mr_state.Pair_mr_state as S
+
+  function z_entry : real
+  function z_exit : real
+
+  axiom hysteresis_window : RA.abs z_entry >. RA.abs z_exit
+
+  function transition (current: S.direction) (z: real) : S.direction
+
+  (** While Flat, no entry inside the band [|z| < z_entry]. *)
+  axiom no_entry_inside_band :
+    forall z: real.
+      RA.abs z <. z_entry ->
+      transition S.Flat z = S.Flat
+
+  (** While positioned, no exit while [|z| > z_exit]. *)
+  axiom no_exit_outside_band :
+    forall current: S.direction, z: real.
+      current <> S.Flat ->
+      RA.abs z >. z_exit ->
+      transition current z = current
+end

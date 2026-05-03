@@ -1,0 +1,16 @@
+(** Why3 companion for [trades_planned.mli] — Domain Event record.
+    Pure data carrier; no behavioural lemmas. *)
+
+module Trades_planned
+  use int.Int
+  use list.List
+  use shared.trade_intent.Trade_intent as TI
+
+  type book_id
+
+  type t = {
+    book_id     : book_id;
+    trades      : list TI.t;
+    computed_at : int;
+  }
+end

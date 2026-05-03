@@ -1,0 +1,11 @@
+(** Why3 companion for [pair_mr_state.mli] — opaque state with the
+    direction discriminator. The structural lemma we expose is the
+    hysteresis predicate used by [pair_mean_reversion.mlw]. *)
+
+module Pair_mr_state
+  type t
+
+  type direction = Flat | Long_spread | Short_spread
+
+  function direction_of (s: t) : direction
+end

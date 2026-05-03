@@ -1,0 +1,55 @@
+(library
+ (name portfolio_management)
+ (public_name trading.portfolio_management)
+ (libraries core decimal))
+
+; Per-aggregate domain layout (see docs/adr/0006): each aggregate is
+; a subdir with values/, events/. The shared/ subdir hosts cross-
+; aggregate value objects (Book_id, Pair, Hedge_ratio, ...). Qualified
+; mode wraps subdir names into the module path: e.g.
+; target_portfolio/events/target_set.ml becomes
+; Portfolio_management.Target_portfolio.Events.Target_set.
+(include_subdirs qualified)
+
+(rule
+ (alias gospel)
+ (deps
+  (glob_files_rec *.mli)
+  (glob_files ../../../strategy/lib/domain/gospel_stubs/*.mli))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  grep -q '(\\*@' \"$f\" || continue
+  gospel check -L ../../../strategy/lib/domain/gospel_stubs -L . \"$f\"
+done")))
+
+; Why3 deductive verification. -L includes:
+;   - .                         (own subdirs via qualified paths like
+;                                `use shared.book_id.Book_id`)
+;   - strategy/lib/domain/core  (use side.Side, instrument.Instrument)
+;   - shared/lib/decimal        (use decimal.Decimal)
+(rule
+ (alias why3)
+ (deps
+  (glob_files_rec *.mlw)
+  (glob_files ../../../strategy/lib/domain/core/*.mlw)
+  (glob_files ../../../shared/lib/decimal/*.mlw))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+done")))
+
+; gospel-alias is intentionally NOT a runtest dep: gospel 0.3.1
+; doesn't support [module type of], which the per-aggregate ADR-0006
+; layout uses for re-export. The why3-alias still proves invariants
+; via the .mlw files. Run `dune build @gospel` manually to type-check
+; gospel annotations on files that don't use [module type of].
+(alias
+ (name runtest)
+ (deps (alias why3)))

@@ -1,0 +1,36 @@
+(** Why3 companion for [reconciliation.mli] — pure domain-service
+    properties. Models [diff] abstractly via its post-condition: every
+    emitted intent has a strictly positive quantity, and an empty
+    result corresponds to "actual already matches target". *)
+
+module Reconciliation
+  use int.Int
+  use list.List
+  use list.Length
+  use list.Mem
+  use decimal.Decimal
+  use shared.trade_intent.Trade_intent as TI
+
+  type target_portfolio
+  type actual_portfolio
+
+  function diff (t: target_portfolio) (a: actual_portfolio) : list TI.t
+
+  (** Producer-imposed invariant on the result: every emitted intent
+      has a strictly-positive quantity. This is a domain-level
+      promise; the OCaml [diff] guarantees it through
+      [intent_for] returning [None] on zero-delta. *)
+  axiom all_positive :
+    forall t: target_portfolio, a: actual_portfolio, ti: TI.t.
+      mem ti (diff t a) -> raw ti.TI.quantity > 0
+
+  (** Idempotence reading: applying [diff] twice in a row, with the
+      actual updated to realise the target between calls, yields an
+      empty list on the second call. We model the "applied" state by
+      a relation [realises] between target and actual. *)
+  predicate realises (t: target_portfolio) (a: actual_portfolio)
+
+  axiom diff_empty_when_realised :
+    forall t: target_portfolio, a: actual_portfolio.
+      realises t a -> diff t a = (Nil: list TI.t)
+end

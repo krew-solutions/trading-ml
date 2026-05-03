@@ -1,0 +1,19 @@
+(** Why3 companion for [hedge_ratio.mli] — the wrapper enforces β > 0,
+    so any [t] viewed through [to_decimal] is a strictly-positive
+    [Decimal.t]. *)
+
+module Hedge_ratio
+  use int.Int
+  use decimal.Decimal
+
+  type t
+
+  function to_decimal (h: t) : Decimal.t
+
+  (** β is strictly positive by construction. *)
+  axiom positive : forall h: t. raw (to_decimal h) > 0
+
+  lemma nonzero : forall h: t. not (is_zero (to_decimal h))
+
+  lemma not_negative : forall h: t. not (is_negative (to_decimal h))
+end

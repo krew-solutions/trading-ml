@@ -2,7 +2,7 @@ module Position_changed = Position_changed_integration_event
 
 module Make (Bus : Bus.Event_bus.S) = struct
   let to_command (ev : Position_changed.t) :
-      Portfolio_management_commands.Project_position_changed_command.t =
+      Portfolio_management_commands.Change_position_command.t =
     {
       book_id = ev.book_id;
       instrument =
@@ -24,8 +24,8 @@ module Make (Bus : Bus.Event_bus.S) = struct
 
   let attach
       ~(events : Position_changed.t Bus.t)
-      ~(dispatch_project_position_changed :
-         Portfolio_management_commands.Project_position_changed_command.t -> unit) :
+      ~(dispatch_change_position :
+         Portfolio_management_commands.Change_position_command.t -> unit) :
       Bus.subscription =
-    Bus.subscribe events (fun ev -> dispatch_project_position_changed (to_command ev))
+    Bus.subscribe events (fun ev -> dispatch_change_position (to_command ev))
 end

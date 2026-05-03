@@ -138,8 +138,8 @@ portfolio_management/
 │   │   ├── integration_events/                # library .integration_events
 │   │   ├── domain_event_handlers/             # library .domain_event_handlers
 │   │   └── commands/                          # library .commands
-│   │       (set_target / project_position_changed /
-│   │        project_cash_changed / reconcile, each as the
+│   │       (set_target / change_position /
+│   │        change_cash / reconcile, each as the
 │   │        wire-format DTO + handler + workflow triplet)
 │   └── infrastructure/
 │       └── acl/inbound_integration_events/    # library .acl.inbound_integration_events

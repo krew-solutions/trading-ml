@@ -1,4 +1,4 @@
-(** Command handler for {!Project_cash_changed_command.t}. *)
+(** Command handler for {!Change_cash_command.t}. *)
 
 type validation_error =
   | Invalid_book_id of string
@@ -23,5 +23,5 @@ val handle :
   actual_portfolio_for:
     (Portfolio_management.Shared.Book_id.t ->
     Portfolio_management.Actual_portfolio.t ref option) ->
-  Project_cash_changed_command.t ->
+  Change_cash_command.t ->
   (Portfolio_management.Actual_portfolio.Events.Actual_cash_changed.t, handle_error) Rop.t

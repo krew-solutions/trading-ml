@@ -20,8 +20,8 @@
     - cash sign tolerance: [cash] can be negative (margin); applies
       do not validate the sign — that is upstream's concern.
 
-    Updated by {!Project_position_changed_command} and
-    {!Project_cash_changed_command} — never by direct mutation. PM
+    Updated by {!Change_position_command} and
+    {!Change_cash_command} — never by direct mutation. PM
     never reads [Account.Portfolio] directly; the observed state
     arrives as integration events and is re-modelled here in PM's
     vocabulary. *)

@@ -1,6 +1,6 @@
 (** Inbound command to PM: "project an upstream cash change into the
     actual_portfolio model." Counterpart of
-    {!Project_position_changed_command.t}. *)
+    {!Change_position_command.t}. *)
 
 type t = {
   book_id : string;

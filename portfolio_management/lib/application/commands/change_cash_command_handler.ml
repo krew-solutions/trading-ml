@@ -35,8 +35,7 @@ let parse_occurred_at raw : (int64, validation_error) Rop.t =
   let parsed = Datetime.Iso8601.parse raw in
   if Int64.equal parsed 0L then Rop.fail (Invalid_occurred_at raw) else Rop.succeed parsed
 
-let validate (cmd : Project_cash_changed_command.t) :
-    (validated_command, validation_error) Rop.t =
+let validate (cmd : Change_cash_command.t) : (validated_command, validation_error) Rop.t =
   let open Rop in
   let+ book_id = parse_book_id cmd.book_id
   and+ delta =
@@ -50,7 +49,7 @@ let validate (cmd : Project_cash_changed_command.t) :
 
 let handle
     ~(actual_portfolio_for : Shared.Book_id.t -> Actual_portfolio.t ref option)
-    (cmd : Project_cash_changed_command.t) :
+    (cmd : Change_cash_command.t) :
     (Actual_portfolio.Events.Actual_cash_changed.t, handle_error) Rop.t =
   match validate cmd with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)

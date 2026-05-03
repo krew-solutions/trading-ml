@@ -1,8 +1,8 @@
 (** In-process test harness for the Portfolio Management BC.
 
     Drives the application-layer workflows ({!Set_target_command_workflow},
-    {!Project_position_changed_command_workflow},
-    {!Project_cash_changed_command_workflow},
+    {!Change_position_command_workflow},
+    {!Change_cash_command_workflow},
     {!Reconcile_command_workflow}) — not the handlers — so the component
     boundary covered by these tests includes the outbound integration-
     event projection. The Hexagonal outbound ports [publish_*] are
@@ -12,16 +12,13 @@ module Pm = Portfolio_management
 module Set_target_wf = Portfolio_management_commands.Set_target_command_workflow
 module Set_target_h = Portfolio_management_commands.Set_target_command_handler
 
-module Project_position_wf =
-  Portfolio_management_commands.Project_position_changed_command_workflow
+module Change_position_wf = Portfolio_management_commands.Change_position_command_workflow
 
-module Project_position_h =
-  Portfolio_management_commands.Project_position_changed_command_handler
+module Change_position_h = Portfolio_management_commands.Change_position_command_handler
 
-module Project_cash_wf =
-  Portfolio_management_commands.Project_cash_changed_command_workflow
+module Change_cash_wf = Portfolio_management_commands.Change_cash_command_workflow
 
-module Project_cash_h = Portfolio_management_commands.Project_cash_changed_command_handler
+module Change_cash_h = Portfolio_management_commands.Change_cash_command_handler
 
 module Reconcile_wf = Portfolio_management_commands.Reconcile_command_workflow
 module Reconcile_h = Portfolio_management_commands.Reconcile_command_handler
@@ -41,8 +38,8 @@ type ctx = {
   target_portfolio_updated_pub : Target_portfolio_updated_ie.t list ref;
   trade_intents_planned_pub : Trade_intents_planned_ie.t list ref;
   last_set_target_result : (unit, Set_target_h.handle_error) Rop.t option;
-  last_project_position_result : (unit, Project_position_h.handle_error) Rop.t option;
-  last_project_cash_result : (unit, Project_cash_h.handle_error) Rop.t option;
+  last_change_position_result : (unit, Change_position_h.handle_error) Rop.t option;
+  last_change_cash_result : (unit, Change_cash_h.handle_error) Rop.t option;
   last_reconcile_result : (unit, Reconcile_h.handle_error) Rop.t option;
 }
 
@@ -53,8 +50,8 @@ let fresh_ctx () =
     target_portfolio_updated_pub = ref [];
     trade_intents_planned_pub = ref [];
     last_set_target_result = None;
-    last_project_position_result = None;
-    last_project_cash_result = None;
+    last_change_position_result = None;
+    last_change_cash_result = None;
     last_reconcile_result = None;
   }
 
@@ -80,23 +77,23 @@ let set_target ctx ~source ~proposed_at ~positions =
   in
   { ctx with last_set_target_result = Some result }
 
-let project_position_changed ctx ~instrument ~delta_qty ~new_qty ~avg_price ~occurred_at =
-  let cmd : Portfolio_management_commands.Project_position_changed_command.t =
+let change_position ctx ~instrument ~delta_qty ~new_qty ~avg_price ~occurred_at =
+  let cmd : Portfolio_management_commands.Change_position_command.t =
     { book_id = book_alpha_str; instrument; delta_qty; new_qty; avg_price; occurred_at }
   in
   let result =
-    Project_position_wf.execute ~actual_portfolio_for:(actual_portfolio_for ctx) cmd
+    Change_position_wf.execute ~actual_portfolio_for:(actual_portfolio_for ctx) cmd
   in
-  { ctx with last_project_position_result = Some result }
+  { ctx with last_change_position_result = Some result }
 
-let project_cash_changed ctx ~delta ~new_balance ~occurred_at =
-  let cmd : Portfolio_management_commands.Project_cash_changed_command.t =
+let change_cash ctx ~delta ~new_balance ~occurred_at =
+  let cmd : Portfolio_management_commands.Change_cash_command.t =
     { book_id = book_alpha_str; delta; new_balance; occurred_at }
   in
   let result =
-    Project_cash_wf.execute ~actual_portfolio_for:(actual_portfolio_for ctx) cmd
+    Change_cash_wf.execute ~actual_portfolio_for:(actual_portfolio_for ctx) cmd
   in
-  { ctx with last_project_cash_result = Some result }
+  { ctx with last_change_cash_result = Some result }
 
 let reconcile ctx ~computed_at =
   let cmd : Portfolio_management_commands.Reconcile_command.t =

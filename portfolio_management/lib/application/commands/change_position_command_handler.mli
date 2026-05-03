@@ -1,4 +1,4 @@
-(** Command handler for {!Project_position_changed_command.t}.
+(** Command handler for {!Change_position_command.t}.
 
     Parse the wire-format command, then call
     {!Portfolio_management.Actual_portfolio.apply_position_change}
@@ -41,7 +41,7 @@ val handle :
   actual_portfolio_for:
     (Portfolio_management.Shared.Book_id.t ->
     Portfolio_management.Actual_portfolio.t ref option) ->
-  Project_position_changed_command.t ->
+  Change_position_command.t ->
   ( Portfolio_management.Actual_portfolio.Events.Actual_position_changed.t,
     handle_error )
   Rop.t

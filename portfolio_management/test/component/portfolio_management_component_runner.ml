@@ -7,4 +7,5 @@ let () =
       Reconcile_command_test.feature;
       Projection_test.feature;
       Pair_mr_pipeline_test.feature;
+      Define_alpha_view_command_test.feature;
     ]

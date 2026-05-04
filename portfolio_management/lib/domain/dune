@@ -15,34 +15,34 @@
  (alias gospel)
  (deps
   (glob_files_rec *.mli)
-  (glob_files ../../../strategy/lib/domain/gospel_stubs/*.mli))
+  (glob_files ../../../shared/lib/domain/gospel_stubs/*.mli))
  (action
   (bash
    "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L ../../../strategy/lib/domain/gospel_stubs -L . \"$f\"
+  gospel check -L ../../../shared/lib/domain/gospel_stubs -L . \"$f\"
 done")))
 
 ; Why3 deductive verification. -L includes:
 ;   - .                         (own subdirs via qualified paths like
 ;                                `use shared.book_id.Book_id`)
-;   - strategy/lib/domain/core  (use side.Side, instrument.Instrument)
+;   - shared/lib/domain/core    (use side.Side, instrument.Instrument)
 ;   - shared/lib/decimal        (use decimal.Decimal)
 (rule
  (alias why3)
  (deps
   (glob_files_rec *.mlw)
-  (glob_files ../../../strategy/lib/domain/core/*.mlw)
+  (glob_files ../../../shared/lib/domain/core/*.mlw)
   (glob_files ../../../shared/lib/decimal/*.mlw))
  (action
   (bash
    "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../../../strategy/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
 done")))
 
 ; gospel-alias is intentionally NOT a runtest dep: gospel 0.3.1

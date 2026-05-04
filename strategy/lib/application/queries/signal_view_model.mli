@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Core.Signal.t}. *)
+(** Read-model DTO for {!Strategy_core.Signal.t}. *)
 
 type t = {
   ts : int64;
@@ -12,6 +12,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Core.Signal.t
+type domain = Strategy_core.Signal.t
 
 val of_domain : domain -> t

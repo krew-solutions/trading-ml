@@ -1,37 +1,40 @@
 (library
  (name engine)
  (public_name trading.engine)
- (libraries core decimal account indicators strategies stream))
+ (libraries core strategy_core decimal account indicators strategies stream)
+ (flags (:standard -open Strategy_core)))
 
 (rule
  (alias gospel)
  (deps
   (glob_files *.mli)
-  (glob_files ../gospel_stubs/*.mli)
+  (glob_files ../../../../shared/lib/domain/gospel_stubs/*.mli)
   gospel_stubs/core.mli)
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in gospel_stubs/*|../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L ../gospel_stubs -L gospel_stubs -L . \"$f\"
+  gospel check -L ../../../../shared/lib/domain/gospel_stubs -L gospel_stubs -L . \"$f\"
 done")))
 
 ; Why3 deductive verification. -L includes:
-;   - ../core              (use side.Side, instrument.Instrument, ...)
-;   - shared/lib/decimal   (use decimal.Decimal — moved out of core)
+;   - ../core                          (strategy_core: signal, order)
+;   - ../../../../shared/lib/domain/core (shared kernel: Instrument, Side, Candle, ...)
+;   - ../../../../shared/lib/decimal   (Decimal)
 (rule
  (alias why3)
  (deps
   (glob_files *.mlw)
   (glob_files ../core/*.mlw)
+  (glob_files ../../../../shared/lib/domain/core/*.mlw)
   (glob_files ../../../../shared/lib/decimal/*.mlw))
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../core -L ../../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../core -L ../../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../core -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../core -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
 done")))
 
 (alias

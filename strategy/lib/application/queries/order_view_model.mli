@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Core.Order.t}. *)
+(** Read-model DTO for {!Strategy_core.Order.t}. *)
 
 type t = {
   id : string;
@@ -16,6 +16,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Core.Order.t
+type domain = Strategy_core.Order.t
 
 val of_domain : domain -> t

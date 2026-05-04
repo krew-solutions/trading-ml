@@ -1,5 +1,3 @@
-open Core
-
 type t = {
   type_ : string; [@key "type"]
   price : string option;

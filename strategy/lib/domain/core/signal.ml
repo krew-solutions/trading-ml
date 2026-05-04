@@ -1,3 +1,4 @@
+open Core
 (** Strategy output: an intent for the engine to translate into orders. *)
 
 type action = Enter_long | Enter_short | Exit_long | Exit_short | Hold

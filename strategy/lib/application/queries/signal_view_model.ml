@@ -1,5 +1,3 @@
-open Core
-
 type t = {
   ts : int64;
   instrument : Instrument_view_model.t;

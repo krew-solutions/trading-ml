@@ -4,7 +4,7 @@ type action = Enter_long | Enter_short | Exit_long | Exit_short | Hold
 
 type t = {
   ts : int64;
-  instrument : Instrument.t;
+  instrument : Core.Instrument.t;
   action : action;
   strength : float;
   stop_loss : Decimal.t option;
@@ -12,5 +12,5 @@ type t = {
   reason : string;
 }
 
-val hold : ts:int64 -> instrument:Instrument.t -> t
+val hold : ts:int64 -> instrument:Core.Instrument.t -> t
 val action_to_string : action -> string

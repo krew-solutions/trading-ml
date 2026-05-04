@@ -24,8 +24,8 @@ type status =
 type t = {
   id : string;
   exec_id : string;
-  instrument : Instrument.t;
-  side : Side.t;
+  instrument : Core.Instrument.t;
+  side : Core.Side.t;
   quantity : Decimal.t;
   filled : Decimal.t;
   remaining : Decimal.t;

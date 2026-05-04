@@ -1,3 +1,4 @@
+open Core
 (** Order model. Pure domain types — no wire-format knowledge.
     Broker-specific enum encoding/decoding lives in the
     corresponding ACL adapters (Finam.Dto, Bcs.Rest). *)

@@ -1,50 +1,39 @@
 (library
- (name core)
- (public_name trading.core)
- (libraries decimal))
+ (name strategy_core)
+ (public_name trading.strategy.core)
+ (libraries decimal core))
 
-; Gospel type-checks only .mli files carrying (*@ ... *) annotations.
-; The shared ../gospel_stubs/ directory provides a Format stub so .mli
-; files exporting [pp : Format.formatter -> t -> unit] don't crash the
-; type-checker (see docs/howto/formal-verification.md).
+; Strategy-specific domain types (Signal, Order) that didn't move out
+; with the shared kernel. Keeps using the same Gospel/Why3 conventions
+; as the shared core library; -L paths point at the new shared
+; locations.
 (rule
  (alias gospel)
  (deps
   (glob_files *.mli)
-  (glob_files ../gospel_stubs/*.mli))
+  (glob_files ../../../../shared/lib/domain/gospel_stubs/*.mli))
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L ../gospel_stubs -L . \"$f\"
+  gospel check -L ../../../../shared/lib/domain/gospel_stubs -L . \"$f\"
 done")))
 
-; Why3 deductive verification. .mlw files carry proofs of algebraic
-; laws derived from the contracts in the matching .mli. Tries Alt-Ergo
-; first (faster on simple goals); falls back to Z3 on goals Alt-Ergo
-; can't close. -L . lets sibling .mlw files resolve via `use Module`.
-; Sibling .mlw files use `use decimal.Decimal` (e.g. order.mlw,
-; candle.mlw, engine/risk.mlw) — `-L ../../../../shared/lib/decimal`
-; lets Why3 resolve that import after the move of decimal.{ml,mli,mlw}
-; into its own shared library.
 (rule
  (alias why3)
  (deps
   (glob_files *.mlw)
+  (glob_files ../../../../shared/lib/domain/core/*.mlw)
   (glob_files ../../../../shared/lib/decimal/*.mlw))
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
 done")))
 
-; Bind formal verification into `dune runtest` so CI runs proofs
-; alongside the unit-test suite. gospel-alias is intentionally NOT a
-; runtest dep — see account/lib/domain/dune for rationale; consistency
-; across BCs keeps `dune runtest` reliably green.
 (alias
  (name runtest)
  (deps (alias why3)))

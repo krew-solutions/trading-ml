@@ -4,7 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
-  core decimal
+  core strategy_core decimal
   queries
   broker
   broker_integration_events
@@ -12,4 +12,6 @@
  (preprocess
   (pps ppx_yojson_conv))
  (flags
-  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Strategy_core)))

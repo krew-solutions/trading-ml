@@ -1,6 +1,7 @@
 (library
  (name bcs)
  (public_name trading.bcs)
- (libraries core decimal broker http_transport token_store websocket log acl_common datetime
+ (libraries core strategy_core decimal broker http_transport token_store websocket log acl_common datetime
             eio eio.unix yojson uri uuidm
-            tls x509))
+            tls x509)
+ (flags (:standard -open Strategy_core)))

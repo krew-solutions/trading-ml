@@ -1,4 +1,5 @@
 (library
  (name broker)
  (public_name trading.broker)
- (libraries core decimal))
+ (libraries core strategy_core decimal)
+ (flags (:standard -open Strategy_core)))

@@ -7,13 +7,13 @@
  (alias gospel)
  (deps
   (glob_files *.mli)
-  (glob_files ../../../strategy/lib/domain/gospel_stubs/*.mli))
+  (glob_files ../domain/gospel_stubs/*.mli))
  (action
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
   grep -q '(\\*@' \"$f\" || continue
-  gospel check -L ../../../strategy/lib/domain/gospel_stubs -L . \"$f\"
+  gospel check -L ../domain/gospel_stubs -L . \"$f\"
 done")))
 
 ; Why3 deductive verification of the algebraic laws stated in

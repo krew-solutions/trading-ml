@@ -17,8 +17,8 @@
 val clip :
   limits:Values.Risk_limits.t ->
   mark:(Core.Instrument.t -> Decimal.t) ->
-  Shared.Target_proposal.t ->
-  Shared.Target_proposal.t
+  Common.Target_proposal.t ->
+  Common.Target_proposal.t
 (** Pure: same input → same output. The mark callback is total
     (returns [Decimal.zero] for unknown instruments) — the caller is
     responsible for providing prices for every instrument in the

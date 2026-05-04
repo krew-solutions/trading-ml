@@ -3,17 +3,17 @@ module Pm = Portfolio_management
 module Target_portfolio = Pm.Target_portfolio
 module Actual_portfolio = Pm.Actual_portfolio
 module Reconciliation = Pm.Reconciliation
-module Shared = Pm.Shared
+module Common = Pm.Common
 
-let book = Shared.Book_id.of_string "alpha"
+let book = Common.Book_id.of_string "alpha"
 
 let dec = Decimal.of_int
 let inst sym = Instrument.of_qualified sym
 
-let position ~book_id instrument target_qty : Shared.Target_position.t =
+let position ~book_id instrument target_qty : Common.Target_position.t =
   { book_id; instrument; target_qty }
 
-let proposal ~book_id positions : Shared.Target_proposal.t =
+let proposal ~book_id positions : Common.Target_proposal.t =
   { book_id; positions; source = "test"; proposed_at = 1L }
 
 let target_with positions =
@@ -45,7 +45,7 @@ let test_full_target_against_empty_actual () =
   Alcotest.(check int) "two trades" 2 (List.length trades);
   let by_instrument =
     List.map
-      (fun (t : Shared.Trade_intent.t) ->
+      (fun (t : Common.Trade_intent.t) ->
         (Instrument.to_qualified t.instrument, t.side, Decimal.to_string t.quantity))
       trades
   in
@@ -90,7 +90,7 @@ let test_diff_event_carries_book_and_timestamp () =
   let actual = Actual_portfolio.empty book in
   let _trades, event = Reconciliation.diff_with_event ~target ~actual ~computed_at:42L in
   Alcotest.(check int64) "computed_at echoed" 42L event.computed_at;
-  Alcotest.(check string) "book_id" "alpha" (Shared.Book_id.to_string event.book_id)
+  Alcotest.(check string) "book_id" "alpha" (Common.Book_id.to_string event.book_id)
 
 let tests =
   [

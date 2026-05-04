@@ -5,7 +5,7 @@
 
 val execute :
   actual_portfolio_for:
-    (Portfolio_management.Shared.Book_id.t ->
+    (Portfolio_management.Common.Book_id.t ->
     Portfolio_management.Actual_portfolio.t ref option) ->
   Change_position_command.t ->
   (unit, Change_position_command_handler.handle_error) Rop.t

@@ -25,7 +25,7 @@ val apply_error_to_string : Portfolio_management.Target_portfolio.apply_error ->
 type validated_position = { instrument : Core.Instrument.t; target_qty : Decimal.t }
 
 type validated_set_target_command = {
-  book_id : Portfolio_management.Shared.Book_id.t;
+  book_id : Portfolio_management.Common.Book_id.t;
   source : string;
   proposed_at : int64;
   positions : validated_position list;

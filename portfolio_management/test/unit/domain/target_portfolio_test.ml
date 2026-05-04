@@ -1,16 +1,16 @@
 open Core
 module Pm = Portfolio_management
 module Target_portfolio = Pm.Target_portfolio
-module Shared = Pm.Shared
+module Common = Pm.Common
 
-let book = Shared.Book_id.of_string "alpha"
+let book = Common.Book_id.of_string "alpha"
 
 let inst sym = Instrument.of_qualified sym
 
-let position ~book_id instrument target_qty : Shared.Target_position.t =
+let position ~book_id instrument target_qty : Common.Target_position.t =
   { book_id; instrument; target_qty }
 
-let proposal ~book_id positions : Shared.Target_proposal.t =
+let proposal ~book_id positions : Common.Target_proposal.t =
   { book_id; positions; source = "test"; proposed_at = 1700000000L }
 
 let dec = Decimal.of_int
@@ -20,7 +20,7 @@ let test_empty_book_has_no_positions () =
   Alcotest.(check (list string))
     "no positions" []
     (List.map
-       (fun (tp : Shared.Target_position.t) -> Instrument.to_qualified tp.instrument)
+       (fun (tp : Common.Target_position.t) -> Instrument.to_qualified tp.instrument)
        (Target_portfolio.positions p));
   Alcotest.(check bool)
     "target_for absent = 0" true
@@ -82,7 +82,7 @@ let test_zero_target_prunes_position () =
 
 let test_book_id_mismatch_rejected () =
   let p = Target_portfolio.empty book in
-  let other = Shared.Book_id.of_string "other" in
+  let other = Common.Book_id.of_string "other" in
   let prop =
     proposal ~book_id:other [ position ~book_id:other (inst "SBER@MISX") (dec 1) ]
   in

@@ -18,7 +18,7 @@ type change = {
 }
 
 type t = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   source : string;
   proposed_at : int64;
   changed : change list;

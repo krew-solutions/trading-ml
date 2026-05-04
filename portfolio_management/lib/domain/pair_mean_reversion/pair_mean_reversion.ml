@@ -17,8 +17,8 @@ let log_close (c : Candle.t) = log (Decimal.to_float c.close)
 (* Direction transition under hysteresis. *)
 let next_direction ~(config : Config.t) ~(current : Direction.t) ~(z : float) :
     Direction.t option =
-  let z_entry = Shared.Z_score.to_float config.z_entry in
-  let z_exit = Shared.Z_score.to_float config.z_exit in
+  let z_entry = Common.Z_score.to_float config.z_entry in
+  let z_exit = Common.Z_score.to_float config.z_exit in
   match current with
   | Direction.Flat ->
       if z >= z_entry then Some Direction.Short_spread
@@ -35,8 +35,8 @@ let proposal_for_direction
     ~(direction : Direction.t)
     ~(close_a : Decimal.t)
     ~(close_b : Decimal.t)
-    ~(proposed_at : int64) : Shared.Target_proposal.t =
-  let beta = Shared.Hedge_ratio.to_decimal config.hedge_ratio in
+    ~(proposed_at : int64) : Common.Target_proposal.t =
+  let beta = Common.Hedge_ratio.to_decimal config.hedge_ratio in
   let qty_a =
     if Decimal.is_zero close_a then Decimal.zero else Decimal.div config.notional close_a
   in
@@ -50,9 +50,9 @@ let proposal_for_direction
     | Direction.Long_spread -> (qty_a, Decimal.neg qty_b)
     | Direction.Short_spread -> (Decimal.neg qty_a, qty_b)
   in
-  let a = Shared.Pair.a config.pair in
-  let b = Shared.Pair.b config.pair in
-  let positions : Shared.Target_position.t list =
+  let a = Common.Pair.a config.pair in
+  let b = Common.Pair.b config.pair in
+  let positions : Common.Target_position.t list =
     [
       { book_id = config.book_id; instrument = a; target_qty = signed_a };
       { book_id = config.book_id; instrument = b; target_qty = signed_b };
@@ -61,12 +61,12 @@ let proposal_for_direction
   { book_id = config.book_id; positions; source = name; proposed_at }
 
 let on_bar (state : State.t) ~instrument ~candle :
-    State.t * Shared.Target_proposal.t option =
+    State.t * Common.Target_proposal.t option =
   let cfg = State.config state in
   let pair = cfg.pair in
   let leg =
-    if Instrument.equal (Shared.Pair.a pair) instrument then Some `A
-    else if Instrument.equal (Shared.Pair.b pair) instrument then Some `B
+    if Instrument.equal (Common.Pair.a pair) instrument then Some `A
+    else if Instrument.equal (Common.Pair.b pair) instrument then Some `B
     else None
   in
   match leg with

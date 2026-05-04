@@ -8,22 +8,22 @@
     - [notional > 0]. *)
 
 type t = private {
-  book_id : Shared.Book_id.t;
-  pair : Shared.Pair.t;
-  hedge_ratio : Shared.Hedge_ratio.t;
+  book_id : Common.Book_id.t;
+  pair : Common.Pair.t;
+  hedge_ratio : Common.Hedge_ratio.t;
   window : int;
-  z_entry : Shared.Z_score.t;
-  z_exit : Shared.Z_score.t;
+  z_entry : Common.Z_score.t;
+  z_exit : Common.Z_score.t;
   notional : Decimal.t;
 }
 
 val make :
-  book_id:Shared.Book_id.t ->
-  pair:Shared.Pair.t ->
-  hedge_ratio:Shared.Hedge_ratio.t ->
+  book_id:Common.Book_id.t ->
+  pair:Common.Pair.t ->
+  hedge_ratio:Common.Hedge_ratio.t ->
   window:int ->
-  z_entry:Shared.Z_score.t ->
-  z_exit:Shared.Z_score.t ->
+  z_entry:Common.Z_score.t ->
+  z_exit:Common.Z_score.t ->
   notional:Decimal.t ->
   t
 (** Raises [Invalid_argument] on a violation. *)

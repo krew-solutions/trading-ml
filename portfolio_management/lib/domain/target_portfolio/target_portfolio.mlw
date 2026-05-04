@@ -10,7 +10,7 @@ module Target_portfolio
   use list.Length
   use list.Mem
   use decimal.Decimal
-  use shared.target_position.Target_position as TP
+  use common.target_position.Target_position as TP
 
   type book_id
 

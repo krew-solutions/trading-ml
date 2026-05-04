@@ -1,7 +1,7 @@
 module Reconciliation = Portfolio_management.Reconciliation
 module Target_portfolio = Portfolio_management.Target_portfolio
 module Actual_portfolio = Portfolio_management.Actual_portfolio
-module Shared = Portfolio_management.Shared
+module Common = Portfolio_management.Common
 
 type validation_error = Invalid_book_id of string | Invalid_computed_at of string
 
@@ -9,12 +9,12 @@ let validation_error_to_string = function
   | Invalid_book_id s -> Printf.sprintf "invalid book_id: %S" s
   | Invalid_computed_at s -> Printf.sprintf "invalid computed_at (ISO-8601): %S" s
 
-type validated_command = { book_id : Shared.Book_id.t; computed_at : int64 }
+type validated_command = { book_id : Common.Book_id.t; computed_at : int64 }
 
-type handle_error = Validation of validation_error | Unknown_book of Shared.Book_id.t
+type handle_error = Validation of validation_error | Unknown_book of Common.Book_id.t
 
-let parse_book_id raw : (Shared.Book_id.t, validation_error) Rop.t =
-  try Rop.succeed (Shared.Book_id.of_string raw)
+let parse_book_id raw : (Common.Book_id.t, validation_error) Rop.t =
+  try Rop.succeed (Common.Book_id.of_string raw)
   with Invalid_argument _ -> Rop.fail (Invalid_book_id raw)
 
 let parse_computed_at raw : (int64, validation_error) Rop.t =
@@ -28,8 +28,8 @@ let validate (cmd : Reconcile_command.t) : (validated_command, validation_error)
   { book_id; computed_at }
 
 let handle
-    ~(target_portfolio_for : Shared.Book_id.t -> Target_portfolio.t option)
-    ~(actual_portfolio_for : Shared.Book_id.t -> Actual_portfolio.t option)
+    ~(target_portfolio_for : Common.Book_id.t -> Target_portfolio.t option)
+    ~(actual_portfolio_for : Common.Book_id.t -> Actual_portfolio.t option)
     (cmd : Reconcile_command.t) :
     (Reconciliation.Events.Trades_planned.t, handle_error) Rop.t =
   match validate cmd with

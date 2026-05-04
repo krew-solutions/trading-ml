@@ -4,7 +4,7 @@
 module Trades_planned
   use int.Int
   use list.List
-  use shared.trade_intent.Trade_intent as TI
+  use common.trade_intent.Trade_intent as TI
 
   type book_id
 

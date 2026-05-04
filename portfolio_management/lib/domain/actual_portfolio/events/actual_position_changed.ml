@@ -1,7 +1,7 @@
 open Core
 
 type t = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   instrument : Instrument.t;
   delta_qty : Decimal.t;
   new_qty : Decimal.t;

@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Portfolio_management.Shared.Target_position.t}. *)
+(** Read-model DTO for {!Portfolio_management.Common.Target_position.t}. *)
 
 type t = {
   book_id : string;
@@ -7,6 +7,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Portfolio_management.Shared.Target_position.t
+type domain = Portfolio_management.Common.Target_position.t
 
 val of_domain : domain -> t

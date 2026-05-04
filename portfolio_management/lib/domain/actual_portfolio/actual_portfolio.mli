@@ -33,9 +33,9 @@ module Events : module type of Events
 
 type t
 
-val empty : Shared.Book_id.t -> t
+val empty : Common.Book_id.t -> t
 
-val book_id : t -> Shared.Book_id.t
+val book_id : t -> Common.Book_id.t
 
 val cash : t -> Decimal.t
 

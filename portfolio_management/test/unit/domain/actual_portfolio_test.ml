@@ -1,9 +1,9 @@
 open Core
 module Pm = Portfolio_management
 module Actual_portfolio = Pm.Actual_portfolio
-module Shared = Pm.Shared
+module Common = Pm.Common
 
-let book = Shared.Book_id.of_string "alpha"
+let book = Common.Book_id.of_string "alpha"
 
 let dec = Decimal.of_int
 

@@ -8,8 +8,8 @@ module Risk_policy
   use list.Mem
   use decimal.Decimal
   use risk.values.risk_limits.Risk_limits as RL
-  use shared.target_position.Target_position as TP
-  use shared.target_proposal.Target_proposal as TPR
+  use common.target_position.Target_position as TP
+  use common.target_proposal.Target_proposal as TPR
 
   type instrument
 

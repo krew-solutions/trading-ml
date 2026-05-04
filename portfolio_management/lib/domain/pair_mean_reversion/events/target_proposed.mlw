@@ -1,7 +1,7 @@
 (** Why3 companion for [target_proposed.mli] — Domain Event record. *)
 
 module Target_proposed
-  use shared.target_proposal.Target_proposal as TPR
+  use common.target_proposal.Target_proposal as TPR
 
   type z_score
 

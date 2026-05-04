@@ -11,7 +11,7 @@ module Events : module type of Events
 (** Re-exports of peer subdirs. *)
 
 val diff :
-  target:Target_portfolio.t -> actual:Actual_portfolio.t -> Shared.Trade_intent.t list
+  target:Target_portfolio.t -> actual:Actual_portfolio.t -> Common.Trade_intent.t list
 (** Returned list is sorted by {!Core.Instrument.compare} for
     deterministic downstream reasoning. Each emitted intent carries
     [book_id] copied from the target, [side] derived from the sign
@@ -24,6 +24,6 @@ val diff_with_event :
   target:Target_portfolio.t ->
   actual:Actual_portfolio.t ->
   computed_at:int64 ->
-  Shared.Trade_intent.t list * Events.Trades_planned.t
+  Common.Trade_intent.t list * Events.Trades_planned.t
 (** Same as {!diff} but also packages the result into a
     [Trades_planned] domain event with the supplied timestamp. *)

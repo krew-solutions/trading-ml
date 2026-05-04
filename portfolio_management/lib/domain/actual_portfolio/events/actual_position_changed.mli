@@ -7,7 +7,7 @@
     Past-tense name; pure data carrier. *)
 
 type t = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   instrument : Core.Instrument.t;
   delta_qty : Decimal.t;  (** signed *)
   new_qty : Decimal.t;  (** signed *)

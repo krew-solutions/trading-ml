@@ -1,1 +1,1 @@
-type t = { proposal : Shared.Target_proposal.t; z : Shared.Z_score.t }
+type t = { proposal : Common.Target_proposal.t; z : Common.Z_score.t }

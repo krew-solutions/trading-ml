@@ -22,7 +22,7 @@ val validation_error_to_string : validation_error -> string
 (** {1 Validated form} *)
 
 type validated_command = {
-  book_id : Portfolio_management.Shared.Book_id.t;
+  book_id : Portfolio_management.Common.Book_id.t;
   instrument : Core.Instrument.t;
   delta_qty : Decimal.t;
   new_qty : Decimal.t;
@@ -34,12 +34,12 @@ type validated_command = {
 
 type handle_error =
   | Validation of validation_error
-  | Unknown_book of Portfolio_management.Shared.Book_id.t
+  | Unknown_book of Portfolio_management.Common.Book_id.t
       (** No actual_portfolio is registered for the book. *)
 
 val handle :
   actual_portfolio_for:
-    (Portfolio_management.Shared.Book_id.t ->
+    (Portfolio_management.Common.Book_id.t ->
     Portfolio_management.Actual_portfolio.t ref option) ->
   Change_position_command.t ->
   ( Portfolio_management.Actual_portfolio.Events.Actual_position_changed.t,

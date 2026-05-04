@@ -1,9 +1,9 @@
 open Core
 module Pm = Portfolio_management
 module PMR = Pm.Pair_mean_reversion
-module Shared = Pm.Shared
+module Common = Pm.Common
 
-let book = Shared.Book_id.of_string "alpha"
+let book = Common.Book_id.of_string "alpha"
 
 let inst sym = Instrument.of_qualified sym
 
@@ -11,11 +11,11 @@ let candle ~ts ~close =
   Candle.make ~ts ~open_:close ~high:close ~low:close ~close ~volume:Decimal.one
 
 let make_config ?(window = 4) ?(z_entry = 2.0) ?(z_exit = 0.5) () =
-  let pair = Shared.Pair.make ~a:(inst "SBER@MISX") ~b:(inst "LKOH@MISX") in
-  let hedge_ratio = Shared.Hedge_ratio.of_decimal Decimal.one in
+  let pair = Common.Pair.make ~a:(inst "SBER@MISX") ~b:(inst "LKOH@MISX") in
+  let hedge_ratio = Common.Hedge_ratio.of_decimal Decimal.one in
   PMR.Values.Pair_mr_config.make ~book_id:book ~pair ~hedge_ratio ~window
-    ~z_entry:(Shared.Z_score.of_float z_entry)
-    ~z_exit:(Shared.Z_score.of_float z_exit)
+    ~z_entry:(Common.Z_score.of_float z_entry)
+    ~z_exit:(Common.Z_score.of_float z_exit)
     ~notional:(Decimal.of_int 10_000)
 
 let feed_pair state ~ts ~price_a ~price_b =
@@ -77,7 +77,7 @@ let test_proposal_carries_pair_book () =
       Alcotest.(check int) "two legs" 2 (List.length prop.positions);
       let mentions sym =
         List.exists
-          (fun (tp : Shared.Target_position.t) ->
+          (fun (tp : Common.Target_position.t) ->
             Instrument.equal tp.instrument (inst sym))
           prop.positions
       in
@@ -85,7 +85,7 @@ let test_proposal_carries_pair_book () =
       Alcotest.(check bool) "LKOH mentioned" true (mentions "LKOH@MISX");
       Alcotest.(check string)
         "book_id alpha" "alpha"
-        (Shared.Book_id.to_string prop.book_id)
+        (Common.Book_id.to_string prop.book_id)
 
 let tests =
   [

@@ -3,10 +3,10 @@ module Trade_intents_planned =
 
 let execute
     ~(target_portfolio_for :
-       Portfolio_management.Shared.Book_id.t ->
+       Portfolio_management.Common.Book_id.t ->
        Portfolio_management.Target_portfolio.t option)
     ~(actual_portfolio_for :
-       Portfolio_management.Shared.Book_id.t ->
+       Portfolio_management.Common.Book_id.t ->
        Portfolio_management.Actual_portfolio.t option)
     ~(publish_trade_intents_planned : Trade_intents_planned.t -> unit)
     (cmd : Reconcile_command.t) : (unit, Reconcile_command_handler.handle_error) Rop.t =

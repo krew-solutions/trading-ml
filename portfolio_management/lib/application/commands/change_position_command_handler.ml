@@ -1,5 +1,5 @@
 module Actual_portfolio = Portfolio_management.Actual_portfolio
-module Shared = Portfolio_management.Shared
+module Common = Portfolio_management.Common
 
 type validation_error =
   | Invalid_book_id of string
@@ -20,7 +20,7 @@ let validation_error_to_string = function
   | Invalid_occurred_at s -> Printf.sprintf "invalid occurred_at (ISO-8601): %S" s
 
 type validated_command = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   instrument : Core.Instrument.t;
   delta_qty : Decimal.t;
   new_qty : Decimal.t;
@@ -28,10 +28,10 @@ type validated_command = {
   occurred_at : int64;
 }
 
-type handle_error = Validation of validation_error | Unknown_book of Shared.Book_id.t
+type handle_error = Validation of validation_error | Unknown_book of Common.Book_id.t
 
-let parse_book_id raw : (Shared.Book_id.t, validation_error) Rop.t =
-  try Rop.succeed (Shared.Book_id.of_string raw)
+let parse_book_id raw : (Common.Book_id.t, validation_error) Rop.t =
+  try Rop.succeed (Common.Book_id.of_string raw)
   with Invalid_argument _ -> Rop.fail (Invalid_book_id raw)
 
 let parse_instrument raw : (Core.Instrument.t, validation_error) Rop.t =
@@ -67,7 +67,7 @@ let validate (cmd : Change_position_command.t) :
   { book_id; instrument; delta_qty; new_qty; avg_price; occurred_at }
 
 let handle
-    ~(actual_portfolio_for : Shared.Book_id.t -> Actual_portfolio.t ref option)
+    ~(actual_portfolio_for : Common.Book_id.t -> Actual_portfolio.t ref option)
     (cmd : Change_position_command.t) :
     (Actual_portfolio.Events.Actual_position_changed.t, handle_error) Rop.t =
   match validate cmd with

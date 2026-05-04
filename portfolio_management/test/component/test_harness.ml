@@ -30,7 +30,7 @@ module Trade_intents_planned_ie =
   Portfolio_management_integration_events.Trade_intents_planned_integration_event
 
 let book_alpha_str = "alpha"
-let book_alpha = Pm.Shared.Book_id.of_string book_alpha_str
+let book_alpha = Pm.Common.Book_id.of_string book_alpha_str
 
 type ctx = {
   target_portfolio : Pm.Target_portfolio.t ref;
@@ -56,13 +56,13 @@ let fresh_ctx () =
   }
 
 let actual_portfolio_for ctx book =
-  if Pm.Shared.Book_id.equal book book_alpha then Some ctx.actual_portfolio else None
+  if Pm.Common.Book_id.equal book book_alpha then Some ctx.actual_portfolio else None
 
 let target_portfolio_for ctx book =
-  if Pm.Shared.Book_id.equal book book_alpha then Some !(ctx.target_portfolio) else None
+  if Pm.Common.Book_id.equal book book_alpha then Some !(ctx.target_portfolio) else None
 
 let actual_portfolio_value_for ctx book =
-  if Pm.Shared.Book_id.equal book book_alpha then Some !(ctx.actual_portfolio) else None
+  if Pm.Common.Book_id.equal book book_alpha then Some !(ctx.actual_portfolio) else None
 
 let set_target ctx ~source ~proposed_at ~positions =
   let cmd : Portfolio_management_commands.Set_target_command.t =

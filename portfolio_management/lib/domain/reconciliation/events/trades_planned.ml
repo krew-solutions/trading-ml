@@ -1,5 +1,5 @@
 type t = {
-  book_id : Shared.Book_id.t;
-  trades : Shared.Trade_intent.t list;
+  book_id : Common.Book_id.t;
+  trades : Common.Trade_intent.t list;
   computed_at : int64;
 }

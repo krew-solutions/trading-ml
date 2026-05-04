@@ -10,7 +10,7 @@ module Actual_position_changed = Events.Actual_position_changed
 module Actual_cash_changed = Events.Actual_cash_changed
 
 type t = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   cash : Decimal.t;
   positions : Actual_position.t list;
       (* invariants:

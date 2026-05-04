@@ -4,7 +4,7 @@
     Past-tense name; pure data carrier. *)
 
 type t = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   delta : Decimal.t;  (** signed *)
   new_balance : Decimal.t;  (** signed; can be negative under margin *)
   occurred_at : int64;  (** epoch seconds *)

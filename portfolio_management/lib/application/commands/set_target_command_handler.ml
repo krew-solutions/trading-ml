@@ -1,5 +1,5 @@
 module Target_portfolio = Portfolio_management.Target_portfolio
-module Shared = Portfolio_management.Shared
+module Common = Portfolio_management.Common
 
 type validation_error =
   | Invalid_book_id of string
@@ -19,19 +19,19 @@ let validation_error_to_string = function
 let apply_error_to_string = function
   | Target_portfolio.Book_id_mismatch { aggregate_book; proposal_book } ->
       Printf.sprintf "book_id mismatch: aggregate=%s, proposal=%s"
-        (Shared.Book_id.to_string aggregate_book)
-        (Shared.Book_id.to_string proposal_book)
+        (Common.Book_id.to_string aggregate_book)
+        (Common.Book_id.to_string proposal_book)
   | Target_portfolio.Position_book_id_mismatch
       { proposal_book; position_instrument; position_book } ->
       Printf.sprintf "position book_id mismatch on %s: proposal=%s, position=%s"
         (Core.Instrument.to_qualified position_instrument)
-        (Shared.Book_id.to_string proposal_book)
-        (Shared.Book_id.to_string position_book)
+        (Common.Book_id.to_string proposal_book)
+        (Common.Book_id.to_string position_book)
 
 type validated_position = { instrument : Core.Instrument.t; target_qty : Decimal.t }
 
 type validated_set_target_command = {
-  book_id : Shared.Book_id.t;
+  book_id : Common.Book_id.t;
   source : string;
   proposed_at : int64;
   positions : validated_position list;
@@ -44,8 +44,8 @@ type handle_error =
       error : Target_portfolio.apply_error;
     }
 
-let parse_book_id raw : (Shared.Book_id.t, validation_error) Rop.t =
-  try Rop.succeed (Shared.Book_id.of_string raw)
+let parse_book_id raw : (Common.Book_id.t, validation_error) Rop.t =
+  try Rop.succeed (Common.Book_id.of_string raw)
   with Invalid_argument _ -> Rop.fail (Invalid_book_id raw)
 
 let parse_source raw : (string, validation_error) Rop.t =
@@ -91,12 +91,12 @@ let validate (cmd : Set_target_command.t) :
   and+ positions = sequence_positions (List.map validate_position cmd.positions) in
   { book_id; source; proposed_at; positions }
 
-let to_target_proposal (v : validated_set_target_command) : Shared.Target_proposal.t =
+let to_target_proposal (v : validated_set_target_command) : Common.Target_proposal.t =
   let positions =
     List.map
       (fun (vp : validated_position) ->
         ({ book_id = v.book_id; instrument = vp.instrument; target_qty = vp.target_qty }
-          : Shared.Target_position.t))
+          : Common.Target_position.t))
       v.positions
   in
   { book_id = v.book_id; positions; source = v.source; proposed_at = v.proposed_at }

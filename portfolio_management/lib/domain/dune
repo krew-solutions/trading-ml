@@ -4,7 +4,7 @@
  (libraries core decimal))
 
 ; Per-aggregate domain layout (see docs/adr/0006): each aggregate is
-; a subdir with values/, events/. The shared/ subdir hosts cross-
+; a subdir with values/, events/. The common/ subdir hosts cross-
 ; aggregate value objects (Book_id, Pair, Hedge_ratio, ...). Qualified
 ; mode wraps subdir names into the module path: e.g.
 ; target_portfolio/events/target_set.ml becomes
@@ -27,7 +27,7 @@ done")))
 
 ; Why3 deductive verification. -L includes:
 ;   - .                         (own subdirs via qualified paths like
-;                                `use shared.book_id.Book_id`)
+;                                `use common.book_id.Book_id`)
 ;   - shared/lib/domain/core    (use side.Side, instrument.Instrument)
 ;   - shared/lib/decimal        (use decimal.Decimal)
 (rule

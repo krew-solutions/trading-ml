@@ -25,10 +25,10 @@ module Events : module type of Events
 
 type t
 
-val empty : Shared.Book_id.t -> t
-val book_id : t -> Shared.Book_id.t
+val empty : Common.Book_id.t -> t
+val book_id : t -> Common.Book_id.t
 
-val positions : t -> Shared.Target_position.t list
+val positions : t -> Common.Target_position.t list
 (** Snapshot view, in deterministic instrument-compare order. *)
 
 val target_for : t -> Core.Instrument.t -> Decimal.t
@@ -38,17 +38,17 @@ val target_for : t -> Core.Instrument.t -> Decimal.t
     Business-rule errors, not programming errors. *)
 type apply_error =
   | Book_id_mismatch of {
-      aggregate_book : Shared.Book_id.t;
-      proposal_book : Shared.Book_id.t;
+      aggregate_book : Common.Book_id.t;
+      proposal_book : Common.Book_id.t;
     }
   | Position_book_id_mismatch of {
-      proposal_book : Shared.Book_id.t;
+      proposal_book : Common.Book_id.t;
       position_instrument : Core.Instrument.t;
-      position_book : Shared.Book_id.t;
+      position_book : Common.Book_id.t;
     }
 
 val apply_proposal :
-  t -> Shared.Target_proposal.t -> (t * Events.Target_set.t, apply_error) result
+  t -> Common.Target_proposal.t -> (t * Events.Target_set.t, apply_error) result
 (** Apply a target proposal. The aggregate replaces all matching
     instrument entries with the values from the proposal; instruments
     in [positions] but absent from the proposal are LEFT UNTOUCHED.

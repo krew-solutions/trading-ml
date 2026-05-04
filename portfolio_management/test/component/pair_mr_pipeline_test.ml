@@ -15,13 +15,13 @@ let candle ~ts ~close =
   Core.Candle.make ~ts ~open_:close ~high:close ~low:close ~close ~volume:Decimal.one
 
 let make_pair_state ~window =
-  let pair = Pm.Shared.Pair.make ~a:(inst "SBER@MISX") ~b:(inst "LKOH@MISX") in
+  let pair = Pm.Common.Pair.make ~a:(inst "SBER@MISX") ~b:(inst "LKOH@MISX") in
   let cfg =
     PMR.Values.Pair_mr_config.make ~book_id:book_alpha ~pair
-      ~hedge_ratio:(Pm.Shared.Hedge_ratio.of_decimal Decimal.one)
+      ~hedge_ratio:(Pm.Common.Hedge_ratio.of_decimal Decimal.one)
       ~window
-      ~z_entry:(Pm.Shared.Z_score.of_float 1.0)
-      ~z_exit:(Pm.Shared.Z_score.of_float 0.5)
+      ~z_entry:(Pm.Common.Z_score.of_float 1.0)
+      ~z_exit:(Pm.Common.Z_score.of_float 0.5)
       ~notional:(Decimal.of_int 1_000)
   in
   PMR.init cfg
@@ -70,7 +70,7 @@ let pipeline_emits_two_legged_trade_list =
           | Some prop ->
               let positions =
                 List.map
-                  (fun (tp : Pm.Shared.Target_position.t) ->
+                  (fun (tp : Pm.Common.Target_position.t) ->
                     ({
                        instrument = Core.Instrument.to_qualified tp.instrument;
                        target_qty = Decimal.to_string tp.target_qty;

@@ -9,7 +9,7 @@ module Reconciliation
   use list.Length
   use list.Mem
   use decimal.Decimal
-  use shared.trade_intent.Trade_intent as TI
+  use common.trade_intent.Trade_intent as TI
 
   type target_portfolio
   type actual_portfolio

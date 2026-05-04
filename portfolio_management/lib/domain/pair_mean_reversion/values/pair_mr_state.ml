@@ -75,7 +75,7 @@ let record_log_close s ~leg ~log_close =
   in
   match (s'.last_a_log_close, s'.last_b_log_close) with
   | Some la, Some lb ->
-      let beta = Decimal.to_float (Shared.Hedge_ratio.to_decimal s'.config.hedge_ratio) in
+      let beta = Decimal.to_float (Common.Hedge_ratio.to_decimal s'.config.hedge_ratio) in
       let spread = la -. (beta *. lb) in
       { s' with spreads = ring_push s'.spreads spread }
   | _ -> s'

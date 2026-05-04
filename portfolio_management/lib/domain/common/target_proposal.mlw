@@ -4,7 +4,7 @@
 module Target_proposal
   use int.Int
   use list.List
-  use shared.target_position.Target_position as TP
+  use common.target_position.Target_position as TP
 
   type book_id
   type instrument

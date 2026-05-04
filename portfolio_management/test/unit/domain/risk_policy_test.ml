@@ -1,18 +1,18 @@
 open Core
 module Pm = Portfolio_management
 module Risk = Pm.Risk
-module Shared = Pm.Shared
+module Common = Pm.Common
 
-let book = Shared.Book_id.of_string "alpha"
+let book = Common.Book_id.of_string "alpha"
 let dec = Decimal.of_int
 let dec_s = Decimal.of_string
 
 let inst sym = Instrument.of_qualified sym
 
-let position ~book_id instrument target_qty : Shared.Target_position.t =
+let position ~book_id instrument target_qty : Common.Target_position.t =
   { book_id; instrument; target_qty }
 
-let proposal ~positions : Shared.Target_proposal.t =
+let proposal ~positions : Common.Target_proposal.t =
   { book_id = book; positions; source = "test"; proposed_at = 1L }
 
 let mark_const_table table inst =
@@ -95,7 +95,7 @@ let test_gross_pass_scales_legs_proportionally () =
   let qty_of sym =
     match
       List.find_opt
-        (fun (p : Shared.Target_position.t) -> Instrument.equal p.instrument (inst sym))
+        (fun (p : Common.Target_position.t) -> Instrument.equal p.instrument (inst sym))
         clipped.positions
     with
     | Some p -> p.target_qty

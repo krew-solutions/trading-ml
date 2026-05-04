@@ -7,10 +7,10 @@ module Trade_intents_planned =
 
 val execute :
   target_portfolio_for:
-    (Portfolio_management.Shared.Book_id.t ->
+    (Portfolio_management.Common.Book_id.t ->
     Portfolio_management.Target_portfolio.t option) ->
   actual_portfolio_for:
-    (Portfolio_management.Shared.Book_id.t ->
+    (Portfolio_management.Common.Book_id.t ->
     Portfolio_management.Actual_portfolio.t option) ->
   publish_trade_intents_planned:(Trade_intents_planned.t -> unit) ->
   Reconcile_command.t ->

@@ -20,7 +20,7 @@ let of_change (c : Portfolio_management.Target_portfolio.Events.Target_set.chang
 
 let of_domain (ev : domain) : t =
   {
-    book_id = Portfolio_management.Shared.Book_id.to_string ev.book_id;
+    book_id = Portfolio_management.Common.Book_id.to_string ev.book_id;
     source = ev.source;
     proposed_at = ev.proposed_at;
     changed = List.map of_change ev.changed;

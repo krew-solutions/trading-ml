@@ -10,7 +10,7 @@ type domain = Portfolio_management.Actual_portfolio.t
 let of_domain (p : domain) : t =
   {
     book_id =
-      Portfolio_management.Shared.Book_id.to_string
+      Portfolio_management.Common.Book_id.to_string
         (Portfolio_management.Actual_portfolio.book_id p);
     cash = Decimal.to_string (Portfolio_management.Actual_portfolio.cash p);
     positions =

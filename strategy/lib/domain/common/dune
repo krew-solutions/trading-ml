@@ -1,5 +1,5 @@
 (library
- (name strategy_core)
+ (name common)
  (public_name trading.strategy.core)
  (libraries decimal core))
 

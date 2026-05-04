@@ -2,19 +2,20 @@
  (target core.mli)
  (deps
   %{project_root}/tools/gospel_wrap.sh
-  (glob_files ../../core/*.mli)
+  (glob_files ../../common/*.mli)
+  (glob_files ../../../../../shared/lib/domain/core/*.mli)
   (glob_files ../../../../../shared/lib/decimal/*.mli))
  (action
   (with-stdout-to %{target}
    (run %{project_root}/tools/gospel_wrap.sh
-        %{dep:../../core/board.mli}
-        %{dep:../../core/candle.mli}
+        %{dep:../../../../../shared/lib/domain/core/board.mli}
+        %{dep:../../../../../shared/lib/domain/core/candle.mli}
         %{dep:../../../../../shared/lib/decimal/decimal.mli}
-        %{dep:../../core/instrument.mli}
-        %{dep:../../core/isin.mli}
-        %{dep:../../core/mic.mli}
-        %{dep:../../core/order.mli}
-        %{dep:../../core/side.mli}
-        %{dep:../../core/signal.mli}
-        %{dep:../../core/ticker.mli}
-        %{dep:../../core/timeframe.mli}))))
+        %{dep:../../../../../shared/lib/domain/core/instrument.mli}
+        %{dep:../../../../../shared/lib/domain/core/isin.mli}
+        %{dep:../../../../../shared/lib/domain/core/mic.mli}
+        %{dep:../../common/order.mli}
+        %{dep:../../../../../shared/lib/domain/core/side.mli}
+        %{dep:../../common/signal.mli}
+        %{dep:../../../../../shared/lib/domain/core/ticker.mli}
+        %{dep:../../../../../shared/lib/domain/core/timeframe.mli}))))

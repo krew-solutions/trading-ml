@@ -4,7 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
-  core strategy_core decimal
+  core common decimal
   queries
   broker
   broker_integration_events
@@ -14,4 +14,4 @@
  (flags
   (:standard
    -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
-   -open Strategy_core)))
+   -open Common)))

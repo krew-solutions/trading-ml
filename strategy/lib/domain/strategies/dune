@@ -1,14 +1,14 @@
 (library
  (name strategies)
  (public_name trading.strategies)
- (libraries core strategy_core decimal indicators gbt)
- (flags (:standard -open Strategy_core)))
+ (libraries core common decimal indicators gbt)
+ (flags (:standard -open Common)))
 
 (rule
  (alias why3)
  (deps
   (glob_files *.mlw)
-  (glob_files ../core/*.mlw)
+  (glob_files ../common/*.mlw)
   (glob_files ../../../../shared/lib/domain/core/*.mlw)
   (glob_files ../../../../shared/lib/decimal/*.mlw)
   (glob_files ../indicators/*.mlw))
@@ -16,8 +16,8 @@
   (bash "set -eu
 for f in %{deps}; do
   case \"$f\" in ../*) continue ;; esac
-  why3 prove -L . -L ../core -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -L ../indicators -P alt-ergo \"$f\" >/dev/null 2>&1 \\
-    || why3 prove -L . -L ../core -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -L ../indicators -P z3 \"$f\" >/dev/null
+  why3 prove -L . -L ../common -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -L ../indicators -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../common -L ../../../../shared/lib/domain/core -L ../../../../shared/lib/decimal -L ../indicators -P z3 \"$f\" >/dev/null
 done")))
 
 (alias

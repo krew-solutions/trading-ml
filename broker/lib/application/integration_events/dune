@@ -1,10 +1,10 @@
 (library
  (name broker_integration_events)
  (public_name trading.broker.integration_events)
- (libraries yojson ppx_yojson_conv_lib core strategy_core decimal queries)
+ (libraries yojson ppx_yojson_conv_lib core common decimal queries)
  (preprocess
   (pps ppx_yojson_conv))
  (flags
   (:standard
    -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
-   -open Strategy_core)))
+   -open Common)))

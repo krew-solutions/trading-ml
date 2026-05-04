@@ -1,4 +1,4 @@
-(** Read-model DTO for {!Strategy_core.Order.kind}.
+(** Read-model DTO for {!Common.Order.kind}.
 
     Flattened discriminated union: [type_] is the tag
     ([MARKET] / [LIMIT] / [STOP] / [STOP_LIMIT]) and the
@@ -15,6 +15,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Strategy_core.Order.kind
+type domain = Common.Order.kind
 
 val of_domain : domain -> t

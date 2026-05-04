@@ -1,5 +1,5 @@
 (library
  (name logistic_regression)
  (public_name trading.logistic_regression)
- (libraries core strategy_core decimal strategies yojson)
- (flags (:standard -open Strategy_core)))
+ (libraries core common decimal strategies yojson)
+ (flags (:standard -open Common)))

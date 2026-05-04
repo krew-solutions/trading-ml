@@ -1,6 +1,6 @@
 (library
  (name account_inbound_http)
  (public_name trading.account.inbound_http)
- (libraries core strategy_core decimal account account_commands bus inbound_http
+ (libraries core common decimal account account_commands bus inbound_http
             cohttp cohttp-eio eio yojson uri)
- (flags (:standard -open Strategy_core)))
+ (flags (:standard -open Common)))

@@ -3,7 +3,7 @@ type t = {
   symbol : string;
   side : string;
   quantity : string;
-  kind : Queries.Order_kind_view_model.t;
+  kind : Broker_queries.Order_kind_view_model.t;
   tif : string;
 }
 [@@deriving yojson]

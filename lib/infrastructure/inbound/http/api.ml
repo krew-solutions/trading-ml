@@ -32,7 +32,7 @@ let order_accepted_json
     [
       ("status", `String "placed");
       ("reservation_id", `Int ev.reservation_id);
-      ("order", Order_view_model.yojson_of_t oa.broker_order);
+      ("order", Broker_queries.Order_view_model.yojson_of_t oa.broker_order);
     ]
 
 let order_rejected_json

@@ -14,5 +14,5 @@
     by the UI for [GET / DELETE /api/orders/<cid>]); Account does
     not consume it. *)
 
-type t = { reservation_id : int; broker_order : Queries.Order_view_model.t }
+type t = { reservation_id : int; broker_order : Broker_queries.Order_view_model.t }
 [@@deriving yojson]

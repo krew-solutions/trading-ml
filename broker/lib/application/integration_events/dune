@@ -1,7 +1,7 @@
 (library
  (name broker_integration_events)
  (public_name trading.broker.integration_events)
- (libraries yojson ppx_yojson_conv_lib core common decimal queries)
+ (libraries yojson ppx_yojson_conv_lib core common decimal broker_queries)
  (preprocess
   (pps ppx_yojson_conv))
  (flags

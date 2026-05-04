@@ -15,7 +15,7 @@ let parse_tif = function
   | "FOK" -> Order.FOK
   | s -> invalid_arg (Printf.sprintf "tif: %S" s)
 
-let parse_kind (k : Queries.Order_kind_view_model.t) : Order.kind =
+let parse_kind (k : Broker_queries.Order_kind_view_model.t) : Order.kind =
   match String.uppercase_ascii k.type_ with
   | "MARKET" -> Market
   | "LIMIT" -> (
@@ -74,5 +74,5 @@ let make
                 Order_accepted.
                   {
                     reservation_id = rid;
-                    broker_order = Queries.Order_view_model.of_domain order;
+                    broker_order = Broker_queries.Order_view_model.of_domain order;
                   }))

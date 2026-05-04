@@ -5,7 +5,7 @@
   yojson
   ppx_yojson_conv_lib
   core common decimal
-  queries
+  broker_queries
   broker
   broker_integration_events
   bus)

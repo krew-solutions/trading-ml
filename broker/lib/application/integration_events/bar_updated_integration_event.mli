@@ -18,9 +18,9 @@
 open Core
 
 type t = {
-  instrument : Queries.Instrument_view_model.t;
+  instrument : Broker_queries.Instrument_view_model.t;
   timeframe : string;  (** [Timeframe.to_string] form. *)
-  bar : Queries.Candle_view_model.t;
+  bar : Broker_queries.Candle_view_model.t;
 }
 [@@deriving yojson]
 

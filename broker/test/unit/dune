@@ -4,7 +4,7 @@
   core common decimal
   broker
   broker_integration_events
-  queries
+  broker_queries
   http_transport
   websocket
   finam

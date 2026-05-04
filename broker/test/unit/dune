@@ -3,6 +3,8 @@
  (libraries
   core common decimal
   broker
+  broker_integration_events
+  queries
   http_transport
   websocket
   finam

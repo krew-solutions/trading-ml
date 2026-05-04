@@ -22,4 +22,6 @@ let () =
       ("token store", Token_store_test.tests);
       (* Infrastructure: WebSocket framing *)
       ("ws frame", Websocket_frame_test.tests);
+      (* Application: integration events *)
+      ("bar_updated DTO", Bar_updated_integration_event_test.tests);
     ]

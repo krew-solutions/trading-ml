@@ -187,7 +187,8 @@ let cmd_backtest args =
     the server's switch; per-key SUBSCRIBE/UNSUBSCRIBE messages flow
     on subscriber lifecycle hooks; inbound BARS events fan out via
     [Stream.push_from_upstream]. *)
-let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
+let finam_live_setup ~env ~paper_sink ~publish_bar_updated (rest : Finam.Rest.t) ~sw :
+    Server.Http.live_setup =
   let cfg = Finam.Rest.cfg rest in
   let auth = Finam.Rest.auth rest in
   let registry_ref : Server.Stream.t option ref = ref None in
@@ -198,33 +199,31 @@ let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.li
   let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
   let on_event (ev : Finam.Ws.event) =
     match ev with
-    | Bars { instrument; timeframe; bars } -> (
+    | Bars { instrument; timeframe; bars } ->
         List.iter (fun candle -> paper_sink instrument candle) bars;
-        match (!registry_ref, timeframe) with
-        | Some r, Some tf ->
+        let tfs : Timeframe.t list =
+          match timeframe with
+          | Some tf -> [ tf ]
+          | None -> (
+              (* No subscription_key in the frame — fall back to the
+                 legacy scan of active subs for this instrument. *)
+              match !bridge_ref with
+              | None -> []
+              | Some b -> Finam.Ws_bridge.timeframes_for_instrument b instrument)
+        in
+        List.iter
+          (fun (tf : Timeframe.t) ->
             List.iter
-              (fun candle ->
-                Server.Stream.push_from_upstream r ~instrument ~timeframe:tf candle)
-              bars
-        | Some _, None -> (
-            (* No subscription_key in the frame — fall back to the
-            legacy scan of active subs for this instrument. *)
-            match !bridge_ref with
-            | None -> ()
-            | Some b -> (
-                let tfs = Finam.Ws_bridge.timeframes_for_instrument b instrument in
-                match !registry_ref with
-                | None -> ()
+              (fun (candle : Candle.t) ->
+                (match !registry_ref with
                 | Some r ->
-                    List.iter
-                      (fun candle ->
-                        List.iter
-                          (fun tf ->
-                            Server.Stream.push_from_upstream r ~instrument ~timeframe:tf
-                              candle)
-                          tfs)
-                      bars))
-        | None, _ -> ())
+                    Server.Stream.push_from_upstream r ~instrument ~timeframe:tf candle
+                | None -> ());
+                publish_bar_updated
+                  (Broker_integration_events.Bar_updated_integration_event.of_domain
+                     ~instrument ~timeframe:tf ~bar:candle))
+              bars)
+          tfs
     | Error_ev { code; type_; message } ->
         Log.warn "[finam ws] error %d %s: %s" code type_ message
     | Lifecycle { event; code; reason } ->
@@ -251,16 +250,20 @@ let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.li
     to [on_first] and tears down on [on_last]. The BARS fan-out
     callback pushes directly into the registry via
     [Stream.push_from_upstream]. *)
-let bcs_live_setup ~env ~paper_sink (rest : Bcs.Rest.t) ~sw : Server.Http.live_setup =
+let bcs_live_setup ~env ~paper_sink ~publish_bar_updated (rest : Bcs.Rest.t) ~sw :
+    Server.Http.live_setup =
   let cfg = Bcs.Rest.cfg rest in
   let auth = Bcs.Rest.auth rest in
   let bridge = Bcs.Ws_bridge.make ~env ~sw ~cfg ~auth in
   let registry_ref : Server.Stream.t option ref = ref None in
   let push instrument timeframe candle =
     paper_sink instrument candle;
-    match !registry_ref with
+    (match !registry_ref with
     | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
-    | None -> ()
+    | None -> ());
+    publish_bar_updated
+      (Broker_integration_events.Bar_updated_integration_event.of_domain ~instrument
+         ~timeframe ~bar:candle)
   in
   Server.Http.
     {
@@ -437,14 +440,6 @@ let cmd_serve args =
     | _ -> ());
     base ~sw
   in
-  let ws_setup =
-    match opened with
-    | Opened_finam { rest; _ } ->
-        Some (with_engine (finam_live_setup ~env ~paper_sink:bar_sink rest))
-    | Opened_bcs { rest; _ } ->
-        Some (with_engine (bcs_live_setup ~env ~paper_sink:bar_sink rest))
-    | Opened_synthetic _ -> None
-  in
   (* Wire the Account / Broker BC choreography. One Command_bus per
      command type, one Event_bus per integration event type. Single
      handler per Command_bus (composition-root invariant); Event_buses
@@ -513,6 +508,11 @@ let cmd_serve args =
       ~t_of_yojson:
         Broker_integration_events.Order_unreachable_integration_event.t_of_yojson
   in
+  let events_bar_updated =
+    event_bus
+      ~yojson_of_t:Broker_integration_events.Bar_updated_integration_event.yojson_of_t
+      ~t_of_yojson:Broker_integration_events.Bar_updated_integration_event.t_of_yojson
+  in
   let portfolio_ref = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 1_000_000)) in
   let next_reservation_id =
     let counter = ref 0 in
@@ -526,6 +526,19 @@ let cmd_serve args =
   let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
   let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
   let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
+  let publish_bar_updated = Bus.Event_bus.publish events_bar_updated in
+  let ws_setup =
+    match opened with
+    | Opened_finam { rest; _ } ->
+        Some
+          (with_engine
+             (finam_live_setup ~env ~paper_sink:bar_sink ~publish_bar_updated rest))
+    | Opened_bcs { rest; _ } ->
+        Some
+          (with_engine
+             (bcs_live_setup ~env ~paper_sink:bar_sink ~publish_bar_updated rest))
+    | Opened_synthetic _ -> None
+  in
   (* Stubbed margin policy: every instrument gets the same 50% initial
      margin and 50% haircut. Replaced with a static per-instrument
      table or a live broker rate source when those land. *)

@@ -23,6 +23,6 @@ type market_price_port = instrument:Instrument.t -> Decimal.t
     round-trip with the on-wire decimal-string representation. *)
 
 val make_handler :
-  reserve_bus:Account_commands.Reserve_command.t Bus.Command_bus.t ->
+  dispatch_reserve:(Account_commands.Reserve_command.t -> unit) ->
   market_price:market_price_port ->
   Inbound_http.Route.handler

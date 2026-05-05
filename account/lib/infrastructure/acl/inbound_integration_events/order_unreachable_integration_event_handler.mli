@@ -1,11 +1,7 @@
 (** Handler for the inbound {!Order_unreachable_integration_event.t}.
-    Functor over {!Bus.Event_bus.S} — transport-agnostic. *)
+    Bus-agnostic — translates the inbound DTO into a release dispatch
+    via the supplied port. *)
 
 module Order_unreachable = Order_unreachable_integration_event
 
-module Make (Bus : Bus.Event_bus.S) : sig
-  val attach :
-    events:Order_unreachable.t Bus.t ->
-    dispatch_release:(reservation_id:int -> unit) ->
-    Bus.subscription
-end
+val handle : dispatch_release:(reservation_id:int -> unit) -> Order_unreachable.t -> unit

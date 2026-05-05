@@ -42,14 +42,13 @@ let parse_args (cmd : Submit_order_command.t) =
 
 let make
     ~(broker : Broker.client)
-    ~(events_accepted : Order_accepted.t Bus.Event_bus.t)
-    ~(events_rejected : Order_rejected.t Bus.Event_bus.t)
-    ~(events_unreachable : Order_unreachable.t Bus.Event_bus.t)
+    ~(publish_accepted : Order_accepted.t -> unit)
+    ~(publish_rejected : Order_rejected.t -> unit)
+    ~(publish_unreachable : Order_unreachable.t -> unit)
     (cmd : Submit_order_command.t) : unit =
   let rid = cmd.reservation_id in
   let unreachable reason =
-    Bus.Event_bus.publish events_unreachable
-      Order_unreachable.{ reservation_id = rid; reason }
+    publish_unreachable Order_unreachable.{ reservation_id = rid; reason }
   in
   match try Ok (parse_args cmd) with Invalid_argument m | Failure m -> Error m with
   | Error reason -> unreachable reason
@@ -66,11 +65,11 @@ let make
       | Ok order -> (
           match order.status with
           | Rejected ->
-              Bus.Event_bus.publish events_rejected
+              publish_rejected
                 Order_rejected.
                   { reservation_id = rid; reason = Order.status_to_string order.status }
           | _ ->
-              Bus.Event_bus.publish events_accepted
+              publish_accepted
                 Order_accepted.
                   {
                     reservation_id = rid;

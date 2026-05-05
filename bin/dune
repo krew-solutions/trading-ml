@@ -11,7 +11,7 @@
             account_inbound_http
             broker_commands broker_integration_events
             strategy_inbound_integration_events strategy_inbound_queries
-            bus
+            bus in_memory
             logistic_regression triple_barrier
             http_transport finam bcs acl_common datetime token_store synthetic paper server log logs
             eio_main mirage-crypto-rng.unix unix)

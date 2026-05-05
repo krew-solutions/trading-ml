@@ -78,7 +78,7 @@ let to_reserve_command (market_price : market_price_port) (req : place_order_req
     price;
   }
 
-let make_handler ~reserve_bus ~market_price : Inbound_http.Route.handler =
+let make_handler ~dispatch_reserve ~market_price : Inbound_http.Route.handler =
  fun request body ->
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
@@ -87,7 +87,7 @@ let make_handler ~reserve_bus ~market_price : Inbound_http.Route.handler =
   | `POST, "/api/orders" ->
       let body_str = Eio.Flow.read_all body in
       let req = place_order_of_json (Yojson.Safe.from_string body_str) in
-      Bus.Command_bus.send reserve_bus (to_reserve_command market_price req);
+      dispatch_reserve (to_reserve_command market_price req);
       (* TODO: reservation_id is not synchronously knowable on the
          async bus — outcomes will arrive on integration-event
          channels, not back through [send]. The Submit dispatch

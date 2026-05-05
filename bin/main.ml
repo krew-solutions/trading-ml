@@ -404,19 +404,18 @@ let cmd_serve args =
     | Some n ->
         Printf.sprintf " [engine: %s on %s]" n (Instrument.to_qualified engine_symbol)
     | None -> "");
-  (* Inbound ACL handler for [Bar_updated_integration_event]:
-     subscribes to the strategy-side mirror bus (created inside the
-     server's switch below), decodes events whose instrument matches
-     [engine_symbol] into [Candle.t], and exposes them as a
-     pull-driven [Stream.t] that [Live_engine.run] consumes. The
-     internal Eio.Stream is the only push→pull boundary on this
-     path — neither the engine nor anything below it sees Eio. *)
-  let module Bar_updated_inbound_handler =
-    Strategy_inbound_integration_events.Bar_updated_integration_event_handler.Make
-      (Bus.Event_bus)
-  in
+  (* Inbound ACL handler for [Bar_updated_integration_event]: holds an
+     internal Eio.Stream that the bus subscriber pushes to and the
+     [Live_engine] fiber pulls from. Constructed before opening the
+     switch — [make] does no IO; the dispatch fiber (in In_memory
+     adapter) is what actually fires [handle] later, on the server's
+     switch. *)
   let engine_handler =
-    Option.map (fun _ -> Bar_updated_inbound_handler.make ~capacity:64) engine_t
+    Option.map
+      (fun _ ->
+        Strategy_inbound_integration_events.Bar_updated_integration_event_handler.make
+          ~capacity:64)
+      engine_t
   in
   let paper_sink =
     match paper_t with
@@ -432,83 +431,70 @@ let cmd_serve args =
     (match (engine_t, engine_handler) with
     | Some e, Some h ->
         Eio.Fiber.fork_daemon ~sw (fun () ->
-            Live_engine.run e ~source:(Bar_updated_inbound_handler.source h);
+            Live_engine.run e
+              ~source:
+                (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
+                 .source h);
             `Stop_daemon)
     | _ -> ());
     base ~sw
   in
-  (* Wire the Account / Broker BC choreography. One Command_bus per
-     command type, one Event_bus per integration event type. Single
-     handler per Command_bus (composition-root invariant); Event_buses
-     fan out to compensation subscriber + SSE projector + future audit
-     consumers without those touching each other. *)
   Eio.Switch.run @@ fun sw ->
-  let cmd_bus (type a) ~yojson_of_t ~t_of_yojson : a Bus.Command_bus.t =
-    Bus.Command_bus.create ~sw
-      ~to_string:(fun (x : a) -> Yojson.Safe.to_string (yojson_of_t x))
-      ~of_string:(fun s -> t_of_yojson (Yojson.Safe.from_string s))
-      ()
+  (* One [Bus.t] per process; one [In_memory] broker registered as the
+     ["in-memory"] scheme. Replacing transport later is a one-line
+     change to [Bus.register]; nothing else moves. *)
+  let bus = Bus.create () in
+  let in_memory_broker = In_memory.create ~sw in
+  Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
+  let producer (type a) ~uri ~(yojson_of : a -> Yojson.Safe.t) : a Bus.producer =
+    Bus.producer bus ~uri ~serialize:(fun v -> Yojson.Safe.to_string (yojson_of v))
   in
-  let event_bus (type a) ~yojson_of_t ~t_of_yojson : a Bus.Event_bus.t =
-    Bus.Event_bus.create ~sw
-      ~to_string:(fun (x : a) -> Yojson.Safe.to_string (yojson_of_t x))
-      ~of_string:(fun s -> t_of_yojson (Yojson.Safe.from_string s))
-      ()
+  let consumer (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
+    Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
+        t_of_yojson (Yojson.Safe.from_string s))
   in
-  let reserve_bus =
-    cmd_bus ~yojson_of_t:Account_commands.Reserve_command.yojson_of_t
-      ~t_of_yojson:Account_commands.Reserve_command.t_of_yojson
+  (* Outbound producers + port closures. Each producer writes to a
+     publisher-namespaced URI; consumers register on the same URI
+     with their own deserializer for their own DTO type. The wire
+     JSON is the shared contract — no in-process bridges. *)
+  let publish_amount_reserved =
+    Bus.publish
+      (producer ~uri:"in-memory://account.amount-reserved"
+         ~yojson_of:
+           Account_integration_events.Amount_reserved_integration_event.yojson_of_t)
   in
-  let release_bus =
-    cmd_bus ~yojson_of_t:Account_commands.Release_command.yojson_of_t
-      ~t_of_yojson:Account_commands.Release_command.t_of_yojson
+  let publish_reservation_released =
+    Bus.publish
+      (producer ~uri:"in-memory://account.reservation-released"
+         ~yojson_of:
+           Account_integration_events.Reservation_released_integration_event.yojson_of_t)
   in
-  let submit_order_bus =
-    cmd_bus ~yojson_of_t:Broker_commands.Submit_order_command.yojson_of_t
-      ~t_of_yojson:Broker_commands.Submit_order_command.t_of_yojson
+  let publish_reservation_rejected =
+    Bus.publish
+      (producer ~uri:"in-memory://account.reservation-rejected"
+         ~yojson_of:
+           Account_integration_events.Reservation_rejected_integration_event.yojson_of_t)
   in
-  let events_amount_reserved =
-    event_bus
-      ~yojson_of_t:
-        Account_integration_events.Amount_reserved_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Account_integration_events.Amount_reserved_integration_event.t_of_yojson
+  let publish_order_accepted =
+    Bus.publish
+      (producer ~uri:"in-memory://broker.order-accepted"
+         ~yojson_of:Broker_integration_events.Order_accepted_integration_event.yojson_of_t)
   in
-  let events_reservation_released =
-    event_bus
-      ~yojson_of_t:
-        Account_integration_events.Reservation_released_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Account_integration_events.Reservation_released_integration_event.t_of_yojson
+  let publish_order_rejected =
+    Bus.publish
+      (producer ~uri:"in-memory://broker.order-rejected"
+         ~yojson_of:Broker_integration_events.Order_rejected_integration_event.yojson_of_t)
   in
-  let events_reservation_rejected =
-    event_bus
-      ~yojson_of_t:
-        Account_integration_events.Reservation_rejected_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Account_integration_events.Reservation_rejected_integration_event.t_of_yojson
+  let publish_order_unreachable =
+    Bus.publish
+      (producer ~uri:"in-memory://broker.order-unreachable"
+         ~yojson_of:
+           Broker_integration_events.Order_unreachable_integration_event.yojson_of_t)
   in
-  let events_order_accepted =
-    event_bus
-      ~yojson_of_t:Broker_integration_events.Order_accepted_integration_event.yojson_of_t
-      ~t_of_yojson:Broker_integration_events.Order_accepted_integration_event.t_of_yojson
-  in
-  let events_order_rejected =
-    event_bus
-      ~yojson_of_t:Broker_integration_events.Order_rejected_integration_event.yojson_of_t
-      ~t_of_yojson:Broker_integration_events.Order_rejected_integration_event.t_of_yojson
-  in
-  let events_order_unreachable =
-    event_bus
-      ~yojson_of_t:
-        Broker_integration_events.Order_unreachable_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Broker_integration_events.Order_unreachable_integration_event.t_of_yojson
-  in
-  let events_bar_updated =
-    event_bus
-      ~yojson_of_t:Broker_integration_events.Bar_updated_integration_event.yojson_of_t
-      ~t_of_yojson:Broker_integration_events.Bar_updated_integration_event.t_of_yojson
+  let publish_bar_updated =
+    Bus.publish
+      (producer ~uri:"in-memory://broker.bar-updated"
+         ~yojson_of:Broker_integration_events.Bar_updated_integration_event.yojson_of_t)
   in
   let portfolio_ref = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 1_000_000)) in
   let next_reservation_id =
@@ -517,13 +503,98 @@ let cmd_serve args =
       incr counter;
       !counter
   in
-  (* Wrap each outbound Event_bus into the matching application-port
-     closure. Application handlers depend on the named ports, not on
-     {!Bus} directly (DIP). *)
-  let publish_amount_reserved = Bus.Event_bus.publish events_amount_reserved in
-  let publish_reservation_released = Bus.Event_bus.publish events_reservation_released in
-  let publish_reservation_rejected = Bus.Event_bus.publish events_reservation_rejected in
-  let publish_bar_updated = Bus.Event_bus.publish events_bar_updated in
+  (* Stubbed margin policy: every instrument gets the same 50% initial
+     margin and 50% haircut. Replaced with a static per-instrument
+     table or a live broker rate source when those land. *)
+  let margin_policy : Account.Portfolio.Margin_policy.t =
+   fun _instrument ->
+    { margin_pct = Decimal.of_string "0.5"; haircut = Decimal.of_string "0.5" }
+  in
+  (* Stubbed mark callback: no live price stream wired yet. *)
+  let mark : Core.Instrument.t -> Decimal.t option = fun _ -> None in
+  (* Workflow ports — direct calls, no command bus. ACL handlers and
+     HTTP handler dispatch through these. *)
+  let dispatch_reserve cmd =
+    match
+      Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
+        ~next_reservation_id ~slippage_buffer:(Decimal.of_string "0.005")
+        ~fee_rate:(Decimal.of_string "0.0005") ~margin_policy ~mark
+        ~publish_amount_reserved ~publish_reservation_rejected cmd
+    with
+    | Ok () -> ()
+    (* Business-rule failures already surfaced as
+       Reservation_rejected integration event by the workflow; the
+       Rop tail is discarded. *)
+    | Error _ -> ()
+  in
+  let dispatch_release ~reservation_id =
+    match
+      Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
+        ~publish_reservation_released
+        Account_commands.Release_command.{ reservation_id }
+    with
+    | Ok () -> ()
+    (* Idempotent compensation: a duplicated or late rejection
+       event for a reservation that's already been released is
+       silently dropped. *)
+    | Error _ -> ()
+  in
+  let dispatch_submit_order =
+    Broker_commands.Submit_order_command_handler.make ~broker:client
+      ~publish_accepted:publish_order_accepted ~publish_rejected:publish_order_rejected
+      ~publish_unreachable:publish_order_unreachable
+  in
+  ignore dispatch_submit_order
+  (* The place-order saga is not yet wired; the dispatch closure is
+     held in scope so Submit_order_command_handler is fully
+     constructed (typechecked end-to-end) and ready for whoever
+     becomes its caller. *);
+  (* Account-side compensation subscribers: read broker's outbound
+     URIs with Account's own mirror DTO deserializer. Account stays
+     autonomous from Broker's OCaml types — JSON wire is the only
+     contract. *)
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consumer ~uri:"in-memory://broker.order-rejected" ~group:"account-compensation"
+         ~t_of_yojson:
+           Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson)
+      (Account_inbound_integration_events.Order_rejected_integration_event_handler.handle
+         ~dispatch_release)
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"account-compensation"
+         ~t_of_yojson:
+           Account_inbound_integration_events.Order_unreachable_integration_event
+           .t_of_yojson)
+      (Account_inbound_integration_events.Order_unreachable_integration_event_handler
+       .handle ~dispatch_release)
+  in
+  (* Strategy-side bar handler: read broker's bar-updated URI with
+     Strategy's mirror DTO deserializer, push decoded candles to the
+     handler's internal stream which Live_engine.run consumes. *)
+  (match engine_handler with
+  | Some h ->
+      let _ : Bus.subscription =
+        Bus.subscribe
+          (consumer ~uri:"in-memory://broker.bar-updated" ~group:"strategy-engine"
+             ~t_of_yojson:
+               Strategy_inbound_integration_events.Bar_updated_integration_event
+               .t_of_yojson)
+          (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
+           .handle h ~instrument:engine_symbol)
+      in
+      ()
+  | None -> ());
+  let market_price ~instrument =
+    match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
+    | last :: _ -> last.close
+    | [] -> Decimal.zero
+  in
+  let account_handler =
+    Account_inbound_http.Http.make_handler ~dispatch_reserve ~market_price
+  in
+  let bc_handlers = [ account_handler ] in
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->
@@ -532,155 +603,55 @@ let cmd_serve args =
         Some (with_engine (bcs_live_setup ~env ~paper_sink ~publish_bar_updated rest))
     | Opened_synthetic _ -> None
   in
-  (* Stubbed margin policy: every instrument gets the same 50% initial
-     margin and 50% haircut. Replaced with a static per-instrument
-     table or a live broker rate source when those land. *)
-  let margin_policy : Account.Portfolio.Margin_policy.t =
-   fun _instrument ->
-    { margin_pct = Decimal.of_string "0.5"; haircut = Decimal.of_string "0.5" }
-  in
-  (* Stubbed mark callback: no live price stream wired yet. The
-     domain falls back to each position's avg_price when [None] is
-     returned, which keeps buying-power computations grounded in
-     entry cost until a real mark source is plugged in. *)
-  let mark : Core.Instrument.t -> Decimal.t option = fun _ -> None in
-  Bus.Command_bus.register_handler reserve_bus (fun cmd ->
-      match
-        Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
-          ~next_reservation_id ~slippage_buffer:(Decimal.of_string "0.005")
-          ~fee_rate:(Decimal.of_string "0.0005") ~margin_policy ~mark
-          ~publish_amount_reserved ~publish_reservation_rejected cmd
-      with
-      | Ok () -> ()
-      (* Business-rule failures (insufficient cash/qty) already
-         surfaced as Reservation_rejected integration event by the
-         workflow; the bus handler discards the Rop tail. *)
-      | Error _ -> ());
-  Bus.Command_bus.register_handler release_bus (fun cmd ->
-      match
-        Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
-          ~publish_reservation_released cmd
-      with
-      | Ok () -> ()
-      (* Idempotent compensation: a duplicated or late rejection
-         event for a reservation that's already been released is
-         silently dropped. *)
-      | Error _ -> ());
-  Bus.Command_bus.register_handler submit_order_bus
-    (Broker_commands.Submit_order_command_handler.make ~broker:client
-       ~events_accepted:events_order_accepted ~events_rejected:events_order_rejected
-       ~events_unreachable:events_order_unreachable);
-  let dispatch_release ~reservation_id =
-    Bus.Command_bus.send release_bus Account_commands.Release_command.{ reservation_id }
-  in
-  (* ACL: bridge Broker-typed outbound buses into Account-typed inbound
-     buses. Account stays autonomous from Broker's type definitions —
-     it subscribes only to its own DTO mirrors, and the field-copy
-     here is the entire translation surface. *)
-  let events_account_inbound_order_rejected =
-    event_bus
-      ~yojson_of_t:
-        Account_inbound_integration_events.Order_rejected_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson
-  in
-  let events_account_inbound_order_unreachable =
-    event_bus
-      ~yojson_of_t:
-        Account_inbound_integration_events.Order_unreachable_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Account_inbound_integration_events.Order_unreachable_integration_event.t_of_yojson
-  in
-  let (_ : Bus.Event_bus.subscription) =
-    Bus.Event_bus.subscribe events_order_rejected (fun ev ->
-        Bus.Event_bus.publish events_account_inbound_order_rejected
-          Account_inbound_integration_events.Order_rejected_integration_event.
-            { reservation_id = ev.reservation_id; reason = ev.reason })
-  in
-  let (_ : Bus.Event_bus.subscription) =
-    Bus.Event_bus.subscribe events_order_unreachable (fun ev ->
-        Bus.Event_bus.publish events_account_inbound_order_unreachable
-          Account_inbound_integration_events.Order_unreachable_integration_event.
-            { reservation_id = ev.reservation_id; reason = ev.reason })
-  in
-  (* ACL: bridge Broker-typed outbound bar events into Strategy-typed
-     inbound mirrors. Field-by-field copy is the entire translation
-     surface; the strategy-side bus + handler then deliver each
-     candle to [Live_engine.run] via the inbound ACL handler. *)
-  let events_strategy_inbound_bar_updated =
-    event_bus
-      ~yojson_of_t:
-        Strategy_inbound_integration_events.Bar_updated_integration_event.yojson_of_t
-      ~t_of_yojson:
-        Strategy_inbound_integration_events.Bar_updated_integration_event.t_of_yojson
-  in
-  let (_ : Bus.Event_bus.subscription) =
-    Bus.Event_bus.subscribe events_bar_updated (fun ev ->
-        Bus.Event_bus.publish events_strategy_inbound_bar_updated
-          Strategy_inbound_integration_events.Bar_updated_integration_event.
-            {
-              instrument =
-                Strategy_inbound_queries.Instrument_view_model.
-                  {
-                    ticker = ev.instrument.ticker;
-                    venue = ev.instrument.venue;
-                    isin = ev.instrument.isin;
-                    board = ev.instrument.board;
-                  };
-              timeframe = ev.timeframe;
-              bar =
-                Strategy_inbound_queries.Candle_view_model.
-                  {
-                    ts = ev.bar.ts;
-                    open_ = ev.bar.open_;
-                    high = ev.bar.high;
-                    low = ev.bar.low;
-                    close = ev.bar.close;
-                    volume = ev.bar.volume;
-                  };
-            })
-  in
-  (match engine_handler with
-  | Some h ->
-      let (_ : Bus.Event_bus.subscription) =
-        Bar_updated_inbound_handler.attach h ~events:events_strategy_inbound_bar_updated
-          ~instrument:engine_symbol
-      in
-      ()
-  | None -> ());
-  (* Apply functors with the in-memory bus. Swap to Kafka =
-     change [Bus.Event_bus] argument here, no consumer rewrites. *)
-  let module Order_rejected_inbound_handler =
-    Account_inbound_integration_events.Order_rejected_integration_event_handler.Make
-      (Bus.Event_bus)
-  in
-  let module Order_unreachable_inbound_handler =
-    Account_inbound_integration_events.Order_unreachable_integration_event_handler.Make
-      (Bus.Event_bus)
-  in
-  let module Sse_publisher = Server.Publish_order_events.Make (Bus.Event_bus) in
-  let (_ : Bus.Event_bus.subscription) =
-    Order_rejected_inbound_handler.attach ~events:events_account_inbound_order_rejected
-      ~dispatch_release
-  in
-  let (_ : Bus.Event_bus.subscription) =
-    Order_unreachable_inbound_handler.attach
-      ~events:events_account_inbound_order_unreachable ~dispatch_release
-  in
-  let market_price ~instrument =
-    match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
-    | last :: _ -> last.close
-    | [] -> Decimal.zero
-  in
-  let account_handler =
-    Account_inbound_http.Http.make_handler ~reserve_bus ~market_price
-  in
-  let bc_handlers = [ account_handler ] in
-  ignore submit_order_bus;
+  (* SSE projector subscribers: each event type gets its own consumer
+     in group "sse-publisher" with the publisher-side DTO
+     deserializer. SSE is part of the same logical "Trading host"
+     deployment as Broker/Account so it legitimately imports their
+     outbound types. *)
   let register_publisher (registry : Server.Stream.t) =
-    Sse_publisher.attach registry ~events_amount_reserved ~events_reservation_released
-      ~events_reservation_rejected ~events_order_accepted ~events_order_rejected
-      ~events_order_unreachable
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.amount-reserved" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Amount_reserved_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_amount_reserved ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.reservation-released" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Reservation_released_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_reservation_released ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.reservation-rejected" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Reservation_rejected_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_reservation_rejected ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-accepted" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_accepted_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_accepted ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-rejected" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_rejected_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_rejected ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_unreachable_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_unreachable ~registry)
+    in
+    ()
   in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
   Server.Http.run ?setup:ws_setup ~bc_handlers ~sw ~env ~port ~broker:client

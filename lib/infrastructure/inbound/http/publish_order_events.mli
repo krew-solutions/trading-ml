@@ -1,12 +1,11 @@
-(** SSE projector: subscribes to every Account / Broker
-    integration-event bus and forwards each event to the [order]
-    SSE channel of [registry] as a discriminated envelope:
+(** SSE projector: per-event-type bus callbacks that forward each
+    event to the [order] SSE channel of [registry] as a discriminated
+    envelope:
 
     {[ { "kind": <variant>, "payload": <event-dto-yojson> } ]}
 
-    Functor over {!Bus.Event_bus.S} — composition root applies it
-    with whichever concrete bus implementation is in use
-    (in-memory today, Kafka tomorrow). *)
+    Bus-agnostic. Each [handle_*] function is registered as the
+    callback for the matching consumer at the composition root. *)
 
 module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
 module Reservation_released =
@@ -17,14 +16,9 @@ module Order_accepted = Broker_integration_events.Order_accepted_integration_eve
 module Order_rejected = Broker_integration_events.Order_rejected_integration_event
 module Order_unreachable = Broker_integration_events.Order_unreachable_integration_event
 
-module Make (Bus : Bus.Event_bus.S) : sig
-  val attach :
-    Stream.t ->
-    events_amount_reserved:Amount_reserved.t Bus.t ->
-    events_reservation_released:Reservation_released.t Bus.t ->
-    events_reservation_rejected:Reservation_rejected.t Bus.t ->
-    events_order_accepted:Order_accepted.t Bus.t ->
-    events_order_rejected:Order_rejected.t Bus.t ->
-    events_order_unreachable:Order_unreachable.t Bus.t ->
-    unit
-end
+val handle_amount_reserved : registry:Stream.t -> Amount_reserved.t -> unit
+val handle_reservation_released : registry:Stream.t -> Reservation_released.t -> unit
+val handle_reservation_rejected : registry:Stream.t -> Reservation_rejected.t -> unit
+val handle_order_accepted : registry:Stream.t -> Order_accepted.t -> unit
+val handle_order_rejected : registry:Stream.t -> Order_rejected.t -> unit
+val handle_order_unreachable : registry:Stream.t -> Order_unreachable.t -> unit

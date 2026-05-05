@@ -7,8 +7,7 @@
   core common decimal
   broker_queries
   broker
-  broker_integration_events
-  bus)
+  broker_integration_events)
  (preprocess
   (pps ppx_yojson_conv))
  (flags

@@ -6,7 +6,6 @@
   ppx_yojson_conv_lib
   core
   decimal
-  bus
   portfolio_management_queries
   portfolio_management_commands)
  (preprocess (pps ppx_yojson_conv))

@@ -3,8 +3,8 @@
 let () =
   Alcotest.run "trading-shared-unit"
     [
-      ("command_bus", Command_bus_test.tests);
-      ("event_bus", Event_bus_test.tests);
+      ("bus", Bus_test.tests);
+      ("in_memory", In_memory_test.tests);
       ("decimal", Decimal_test.tests);
       ("rop", Rop_test.tests);
       ("workflow_engine", Workflow_engine_test.tests);

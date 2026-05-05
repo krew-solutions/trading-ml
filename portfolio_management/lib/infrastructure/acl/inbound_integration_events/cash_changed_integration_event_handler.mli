@@ -1,10 +1,11 @@
-(** Handler for the inbound {!Cash_changed_integration_event.t}. *)
+(** Handler for the inbound {!Cash_changed_integration_event.t}.
+    Bus-agnostic — translates the inbound DTO into a
+    {!Portfolio_management_commands.Change_cash_command.t} and
+    dispatches via the supplied port. *)
 
 module Cash_changed = Cash_changed_integration_event
 
-module Make (Bus : Bus.Event_bus.S) : sig
-  val attach :
-    events:Cash_changed.t Bus.t ->
-    dispatch_change_cash:(Portfolio_management_commands.Change_cash_command.t -> unit) ->
-    Bus.subscription
-end
+val handle :
+  dispatch_change_cash:(Portfolio_management_commands.Change_cash_command.t -> unit) ->
+  Cash_changed.t ->
+  unit

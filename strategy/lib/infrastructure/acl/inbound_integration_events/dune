@@ -5,7 +5,6 @@
   yojson
   ppx_yojson_conv_lib
   strategy_inbound_queries
-  bus
   core
   decimal
   eio

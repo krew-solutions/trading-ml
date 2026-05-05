@@ -1,0 +1,7 @@
+(library
+ (name strategy_inbound_integration_events)
+ (public_name trading.strategy.acl.inbound_integration_events)
+ (libraries yojson ppx_yojson_conv_lib strategy_inbound_queries)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

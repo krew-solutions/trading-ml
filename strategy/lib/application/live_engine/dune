@@ -1,5 +1,5 @@
 (library
  (name live_engine)
  (public_name trading.live_engine)
- (libraries core common decimal account broker strategies engine log stream eio_stream eio)
+ (libraries core common decimal account broker strategies engine log stream)
  (flags (:standard -open Common)))

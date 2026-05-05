@@ -404,27 +404,24 @@ let cmd_serve args =
     | Some n ->
         Printf.sprintf " [engine: %s on %s]" n (Instrument.to_qualified engine_symbol)
     | None -> "");
-  (* Engine source is an [Eio.Stream] the WS sinks push candles into;
-     [Live_engine.run] reads from it in its own fiber (spawned below
-     inside the server's switch). This replaces the previous direct
-     on_bar callback with a proper pull-driven pipeline, decoupling
-     the WS producer from the engine consumer. *)
-  let engine_source = Option.map (fun _ -> Eio.Stream.create 64) engine_t in
+  (* Inbound ACL handler for [Bar_updated_integration_event]:
+     subscribes to the strategy-side mirror bus (created inside the
+     server's switch below), decodes events whose instrument matches
+     [engine_symbol] into [Candle.t], and exposes them as a
+     pull-driven [Stream.t] that [Live_engine.run] consumes. The
+     internal Eio.Stream is the only push→pull boundary on this
+     path — neither the engine nor anything below it sees Eio. *)
+  let module Bar_updated_inbound_handler =
+    Strategy_inbound_integration_events.Bar_updated_integration_event_handler.Make
+      (Bus.Event_bus)
+  in
+  let engine_handler =
+    Option.map (fun _ -> Bar_updated_inbound_handler.make ~capacity:64) engine_t
+  in
   let paper_sink =
     match paper_t with
     | Some p -> fun instrument candle -> Paper.Paper_broker.on_bar p ~instrument candle
     | None -> fun _ _ -> ()
-  in
-  let engine_sink =
-    match engine_source with
-    | Some src ->
-        fun instrument candle ->
-          if Instrument.equal instrument engine_symbol then Eio.Stream.add src candle
-    | None -> fun _ _ -> ()
-  in
-  let bar_sink instrument candle =
-    paper_sink instrument candle;
-    engine_sink instrument candle
   in
   (* Wrap any [Server.Http.live_setup] factory so that, when the
      server's switch opens, we also spawn the engine fiber on the
@@ -432,10 +429,10 @@ let cmd_serve args =
      — shutdown the server, the engine daemon winds down with it. *)
   let with_engine (base : sw:Eio.Switch.t -> Server.Http.live_setup) ~sw :
       Server.Http.live_setup =
-    (match (engine_t, engine_source) with
-    | Some e, Some src ->
+    (match (engine_t, engine_handler) with
+    | Some e, Some h ->
         Eio.Fiber.fork_daemon ~sw (fun () ->
-            Live_engine.run e ~source:src;
+            Live_engine.run e ~source:(Bar_updated_inbound_handler.source h);
             `Stop_daemon)
     | _ -> ());
     base ~sw
@@ -530,13 +527,9 @@ let cmd_serve args =
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->
-        Some
-          (with_engine
-             (finam_live_setup ~env ~paper_sink:bar_sink ~publish_bar_updated rest))
+        Some (with_engine (finam_live_setup ~env ~paper_sink ~publish_bar_updated rest))
     | Opened_bcs { rest; _ } ->
-        Some
-          (with_engine
-             (bcs_live_setup ~env ~paper_sink:bar_sink ~publish_bar_updated rest))
+        Some (with_engine (bcs_live_setup ~env ~paper_sink ~publish_bar_updated rest))
     | Opened_synthetic _ -> None
   in
   (* Stubbed margin policy: every instrument gets the same 50% initial
@@ -610,6 +603,51 @@ let cmd_serve args =
           Account_inbound_integration_events.Order_unreachable_integration_event.
             { reservation_id = ev.reservation_id; reason = ev.reason })
   in
+  (* ACL: bridge Broker-typed outbound bar events into Strategy-typed
+     inbound mirrors. Field-by-field copy is the entire translation
+     surface; the strategy-side bus + handler then deliver each
+     candle to [Live_engine.run] via the inbound ACL handler. *)
+  let events_strategy_inbound_bar_updated =
+    event_bus
+      ~yojson_of_t:
+        Strategy_inbound_integration_events.Bar_updated_integration_event.yojson_of_t
+      ~t_of_yojson:
+        Strategy_inbound_integration_events.Bar_updated_integration_event.t_of_yojson
+  in
+  let (_ : Bus.Event_bus.subscription) =
+    Bus.Event_bus.subscribe events_bar_updated (fun ev ->
+        Bus.Event_bus.publish events_strategy_inbound_bar_updated
+          Strategy_inbound_integration_events.Bar_updated_integration_event.
+            {
+              instrument =
+                Strategy_inbound_queries.Instrument_view_model.
+                  {
+                    ticker = ev.instrument.ticker;
+                    venue = ev.instrument.venue;
+                    isin = ev.instrument.isin;
+                    board = ev.instrument.board;
+                  };
+              timeframe = ev.timeframe;
+              bar =
+                Strategy_inbound_queries.Candle_view_model.
+                  {
+                    ts = ev.bar.ts;
+                    open_ = ev.bar.open_;
+                    high = ev.bar.high;
+                    low = ev.bar.low;
+                    close = ev.bar.close;
+                    volume = ev.bar.volume;
+                  };
+            })
+  in
+  (match engine_handler with
+  | Some h ->
+      let (_ : Bus.Event_bus.subscription) =
+        Bar_updated_inbound_handler.attach h ~events:events_strategy_inbound_bar_updated
+          ~instrument:engine_symbol
+      in
+      ()
+  | None -> ());
   (* Apply functors with the in-memory bus. Swap to Kafka =
      change [Bus.Event_bus] argument here, no consumer rewrites. *)
   let module Order_rejected_inbound_handler =

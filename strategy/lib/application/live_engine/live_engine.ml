@@ -254,12 +254,14 @@ let on_bar t (c : Candle.t) =
         reconcile_unsafe t)
 
 let run t ~source =
-  (* Stream driver: WS bridge pushes candles into [source], pipeline
-     threads state internally, we mirror each event into [t.state] and
-     route settled trades to the broker. Exactly the same
-     [Pipeline.run] that Backtest consumes via [to_list + aggregate] —
-     divergence in behaviour is impossible by construction. *)
-  Eio_stream.of_eio_stream source
+  (* Stream driver: pure pull-driven [source] is plugged into the
+     same [Pipeline.run] that Backtest consumes via [to_list +
+     aggregate] — divergence in behaviour is impossible by
+     construction. The Eio-stream → Stream conversion (when the
+     source ultimately comes from a push-driven channel like the
+     bus-fed inbound ACL handler) is the responsibility of the
+     producer, not Live_engine. *)
+  source
   |> Engine.Pipeline.run t.step_cfg t.state
   |> Stream.iter (fun event -> with_lock t (fun () -> apply_event t event))
 

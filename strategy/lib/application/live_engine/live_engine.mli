@@ -70,17 +70,18 @@ val on_bar : t -> Candle.t -> unit
     Intended for single-threaded test driving. Live deployments use
     {!run} which drains an Eio stream in its own fiber. *)
 
-val run : t -> source:Candle.t Eio.Stream.t -> unit
+val run : t -> source:Candle.t Stream.t -> unit
 (** Stream-driver variant: pulls bars from [source] and feeds them
-    into {!on_bar} one by one. Blocks (never returns on an
-    unbounded source) — intended to be invoked inside
-    [Eio.Fiber.fork_daemon], with WS bridges pushing upstream
-    candles into [source] from their own fibers.
+    into the engine pipeline one by one. Blocks (never returns on
+    an effectively-infinite source) — intended to be invoked inside
+    [Eio.Fiber.fork_daemon].
 
-    Semantically equivalent to
-    [Stream.iter (on_bar t) (Eio_stream.of_eio_stream source)] —
-    this is the boundary at which the pull-driven pure pipeline
-    meets Eio's push-driven concurrency. *)
+    [source] is the pure pull-driven {!Stream.t}; the conversion
+    from any push-driven Eio source happens upstream in the inbound
+    ACL handler (see
+    {!Strategy_inbound_integration_events.Bar_updated_integration_event_handler}).
+    Live_engine itself stays Eio-free, so it consumes both live
+    bus-fed sources and tests' [Stream.of_list] inputs unchanged. *)
 
 val position : t -> Decimal.t
 (** Running net position for [config.instrument] (positive = long,

@@ -7,6 +7,7 @@
  (public_names trading trading_export_training_data trading_train_logistic)
  (package trading)
  (libraries core common decimal account broker indicators strategies engine live_engine
+            account_factory
             account_commands account_integration_events account_inbound_integration_events
             account_inbound_http
             broker_commands broker_integration_events

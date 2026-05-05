@@ -453,28 +453,10 @@ let cmd_serve args =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
         t_of_yojson (Yojson.Safe.from_string s))
   in
-  (* Outbound producers + port closures. Each producer writes to a
-     publisher-namespaced URI; consumers register on the same URI
-     with their own deserializer for their own DTO type. The wire
-     JSON is the shared contract — no in-process bridges. *)
-  let publish_amount_reserved =
-    Bus.publish
-      (producer ~uri:"in-memory://account.amount-reserved"
-         ~yojson_of:
-           Account_integration_events.Amount_reserved_integration_event.yojson_of_t)
-  in
-  let publish_reservation_released =
-    Bus.publish
-      (producer ~uri:"in-memory://account.reservation-released"
-         ~yojson_of:
-           Account_integration_events.Reservation_released_integration_event.yojson_of_t)
-  in
-  let publish_reservation_rejected =
-    Bus.publish
-      (producer ~uri:"in-memory://account.reservation-rejected"
-         ~yojson_of:
-           Account_integration_events.Reservation_rejected_integration_event.yojson_of_t)
-  in
+  (* Outbound producers + port closures for Broker BC. Account's
+     three outbound producers live inside [Account_factory.build]
+     below — Account is autonomous about how its outbound DTOs hit
+     the wire. *)
   let publish_order_accepted =
     Bus.publish
       (producer ~uri:"in-memory://broker.order-accepted"
@@ -496,49 +478,6 @@ let cmd_serve args =
       (producer ~uri:"in-memory://broker.bar-updated"
          ~yojson_of:Broker_integration_events.Bar_updated_integration_event.yojson_of_t)
   in
-  let portfolio_ref = ref (Account.Portfolio.empty ~cash:(Decimal.of_int 1_000_000)) in
-  let next_reservation_id =
-    let counter = ref 0 in
-    fun () ->
-      incr counter;
-      !counter
-  in
-  (* Stubbed margin policy: every instrument gets the same 50% initial
-     margin and 50% haircut. Replaced with a static per-instrument
-     table or a live broker rate source when those land. *)
-  let margin_policy : Account.Portfolio.Margin_policy.t =
-   fun _instrument ->
-    { margin_pct = Decimal.of_string "0.5"; haircut = Decimal.of_string "0.5" }
-  in
-  (* Stubbed mark callback: no live price stream wired yet. *)
-  let mark : Core.Instrument.t -> Decimal.t option = fun _ -> None in
-  (* Workflow ports — direct calls, no command bus. ACL handlers and
-     HTTP handler dispatch through these. *)
-  let dispatch_reserve cmd =
-    match
-      Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
-        ~next_reservation_id ~slippage_buffer:(Decimal.of_string "0.005")
-        ~fee_rate:(Decimal.of_string "0.0005") ~margin_policy ~mark
-        ~publish_amount_reserved ~publish_reservation_rejected cmd
-    with
-    | Ok () -> ()
-    (* Business-rule failures already surfaced as
-       Reservation_rejected integration event by the workflow; the
-       Rop tail is discarded. *)
-    | Error _ -> ()
-  in
-  let dispatch_release ~reservation_id =
-    match
-      Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
-        ~publish_reservation_released
-        Account_commands.Release_command.{ reservation_id }
-    with
-    | Ok () -> ()
-    (* Idempotent compensation: a duplicated or late rejection
-       event for a reservation that's already been released is
-       silently dropped. *)
-    | Error _ -> ()
-  in
   let dispatch_submit_order =
     Broker_commands.Submit_order_command_handler.make ~broker:client
       ~publish_accepted:publish_order_accepted ~publish_rejected:publish_order_rejected
@@ -549,27 +488,6 @@ let cmd_serve args =
      held in scope so Submit_order_command_handler is fully
      constructed (typechecked end-to-end) and ready for whoever
      becomes its caller. *);
-  (* Account-side compensation subscribers: read broker's outbound
-     URIs with Account's own mirror DTO deserializer. Account stays
-     autonomous from Broker's OCaml types — JSON wire is the only
-     contract. *)
-  let _ : Bus.subscription =
-    Bus.subscribe
-      (consumer ~uri:"in-memory://broker.order-rejected" ~group:"account-compensation"
-         ~t_of_yojson:
-           Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson)
-      (Account_inbound_integration_events.Order_rejected_integration_event_handler.handle
-         ~dispatch_release)
-  in
-  let _ : Bus.subscription =
-    Bus.subscribe
-      (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"account-compensation"
-         ~t_of_yojson:
-           Account_inbound_integration_events.Order_unreachable_integration_event
-           .t_of_yojson)
-      (Account_inbound_integration_events.Order_unreachable_integration_event_handler
-       .handle ~dispatch_release)
-  in
   (* Strategy-side bar handler: read broker's bar-updated URI with
      Strategy's mirror DTO deserializer, push decoded candles to the
      handler's internal stream which Live_engine.run consumes. *)
@@ -591,10 +509,11 @@ let cmd_serve args =
     | last :: _ -> last.close
     | [] -> Decimal.zero
   in
-  let account_handler =
-    Account_inbound_http.Http.make_handler ~dispatch_reserve ~market_price
+  let account =
+    Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
+      ~market_price
   in
-  let bc_handlers = [ account_handler ] in
+  let bc_handlers = [ account.http_handler ] in
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->

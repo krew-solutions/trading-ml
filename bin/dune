@@ -9,6 +9,7 @@
  (libraries core common decimal account broker indicators strategies engine live_engine
             account_factory
             portfolio_management_factory
+            strategy_factory
             account_commands account_integration_events account_inbound_integration_events
             account_inbound_http
             broker_commands broker_integration_events

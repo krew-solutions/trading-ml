@@ -352,10 +352,12 @@ let cmd_serve args =
     | Some p -> Paper.Paper_broker.as_broker p
     | None -> source_client
   in
-  (* Live engine — optional; constructed only when --strategy is set.
-     Trades [engine_symbol] through [client] (which is Paper-wrapped
-     when --paper, so engine orders are simulated in that case). *)
-  let engine_t =
+  (* Resolve [--strategy] CLI arg into a built [Strategies.Strategy.t].
+     Registry lookup and per-strategy [--param] parsing stay in the
+     composition root; the actual engine construction
+     (Live_engine.make, the bar handler, the engine fiber) lives in
+     {!Strategy_factory.Factory.build} below. *)
+  let resolved_strategy =
     match strategy_name with
     | None -> None
     | Some name -> (
@@ -363,40 +365,13 @@ let cmd_serve args =
         | None ->
             Printf.eprintf "unknown --strategy: %s (use `trading list`)\n" name;
             exit 2
-        | Some spec ->
-            let strat = spec.build (strategy_params_from_args spec args) in
-            let equity = Decimal.of_int 1_000_000 in
-            let cfg : Live_engine.config =
-              {
-                broker = client;
-                strategy = strat;
-                instrument = engine_symbol;
-                initial_cash = equity;
-                limits = Engine.Risk.default_limits ~equity;
-                tif = Order.DAY;
-                fee_rate = Decimal.of_string "0.0005";
-                reconcile_every = 10;
-                max_drawdown_pct = 0.15;
-                rate_limit = None;
-              }
-            in
-            Some (Live_engine.make cfg))
+        | Some spec -> Some (spec.build (strategy_params_from_args spec args)))
   in
-  (* Wire Paper's fill events into Live_engine's reservation ledger.
-     In real live trading this will be driven by WS [order_update]
-     frames from Finam/BCS instead — Paper is the stand-in with the
-     same callback contract. *)
-  (match (paper_t, engine_t) with
-  | Some p, Some e ->
-      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
-          Live_engine.on_fill_event e
-            {
-              client_order_id = f.client_order_id;
-              actual_quantity = f.quantity;
-              actual_price = f.price;
-              actual_fee = f.fee;
-            })
-  | _ -> ());
+  let paper_sink =
+    match paper_t with
+    | Some p -> fun instrument candle -> Paper.Paper_broker.on_bar p ~instrument candle
+    | None -> fun _ _ -> ()
+  in
   Log.info "broker: %s%s (account=%s)%s" (Broker.name source_client)
     (if paper_mode then " [paper]" else "")
     (Option.value account ~default:"<none>")
@@ -404,41 +379,6 @@ let cmd_serve args =
     | Some n ->
         Printf.sprintf " [engine: %s on %s]" n (Instrument.to_qualified engine_symbol)
     | None -> "");
-  (* Inbound ACL handler for [Bar_updated_integration_event]: holds an
-     internal Eio.Stream that the bus subscriber pushes to and the
-     [Live_engine] fiber pulls from. Constructed before opening the
-     switch — [make] does no IO; the dispatch fiber (in In_memory
-     adapter) is what actually fires [handle] later, on the server's
-     switch. *)
-  let engine_handler =
-    Option.map
-      (fun _ ->
-        Strategy_inbound_integration_events.Bar_updated_integration_event_handler.make
-          ~capacity:64)
-      engine_t
-  in
-  let paper_sink =
-    match paper_t with
-    | Some p -> fun instrument candle -> Paper.Paper_broker.on_bar p ~instrument candle
-    | None -> fun _ _ -> ()
-  in
-  (* Wrap any [Server.Http.live_setup] factory so that, when the
-     server's switch opens, we also spawn the engine fiber on the
-     same switch. Engine's lifetime is thereby tied to the server's
-     — shutdown the server, the engine daemon winds down with it. *)
-  let with_engine (base : sw:Eio.Switch.t -> Server.Http.live_setup) ~sw :
-      Server.Http.live_setup =
-    (match (engine_t, engine_handler) with
-    | Some e, Some h ->
-        Eio.Fiber.fork_daemon ~sw (fun () ->
-            Live_engine.run e
-              ~source:
-                (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
-                 .source h);
-            `Stop_daemon)
-    | _ -> ());
-    base ~sw
-  in
   Eio.Switch.run @@ fun sw ->
   (* One [Bus.t] per process; one [In_memory] broker registered as the
      ["in-memory"] scheme. Replacing transport later is a one-line
@@ -488,22 +428,25 @@ let cmd_serve args =
      held in scope so Submit_order_command_handler is fully
      constructed (typechecked end-to-end) and ready for whoever
      becomes its caller. *);
-  (* Strategy-side bar handler: read broker's bar-updated URI with
-     Strategy's mirror DTO deserializer, push decoded candles to the
-     handler's internal stream which Live_engine.run consumes. *)
-  (match engine_handler with
-  | Some h ->
-      let _ : Bus.subscription =
-        Bus.subscribe
-          (consumer ~uri:"in-memory://broker.bar-updated" ~group:"strategy-engine"
-             ~t_of_yojson:
-               Strategy_inbound_integration_events.Bar_updated_integration_event
-               .t_of_yojson)
-          (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
-           .handle h ~instrument:engine_symbol)
-      in
-      ()
-  | None -> ());
+  let strategy =
+    Strategy_factory.Factory.build ~bus ~sw ~broker:client ~strategy:resolved_strategy
+      ~engine_symbol
+  in
+  (* Wire Paper's fill events into the engine via the factory's
+     [on_fill_event] port. In real live trading this will be driven
+     by WS [order_update] frames from Finam/BCS instead — Paper is
+     the stand-in with the same callback contract. *)
+  (match (paper_t, strategy.on_fill_event) with
+  | Some p, Some on_fill ->
+      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
+          on_fill
+            {
+              Live_engine.client_order_id = f.client_order_id;
+              actual_quantity = f.quantity;
+              actual_price = f.price;
+              actual_fee = f.fee;
+            })
+  | _ -> ());
   let market_price ~instrument =
     match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
     | last :: _ -> last.close
@@ -514,13 +457,13 @@ let cmd_serve args =
       ~market_price
   in
   let pm = Portfolio_management_factory.Factory.build ~bus in
-  let bc_handlers = [ account.http_handler; pm.http_handler ] in
+  let bc_handlers = [ account.http_handler; pm.http_handler; strategy.http_handler ] in
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->
-        Some (with_engine (finam_live_setup ~env ~paper_sink ~publish_bar_updated rest))
+        Some (finam_live_setup ~env ~paper_sink ~publish_bar_updated rest)
     | Opened_bcs { rest; _ } ->
-        Some (with_engine (bcs_live_setup ~env ~paper_sink ~publish_bar_updated rest))
+        Some (bcs_live_setup ~env ~paper_sink ~publish_bar_updated rest)
     | Opened_synthetic _ -> None
   in
   (* SSE projector subscribers: each event type gets its own consumer

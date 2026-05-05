@@ -1,0 +1,20 @@
+(library
+ (name portfolio_management_factory)
+ (public_name trading.portfolio_management.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  common
+  decimal
+  portfolio_management
+  portfolio_management_commands
+  portfolio_management_integration_events
+  portfolio_management_inbound_integration_events
+  portfolio_management_inbound_http
+  inbound_http
+  yojson
+  ppx_yojson_conv_lib)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

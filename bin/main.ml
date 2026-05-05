@@ -513,7 +513,8 @@ let cmd_serve args =
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
       ~market_price
   in
-  let bc_handlers = [ account.http_handler ] in
+  let pm = Portfolio_management_factory.Factory.build ~bus in
+  let bc_handlers = [ account.http_handler; pm.http_handler ] in
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->

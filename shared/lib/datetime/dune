@@ -1,3 +1,4 @@
 (library
  (name datetime)
- (public_name trading.datetime))
+ (public_name trading.datetime)
+ (libraries unix))

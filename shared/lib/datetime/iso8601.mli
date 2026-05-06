@@ -11,3 +11,8 @@ val parse : string -> int64
 
     Falls back to parsing the input as a plain int64 if the date
     pattern doesn't match; returns [0L] on total failure. *)
+
+val format : int64 -> string
+(** Formats a UTC epoch-seconds int64 as
+    [YYYY-MM-DDTHH:MM:SSZ]. Inverse of {!parse} on the
+    canonical form. *)

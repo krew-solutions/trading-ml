@@ -10,3 +10,8 @@ let parse (s : string) : int64 =
         let days = (era * 146097) + doe - 719468 in
         Int64.(add (mul (of_int days) 86400L) (of_int ((h * 3600) + (mi * 60) + se))))
   with _ -> ( try Int64.of_string s with _ -> 0L)
+
+let format (ts : int64) : string =
+  let t = Unix.gmtime (Int64.to_float ts) in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" (t.tm_year + 1900) (t.tm_mon + 1)
+    t.tm_mday t.tm_hour t.tm_min t.tm_sec

@@ -6,6 +6,8 @@
   ppx_yojson_conv_lib
   core
   decimal
+  datetime
+  portfolio_management
   portfolio_management_inbound_queries
   portfolio_management_commands)
  (preprocess (pps ppx_yojson_conv))

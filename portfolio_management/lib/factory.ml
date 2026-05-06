@@ -136,14 +136,21 @@ let build ~bus : t =
      these commands today. When PM HTTP routes / Strategy → PM bridge /
      a scheduler appear, these closures move into [Http.make_handler]
      and into bridge subscribers without changes here. *)
-  let _ = dispatch_set_target in
   let _ = dispatch_reconcile in
   let _ = dispatch_define_alpha_view in
-  (* Eager inbound subscriptions on Account-side outbound URIs.
-     Account does not publish these today; the subscriptions sit
-     inert until traffic arrives. Each consumer deserializes wire
-     JSON into PM's own mirror DTO — the wire is the only
-     cross-BC contract. *)
+  (* Pair-mean-reversion handler: drives any registered pair-mr
+     state on bars from [broker.bar-updated] and dispatches
+     [Set_target_command] on emitted proposals. Registry starts
+     empty; a future [Define_pair_mr_command] will populate it. *)
+  let pair_mr_handler =
+    Portfolio_management_inbound_integration_events.Bar_updated_integration_event_handler
+    .make ()
+  in
+  (* Eager inbound subscriptions on cross-BC outbound URIs. Today's
+     publishers don't fully exist yet; the subscriptions sit inert
+     until traffic arrives. Each consumer deserializes wire JSON
+     into PM's own mirror DTO — the wire is the only cross-BC
+     contract. *)
   let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
         t_of_yojson (Yojson.Safe.from_string s))
@@ -168,6 +175,16 @@ let build ~bus : t =
       (Portfolio_management_inbound_integration_events
        .Position_changed_integration_event_handler
        .handle ~dispatch_change_position)
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://broker.bar-updated" ~group:"portfolio-management-pair-mr"
+         ~t_of_yojson:
+           Portfolio_management_inbound_integration_events.Bar_updated_integration_event
+           .t_of_yojson)
+      (Portfolio_management_inbound_integration_events
+       .Bar_updated_integration_event_handler
+       .handle pair_mr_handler ~dispatch_set_target)
   in
   let http_handler = Portfolio_management_inbound_http.Http.make_handler () in
   { http_handler }

@@ -6,7 +6,7 @@
   ppx_yojson_conv_lib
   core
   decimal
-  portfolio_management_queries
+  portfolio_management_inbound_queries
   portfolio_management_commands)
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

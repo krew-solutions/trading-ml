@@ -10,7 +10,7 @@
 
 type t = {
   book_id : string;
-  instrument : Portfolio_management_queries.Instrument_view_model.t;
+  instrument : Portfolio_management_inbound_queries.Instrument_view_model.t;
   delta_qty : string;  (** signed Decimal string *)
   new_qty : string;
   avg_price : string;

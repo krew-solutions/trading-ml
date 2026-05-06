@@ -457,7 +457,10 @@ let cmd_serve args =
       ~market_price
   in
   let pm = Portfolio_management_factory.Factory.build ~bus in
-  let bc_handlers = [ account.http_handler; pm.http_handler; strategy.http_handler ] in
+  let broker_handler = Broker_inbound_http.Http.make_handler ~broker:client in
+  let bc_handlers =
+    [ account.http_handler; broker_handler; pm.http_handler; strategy.http_handler ]
+  in
   let ws_setup =
     match opened with
     | Opened_finam { rest; _ } ->

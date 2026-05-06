@@ -206,22 +206,6 @@ let route ~broker ~bc_handlers ~registry request body :
         | `OPTIONS, _ -> (204, `Response (string_response ""))
         | `GET, "/api/indicators" -> ok (json_response (Api.indicators_catalog ()))
         | `GET, "/api/strategies" -> ok (json_response (Api.strategies_catalog ()))
-        | `GET, "/api/exchanges" ->
-            let venues =
-              try Broker.venues broker
-              with e ->
-                Log.warn "%s venues failed: %s" (Broker.name broker)
-                  (Printexc.to_string e);
-                []
-            in
-            let j : Yojson.Safe.t =
-              `Assoc
-                [
-                  ( "exchanges",
-                    `List (List.map (fun m -> `String (Mic.to_string m)) venues) );
-                ]
-            in
-            ok (json_response j)
         | `GET, "/api/candles" ->
             let instrument = Instrument.of_qualified (get_query uri "symbol") in
             let n = get_query_int uri "n" 500 in
@@ -235,19 +219,6 @@ let route ~broker ~bc_handlers ~registry request body :
         | `POST, "/api/backtest" ->
             let body = Eio.Flow.read_all body in
             ok (json_response (run_backtest broker body))
-        | `GET, "/api/orders" ->
-            let orders = Broker.get_orders broker in
-            ok (json_response (Api.orders_json orders))
-        | `GET, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/"
-          ->
-            let cid = String.sub path 12 (String.length path - 12) in
-            let o = Broker.get_order broker ~client_order_id:cid in
-            ok (json_response (Api.order_json o))
-        | `DELETE, path
-          when String.length path > 12 && String.sub path 0 12 = "/api/orders/" ->
-            let cid = String.sub path 12 (String.length path - 12) in
-            let o = Broker.cancel_order broker ~client_order_id:cid in
-            ok (json_response (Api.order_json o))
         | `GET, "/" | `GET, "/health" ->
             ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
         | _ -> (404, `Response (string_response ~status:`Not_found "not found")))

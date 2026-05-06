@@ -118,14 +118,6 @@ let indicators_catalog () : Yojson.Safe.t =
            ])
        Indicators.Registry.specs)
 
-let order_kind_json (k : Order.kind) : Yojson.Safe.t =
-  project (module Order_kind_view_model) k
-
-let order_json (o : Order.t) : Yojson.Safe.t = project (module Order_view_model) o
-
-let orders_json (os : Order.t list) : Yojson.Safe.t =
-  `Assoc [ ("orders", `List (List.map order_json os)) ]
-
 (** Accept either JSON int or float for numeric fields — UI uses float,
     CLI may send ints for lot-sized quantities. *)
 let to_decimal (j : Yojson.Safe.t) : Decimal.t =

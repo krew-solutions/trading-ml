@@ -1,0 +1,16 @@
+(** Why3 companion for [z_score.mli] — finite real wrapper. Why3's real
+    type is naturally finite, so the structural lemma is just identity
+    over the projection. *)
+
+module Z_score
+  use real.RealInfix
+  use real.Abs as RA
+
+  type t
+
+  function to_real (z: t) : real
+
+  function abs_ (z: t) : real = RA.abs (to_real z)
+
+  lemma abs_nonneg : forall z: t. abs_ z >=. 0.0
+end

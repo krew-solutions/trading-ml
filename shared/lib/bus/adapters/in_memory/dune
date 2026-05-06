@@ -1,0 +1,4 @@
+(library
+ (name in_memory)
+ (public_name trading.bus.in_memory)
+ (libraries bus eio logs))

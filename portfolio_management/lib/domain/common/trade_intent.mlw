@@ -1,0 +1,25 @@
+(** Why3 companion for [trade_intent.mli] — VO record. The [.ml] smart
+    constructors (none yet) and the producer ([Reconciliation.diff])
+    guarantee [quantity > 0]; the lemma below states that property as
+    a consumer-side reading guide. *)
+
+module Trade_intent
+  use int.Int
+  use decimal.Decimal
+  use side.Side
+
+  type book_id
+  type instrument
+
+  type t = {
+    book_id    : book_id;
+    instrument : instrument;
+    side       : Side.t;
+    quantity   : Decimal.t;
+  }
+
+  (** Producer-imposed invariant — every [t] returned by
+      [Reconciliation.diff] satisfies [quantity > 0]. Stated as a
+      predicate; producers prove it, consumers may rely on it. *)
+  predicate well_formed (i: t) = raw i.quantity > 0
+end

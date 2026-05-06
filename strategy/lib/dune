@@ -1,0 +1,26 @@
+(library
+ (name strategy_factory)
+ (public_name trading.strategy.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  common
+  decimal
+  broker
+  engine
+  strategies
+  live_engine
+  strategy_inbound_integration_events
+  strategy_inbound_queries
+  strategy_inbound_http
+  inbound_http
+  yojson
+  ppx_yojson_conv_lib
+  eio)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Common)))

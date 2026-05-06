@@ -1,0 +1,103 @@
+(** Why3 verification companion for [decimal.mli].
+    Axiomatizes the contracts declared in the [.mli] as pure logical
+    functions and derives downstream algebraic laws.
+
+    The [.ml] implementation is NOT re-proved here — we take the
+    contracts (zero, add, sub, neg, is_zero, div) as given and prove
+    that they imply the expected algebraic behaviour.
+
+    Run:  why3 prove -P alt-ergo lib/domain/core/decimal.mlw  *)
+
+module Decimal
+  use int.Int
+  use int.ComputerDivision
+  use bool.Bool
+
+  type t
+
+  (** Logical projection, matching [(*@ model raw : integer *)] in the .mli. *)
+  function raw (x: t) : int
+
+  (** [t] is determined by its raw integer view — injectivity axiom.
+      Implementation (int64) satisfies it trivially; here it's an axiom
+      because [t] is abstract. *)
+  axiom raw_inj : forall a b: t. raw a = raw b -> a = b
+
+  (** Pure logical versions of the contracts. Each [function] symbol
+      represents the specification, not the runtime implementation. *)
+
+  function zero : t
+  axiom zero_raw : raw zero = 0
+
+  function add (a b: t) : t
+  axiom add_raw : forall a b: t. raw (add a b) = raw a + raw b
+
+  function sub (a b: t) : t
+  axiom sub_raw : forall a b: t. raw (sub a b) = raw a - raw b
+
+  function neg (a: t) : t
+  axiom neg_raw : forall a: t. raw (neg a) = - raw a
+
+  predicate is_zero (a: t) = raw a = 0
+  predicate is_positive (a: t) = raw a > 0
+  predicate is_negative (a: t) = raw a < 0
+
+  (** [unit_], [int64_max] are concrete bounds used to state the
+      preconditions of [mul] / [div]. *)
+  function unit_ : int = 100000000        (* 10^8 *)
+  function int64_max : int = 9223372036854775807
+
+  (** [mul] / [div] are partial — they may raise [Decimal_overflow] on
+      the OCaml side when the mathematically-exact result does not fit
+      in int64. Logically we model them as functions whose output is
+      well-defined when the precondition holds and unconstrained
+      otherwise. The OCaml implementation is widened to 128-bit
+      intermediate arithmetic, so the only failure mode is the final
+      narrow-back. *)
+
+  function mul_d (a b: t) : t
+
+  axiom mul_raw : forall a b: t.
+    let exact = div (raw a * raw b) unit_ in
+    -int64_max <= exact <= int64_max ->
+    raw (mul_d a b) = exact
+
+  function div_d (a b: t) : t
+
+  axiom div_raw : forall a b: t.
+    raw b <> 0 ->
+    let exact = div (raw a * unit_) (raw b) in
+    -int64_max <= exact <= int64_max ->
+    raw (div_d a b) = exact
+
+  (** Derived algebraic laws — proved by [alt-ergo] from the axioms above. *)
+
+  lemma add_comm : forall a b: t.
+    add a b = add b a
+
+  lemma add_assoc : forall a b c: t.
+    add (add a b) c = add a (add b c)
+
+  lemma add_zero_right : forall a: t.
+    add a zero = a
+
+  lemma add_zero_left : forall a: t.
+    add zero a = a
+
+  lemma sub_self : forall a: t.
+    sub a a = zero
+
+  lemma sub_zero : forall a: t.
+    sub a zero = a
+
+  lemma neg_involution : forall a: t.
+    neg (neg a) = a
+
+  lemma add_neg : forall a: t.
+    add a (neg a) = zero
+
+  lemma is_zero_zero : is_zero zero
+
+  lemma is_zero_exhaustive : forall a: t.
+    is_zero a \/ is_positive a \/ is_negative a
+end

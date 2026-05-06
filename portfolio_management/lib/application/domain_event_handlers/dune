@@ -1,0 +1,9 @@
+(library
+ (name portfolio_management_domain_event_handlers)
+ (public_name trading.portfolio_management.domain_event_handlers)
+ (libraries
+  core
+  decimal
+  portfolio_management
+  portfolio_management_queries
+  portfolio_management_integration_events))

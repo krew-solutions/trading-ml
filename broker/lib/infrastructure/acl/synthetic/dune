@@ -1,4 +1,4 @@
 (library
  (name synthetic)
  (public_name trading.synthetic)
- (libraries core broker uuidm))
+ (libraries core decimal broker uuidm))

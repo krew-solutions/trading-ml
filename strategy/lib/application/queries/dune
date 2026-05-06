@@ -1,0 +1,9 @@
+(library
+ (name queries)
+ (public_name trading.queries)
+ (libraries yojson ppx_yojson_conv_lib core common decimal engine account_queries)
+ (preprocess (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Common)))

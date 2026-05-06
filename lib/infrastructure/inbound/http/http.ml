@@ -9,26 +9,8 @@
 
 open Core
 
-let json_response ?(status = `OK) (j : Yojson.Safe.t) =
-  let body = Cohttp_eio.Body.of_string (Yojson.Safe.to_string j) in
-  let headers =
-    Cohttp.Header.of_list
-      [
-        ("Content-Type", "application/json");
-        ("Access-Control-Allow-Origin", "*");
-        ("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        ("Access-Control-Allow-Headers", "Content-Type");
-      ]
-  in
-  Cohttp_eio.Server.respond ~status ~headers ~body ()
-
-let string_response ?(status = `OK) s =
-  let body = Cohttp_eio.Body.of_string s in
-  let headers =
-    Cohttp.Header.of_list
-      [ ("Content-Type", "text/plain"); ("Access-Control-Allow-Origin", "*") ]
-  in
-  Cohttp_eio.Server.respond ~status ~headers ~body ()
+let json_response = Inbound_http.Response.json
+let string_response = Inbound_http.Response.text
 
 let get_query uri k =
   match Uri.get_query_param uri k with
@@ -197,75 +179,56 @@ let sse_expert (registry : Stream.t) ~bar_keys =
       Log.info "SSE close id=%d" subscriber.id )
 
 (** Pure routing: given method+path, return (status, action). Kept
-    separate from request logging so [handler] can log uniformly. *)
-let route broker registry request body : int * Cohttp_eio.Server.response_action =
+    separate from request logging so [handler] can log uniformly.
+    [bc_handlers] are tried first (in order); the built-in match
+    below covers cross-cutting routes that don't belong to any
+    Bounded Context (catalogs, candles, SSE, backtest, health) plus
+    the not-yet-extracted broker-side order queries. *)
+let route ~broker ~bc_handlers ~registry request body :
+    int * Cohttp_eio.Server.response_action =
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
   let meth = Cohttp.Request.meth request in
   let ok r = (200, `Response r) in
+  let try_bc () =
+    List.fold_left
+      (fun acc (h : Inbound_http.Route.handler) ->
+        match acc with
+        | Some _ -> acc
+        | None -> h request body)
+      None bc_handlers
+  in
   try
-    match (meth, path) with
-    | `OPTIONS, _ -> (204, `Response (string_response ""))
-    | `GET, "/api/indicators" -> ok (json_response (Api.indicators_catalog ()))
-    | `GET, "/api/strategies" -> ok (json_response (Api.strategies_catalog ()))
-    | `GET, "/api/exchanges" ->
-        let venues =
-          try Broker.venues broker
-          with e ->
-            Log.warn "%s venues failed: %s" (Broker.name broker) (Printexc.to_string e);
-            []
-        in
-        let j : Yojson.Safe.t =
-          `Assoc
-            [
-              ("exchanges", `List (List.map (fun m -> `String (Mic.to_string m)) venues));
-            ]
-        in
-        ok (json_response j)
-    | `GET, "/api/candles" ->
-        let instrument = Instrument.of_qualified (get_query uri "symbol") in
-        let n = get_query_int uri "n" 500 in
-        let timeframe = parse_timeframe (get_query uri "timeframe") in
-        ok
-          (json_response
-             (Api.candles_json (fetch_candles broker ~instrument ~n ~timeframe)))
-    | `GET, "/api/stream" ->
-        let bar_keys = parse_bars_param (get_query uri "bars") in
-        (200, `Expert (sse_expert registry ~bar_keys))
-    | `POST, "/api/backtest" ->
-        let body = Eio.Flow.read_all body in
-        ok (json_response (run_backtest broker body))
-    | `GET, "/api/orders" ->
-        let orders = Broker.get_orders broker in
-        ok (json_response (Api.orders_json orders))
-    | `POST, "/api/orders" ->
-        let body = Eio.Flow.read_all body in
-        let req = Api.place_order_of_json (Yojson.Safe.from_string body) in
-        let o =
-          Broker.place_order broker ~instrument:req.instrument ~side:req.side
-            ~quantity:req.quantity ~kind:req.kind ~tif:req.tif
-            ~client_order_id:req.client_order_id
-        in
-        ok (json_response (Api.order_json o))
-    | `GET, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/" ->
-        let cid = String.sub path 12 (String.length path - 12) in
-        let o = Broker.get_order broker ~client_order_id:cid in
-        ok (json_response (Api.order_json o))
-    | `DELETE, path when String.length path > 12 && String.sub path 0 12 = "/api/orders/"
-      ->
-        let cid = String.sub path 12 (String.length path - 12) in
-        let o = Broker.cancel_order broker ~client_order_id:cid in
-        ok (json_response (Api.order_json o))
-    | `GET, "/" | `GET, "/health" ->
-        ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
-    | _ -> (404, `Response (string_response ~status:`Not_found "not found"))
+    match try_bc () with
+    | Some r -> r
+    | None -> (
+        match (meth, path) with
+        | `OPTIONS, _ -> (204, `Response (string_response ""))
+        | `GET, "/api/indicators" -> ok (json_response (Api.indicators_catalog ()))
+        | `GET, "/api/strategies" -> ok (json_response (Api.strategies_catalog ()))
+        | `GET, "/api/candles" ->
+            let instrument = Instrument.of_qualified (get_query uri "symbol") in
+            let n = get_query_int uri "n" 500 in
+            let timeframe = parse_timeframe (get_query uri "timeframe") in
+            ok
+              (json_response
+                 (Api.candles_json (fetch_candles broker ~instrument ~n ~timeframe)))
+        | `GET, "/api/stream" ->
+            let bar_keys = parse_bars_param (get_query uri "bars") in
+            (200, `Expert (sse_expert registry ~bar_keys))
+        | `POST, "/api/backtest" ->
+            let body = Eio.Flow.read_all body in
+            ok (json_response (run_backtest broker body))
+        | `GET, "/" | `GET, "/health" ->
+            ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
+        | _ -> (404, `Response (string_response ~status:`Not_found "not found")))
   with e ->
     ( 500,
       `Response
         (json_response ~status:`Internal_server_error
            (`Assoc [ ("error", `String (Printexc.to_string e)) ])) )
 
-let handler broker registry _conn request body =
+let handler ~broker ~bc_handlers ~registry _conn request body =
   let t0 = Unix.gettimeofday () in
   let uri = Cohttp.Request.uri request in
   let meth_str = Cohttp.Code.string_of_method (Cohttp.Request.meth request) in
@@ -273,7 +236,7 @@ let handler broker registry _conn request body =
     let q = Uri.query uri in
     if q = [] then Uri.path uri else Uri.path uri ^ "?" ^ Uri.encoded_of_query q
   in
-  let status, action = route broker registry request body in
+  let status, action = route ~broker ~bc_handlers ~registry request body in
   let dt_ms = (Unix.gettimeofday () -. t0) *. 1000. in
   (match action with
   | `Expert _ ->
@@ -300,8 +263,15 @@ let no_live_setup : live_setup =
     bind = (fun _ -> ());
   }
 
-let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~broker () =
-  Eio.Switch.run @@ fun sw ->
+let run
+    ?(setup = fun ~sw:_ -> no_live_setup)
+    ?(bc_handlers = [])
+    ~sw
+    ~env
+    ~port
+    ~broker
+    ~(register_publisher : Stream.t -> unit)
+    () =
   let s = setup ~sw in
   let fetch ~instrument ~n ~timeframe = fetch_candles broker ~instrument ~n ~timeframe in
   let registry =
@@ -309,11 +279,14 @@ let run ?(setup = fun ~sw:_ -> no_live_setup) ~env ~port ~broker () =
       ~fetch ()
   in
   s.bind registry;
+  register_publisher registry;
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw (Eio.Stdenv.net env)
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
   in
   let server =
-    Cohttp_eio.Server.make_response_action ~callback:(handler broker registry) ()
+    Cohttp_eio.Server.make_response_action
+      ~callback:(handler ~broker ~bc_handlers ~registry)
+      ()
   in
   Cohttp_eio.Server.run socket server ~on_error:raise

@@ -12,7 +12,7 @@ let of_yojson_flex (j : Yojson.Safe.t) : Candle.t =
   in
   let ts =
     match find [ "timestamp"; "time"; "t"; "ts" ] with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | `Int n -> Int64.of_int n
     | `Intlit s -> Int64.of_string s
     | _ -> 0L

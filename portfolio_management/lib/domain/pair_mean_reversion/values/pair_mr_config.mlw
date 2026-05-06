@@ -1,0 +1,27 @@
+(** Why3 companion for [pair_mr_config.mli] — invariants:
+    [window > 0], [|z_entry| > |z_exit|], [notional > 0]. *)
+
+module Pair_mr_config
+  use int.Int
+  use decimal.Decimal
+
+  type book_id
+  type pair
+  type hedge_ratio
+  type z_score
+
+  type t = {
+    book_id     : book_id;
+    pair        : pair;
+    hedge_ratio : hedge_ratio;
+    window      : int;
+    z_entry     : z_score;
+    z_exit      : z_score;
+    notional    : Decimal.t;
+  }
+
+  (** Structural-only model. Invariants ([window > 0],
+      [|z_entry| > |z_exit|], [notional > 0]) are enforced by the
+      OCaml smart constructor [Pair_mr_config.make]; downstream
+      lemmas can axiomatise them per their needs. *)
+end

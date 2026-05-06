@@ -158,11 +158,11 @@ function generateCandles({
     const volume = 500 + Math.floor(rng() * 5000);
     out.push({
       ts: startTs + i * tfSeconds,
-      open: round(price),
-      high: round(high),
-      low:  round(low),
-      close: round(close),
-      volume,
+      open:   moneyStr(price),
+      high:   moneyStr(high),
+      low:    moneyStr(low),
+      close:  moneyStr(close),
+      volume: intStr(volume),
     });
     price = close;
   }
@@ -170,6 +170,16 @@ function generateCandles({
 }
 
 const round = (x) => Math.round(x * 100) / 100;
+
+/** Canonical decimal string matching the OCaml `Core.Decimal.to_string`
+ *  output: trailing zeros trimmed, integer values printed without `.`.
+ *  Two-decimal precision is enough for the synthetic prices generated
+ *  here — kopeck level on equities. */
+const moneyStr = (x) => {
+  const n = round(x);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+};
+const intStr = (n) => String(n);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Plausible backtest result — just enough for the UI to render the panel
@@ -192,7 +202,7 @@ function runBacktest({ symbol, strategy, n = 500, timeframe = 'H1' }) {
     const noise = (rng() - 0.5) * initialCash * 0.03;
     equityCurve.push({
       ts: candles[i].ts,
-      equity: initialCash + (finalCash - initialCash) * progress + noise,
+      equity: moneyStr(initialCash + (finalCash - initialCash) * progress + noise),
     });
   }
 
@@ -201,22 +211,25 @@ function runBacktest({ symbol, strategy, n = 500, timeframe = 'H1' }) {
   for (let i = 0; i < numTrades; i++) {
     const idx = Math.floor(rng() * candles.length);
     const c = candles[idx];
+    /* c.close is already a moneyStr; convert back for the fee math
+       and re-emit as a money string. */
+    const closeNum = Number(c.close);
     fills.push({
       ts: c.ts,
       side: rng() > 0.5 ? 'BUY' : 'SELL',
-      quantity: 100,
+      quantity: intStr(100),
       price: c.close,
-      fee: round(c.close * 100 * 0.0005),
+      fee: moneyStr(closeNum * 100 * 0.0005),
       reason: `mock ${strategy} signal`,
     });
   }
 
   return {
     num_trades: numTrades,
-    total_return: totalReturn,
-    max_drawdown: maxDrawdown,
-    final_cash: round(finalCash),
-    realized_pnl: round(realizedPnl),
+    total_return: totalReturn,    // domain ratio, stays float on wire
+    max_drawdown: maxDrawdown,    // domain ratio, stays float on wire
+    final_cash: moneyStr(finalCash),
+    realized_pnl: moneyStr(realizedPnl),
     equity_curve: equityCurve,
     fills,
   };
@@ -304,19 +317,33 @@ const ordersBook = new Map();
 
 function ordersList() { return [...ordersBook.values()]; }
 
+/** All kind-specific price slots are present on the wire as either a
+ *  decimal string or explicit JSON `null`, mirroring how OCaml's
+ *  `ppx_yojson_conv` serialises `string option`. The mock fills in
+ *  the missing slots so downstream type-checks line up. */
+function normaliseKind(k) {
+  const base = { type: 'MARKET', price: null, stop_price: null, limit_price: null };
+  if (!k) return base;
+  return { ...base, ...k };
+}
+
 function placeOrderMock(body) {
   const cid = body?.client_order_id ?? `mock-${Date.now()}`;
+  /* Wire-shape body: quantity is a decimal string. We keep it as-is
+     in the response and echo it as `filled` (paper fills instantly).
+     Default to `"0"` if absent — strings everywhere on the wire. */
+  const qty = String(body?.quantity ?? '0');
   const order = {
     client_order_id: cid,
     id: cid,
     instrument: body?.symbol ?? 'SBER@MISX',
     side: body?.side ?? 'BUY',
-    quantity: Number(body?.quantity ?? 0),
-    filled: Number(body?.quantity ?? 0),
-    remaining: 0,
+    quantity:  qty,
+    filled:    qty,
+    remaining: '0',
     status: 'Filled',
     tif: body?.tif ?? 'DAY',
-    kind: body?.kind ?? { type: 'MARKET' },
+    kind: normaliseKind(body?.kind),
     ts: Math.floor(Date.now() / 1000),
   };
   ordersBook.set(cid, order);
@@ -332,7 +359,7 @@ function getOrderMock(cid) {
 function cancelOrderMock(cid) {
   const o = ordersBook.get(cid);
   if (!o) throw new Error(`no order ${cid}`);
-  const cancelled = { ...o, status: 'Cancelled', filled: 0, remaining: o.quantity };
+  const cancelled = { ...o, status: 'Cancelled', filled: '0', remaining: o.quantity };
   ordersBook.set(cid, cancelled);
   return cancelled;
 }

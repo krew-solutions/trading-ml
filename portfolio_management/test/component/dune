@@ -1,0 +1,12 @@
+(test
+ (name portfolio_management_component_runner)
+ (libraries
+  core
+  decimal
+  rop
+  portfolio_management
+  portfolio_management_commands
+  portfolio_management_integration_events
+  portfolio_management_queries
+  gherkin_edsl
+  alcotest))

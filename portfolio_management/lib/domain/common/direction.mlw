@@ -1,0 +1,24 @@
+(** Why3 companion for [direction.mli] — three-valued directional
+    bias with a sign-mapping function. *)
+
+module Direction
+  use int.Int
+
+  type t = Up | Down | Flat
+
+  function sign (d: t) : int =
+    match d with
+    | Up -> 1
+    | Down -> -1
+    | Flat -> 0
+    end
+
+  lemma sign_up   : sign Up   = 1
+  lemma sign_down : sign Down = -1
+  lemma sign_flat : sign Flat = 0
+
+  lemma sign_in_range : forall d: t. -1 <= sign d <= 1
+
+  lemma sign_zero_iff_flat : forall d: t.
+    sign d = 0 <-> d = Flat
+end

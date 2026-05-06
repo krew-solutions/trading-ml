@@ -1,7 +1,8 @@
 (library
  (name server)
  (public_name trading.server)
- (libraries core broker indicators strategies engine log
-            queries commands domain_event_handlers workflows
-            integration_events
-            cohttp-eio eio eio.unix yojson uri))
+ (libraries core common decimal broker indicators strategies engine log
+            queries broker_queries inbound_http
+            account_integration_events broker_integration_events
+            cohttp-eio eio eio.unix yojson uri)
+ (flags (:standard -open Common)))

@@ -1,0 +1,7 @@
+(test
+ (name portfolio_management_unit_runner)
+ (libraries core decimal portfolio_management alcotest))
+
+; Filenames globally unique within this test runner so the flat
+; namespace doesn't collide.
+(include_subdirs unqualified)

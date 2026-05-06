@@ -26,8 +26,8 @@ type t
 
 val make :
   ?initial_cash:Decimal.t ->
-  ?fee_rate:float ->
-  ?slippage_bps:float ->
+  ?fee_rate:Decimal.t ->
+  ?slippage_bps:Decimal.t ->
   ?participation_rate:float ->
   source:Broker.client ->
   unit ->
@@ -36,16 +36,16 @@ val make :
     {!Engine.Backtest.default_config}, so paper and backtest P&L are
     comparable out of the box.
 
-    [fee_rate] (default [0.0]) is a multiplier on fill notional
-    ([qty * price]) — set to [0.0005] to match the backtester's
-    5-bps commission model.
+    [fee_rate] (default {!Decimal.zero}) is a multiplier on fill
+    notional ([qty * price]) — set to [Decimal.of_string "0.0005"]
+    to match the backtester's 5-bps commission model.
 
-    [slippage_bps] (default [0.0]) shifts the fill price against the
-    trader on {!Market} and {!Stop} orders: buys pay [(1 + bps/1e4) *
-    price], sells receive [(1 - bps/1e4) * price]. {!Limit} and
-    {!Stop_limit} orders fill at their stated price and are not
-    slipped — a limit order that triggers has already locked in its
-    worst acceptable price.
+    [slippage_bps] (default {!Decimal.zero}) shifts the fill price
+    against the trader on {!Market} and {!Stop} orders: buys pay
+    [(1 + bps/1e4) * price], sells receive [(1 - bps/1e4) * price].
+    {!Limit} and {!Stop_limit} orders fill at their stated price
+    and are not slipped — a limit order that triggers has already
+    locked in its worst acceptable price.
 
     [participation_rate] (default [None] = unconstrained) caps how
     much of a bar's volume the engine is willing to consume, forcing
@@ -107,7 +107,7 @@ val on_fill : t -> (fill -> unit) -> unit
     actual broker numbers — Paper is the stand-in for a real WS
     fill stream, with identical semantics on the consumer side. *)
 
-val portfolio : t -> Engine.Portfolio.t
+val portfolio : t -> Account.Portfolio.t
 (** Current paper portfolio (cash + positions + realized PnL).
-    Updated on every fill using {!Engine.Portfolio.fill}. Exposed for
+    Updated on every fill using {!Account.Portfolio.fill}. Exposed for
     diagnostics, CLI order summaries and UI — not part of the port. *)

@@ -1,0 +1,14 @@
+(** Why3 companion for [reservation_released.mli] — Domain Event record. *)
+
+module Reservation_released
+  use int.Int
+  use side.Side
+
+  type instrument
+
+  type t = {
+    reservation_id : int;
+    side : Side.t;
+    instrument : instrument;
+  }
+end

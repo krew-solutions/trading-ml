@@ -1,0 +1,4 @@
+(library
+ (name inbound_http)
+ (public_name trading.inbound_http)
+ (libraries cohttp cohttp-eio eio yojson uri))

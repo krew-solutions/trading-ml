@@ -23,19 +23,19 @@ type t = {
   source : Broker.client;
   mutable book : (string * entry) list;
   mutable fills : fill list;
-  mutable portfolio : Engine.Portfolio.t;
+  mutable portfolio : Account.Portfolio.t;
   last_ts : (Instrument.t, int64) Hashtbl.t;
   mutex : Mutex.t;
-  fee_rate : float;
-  slippage_bps : float;
+  fee_rate : Decimal.t;
+  slippage_bps : Decimal.t;
   participation_rate : float option;
   mutable fill_listeners : (fill -> unit) list;
 }
 
 let make
     ?(initial_cash = Decimal.of_int 1_000_000)
-    ?(fee_rate = 0.0)
-    ?(slippage_bps = 0.0)
+    ?(fee_rate = Decimal.zero)
+    ?(slippage_bps = Decimal.zero)
     ?participation_rate
     ~source
     () =
@@ -43,7 +43,7 @@ let make
     source;
     book = [];
     fills = [];
-    portfolio = Engine.Portfolio.empty ~cash:initial_cash;
+    portfolio = Account.Portfolio.empty ~cash:initial_cash;
     last_ts = Hashtbl.create 8;
     mutex = Mutex.create ();
     fee_rate;
@@ -121,15 +121,20 @@ let is_slippable (k : Order.kind) =
   | Market | Stop _ -> true
   | Limit _ | Stop_limit _ -> false
 
+(** Convert basis-points (e.g. [Decimal.of_string "5"] = 0.05%)
+    into the [factor] applied to [price]: [1 ± bps / 10_000]. The
+    direction depends on side — buys pay up, sells receive less. *)
 let apply_slippage ~bps (side : Side.t) (price : Decimal.t) : Decimal.t =
-  if bps = 0.0 then price
+  if Decimal.is_zero bps then price
   else
+    let denom = Decimal.of_int 10_000 in
+    let bps_frac = Decimal.div bps denom in
     let factor =
       match side with
-      | Buy -> 1.0 +. (bps /. 10_000.0)
-      | Sell -> 1.0 -. (bps /. 10_000.0)
+      | Buy -> Decimal.add Decimal.one bps_frac
+      | Sell -> Decimal.sub Decimal.one bps_frac
     in
-    Decimal.mul price (Decimal.of_float factor)
+    Decimal.mul price factor
 
 (** How much of [remaining] can fill against bar [c], given the
     configured participation cap. With [None] (default), no cap. *)
@@ -150,8 +155,8 @@ let apply_fill t (e : entry) (c : Candle.t) (price_intent : Decimal.t) =
       else price_intent
     in
     let fee =
-      if t.fee_rate = 0.0 then Decimal.zero
-      else Decimal.mul (Decimal.mul qty price) (Decimal.of_float t.fee_rate)
+      if Decimal.is_zero t.fee_rate then Decimal.zero
+      else Decimal.mul (Decimal.mul qty price) t.fee_rate
     in
     let new_filled = Decimal.add o.filled qty in
     let new_remaining = Decimal.sub o.remaining qty in
@@ -179,7 +184,7 @@ let apply_fill t (e : entry) (c : Candle.t) (price_intent : Decimal.t) =
     in
     t.fills <- fill_rec :: t.fills;
     t.portfolio <-
-      Engine.Portfolio.fill t.portfolio ~instrument:o.instrument ~side:o.side
+      Account.Portfolio.fill t.portfolio ~instrument:o.instrument ~side:o.side
         ~quantity:qty ~price ~fee;
     (* Fire synchronous listeners (e.g., Live_engine's commit_fill
        handler). Call them in registration order — reverse the stack

@@ -1,40 +1,32 @@
-(** Publisher: projects {!Workflows.Place_order_workflow.event} values to
-    JSON via [Integration_events.*] DTOs and pushes each one to the SSE
-    [order] channel via {!Stream.publish_order}.
+module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
+module Reservation_released =
+  Account_integration_events.Reservation_released_integration_event
+module Reservation_rejected =
+  Account_integration_events.Reservation_rejected_integration_event
+module Order_accepted = Broker_integration_events.Order_accepted_integration_event
+module Order_rejected = Broker_integration_events.Order_rejected_integration_event
+module Order_unreachable = Broker_integration_events.Order_unreachable_integration_event
 
-    Wraps every event in a discriminated envelope:
-    [{ "kind": <variant>, "payload": <integration-event-dto> }]
-    The browser-side [addEventListener("order", ...)] handler branches
-    on [kind] to decide which UI region updates. *)
+let envelope kind payload : Yojson.Safe.t =
+  `Assoc [ ("kind", `String kind); ("payload", payload) ]
 
-let json_of_event : Workflows.Place_order_workflow.event -> Yojson.Safe.t = function
-  | Amount_reserved x ->
-      let module IE = Integration_events.Amount_reserved_integration_event in
-      `Assoc
-        [
-          ("kind", `String "amount_reserved"); ("payload", IE.yojson_of_t (IE.of_domain x));
-        ]
-  | Order_forwarded x ->
-      let module IE = Integration_events.Order_forwarded_integration_event in
-      `Assoc
-        [
-          ("kind", `String "order_forwarded"); ("payload", IE.yojson_of_t (IE.of_domain x));
-        ]
-  | Forward_rejected x ->
-      let module IE = Integration_events.Forward_rejected_integration_event in
-      `Assoc
-        [
-          ("kind", `String "forward_rejected");
-          ("payload", IE.yojson_of_t (IE.of_domain x));
-        ]
-  | Reservation_released x ->
-      let module IE = Integration_events.Reservation_released_integration_event in
-      `Assoc
-        [
-          ("kind", `String "reservation_released");
-          ("payload", IE.yojson_of_t (IE.of_domain x));
-        ]
+let publish ~registry kind to_yojson ev =
+  Stream.publish_order registry (envelope kind (to_yojson ev))
 
-let publish (registry : Stream.t) (events : Workflows.Place_order_workflow.event list) :
-    unit =
-  List.iter (fun e -> Stream.publish_order registry (json_of_event e)) events
+let handle_amount_reserved ~registry (ev : Amount_reserved.t) : unit =
+  publish ~registry "amount_reserved" Amount_reserved.yojson_of_t ev
+
+let handle_reservation_released ~registry (ev : Reservation_released.t) : unit =
+  publish ~registry "reservation_released" Reservation_released.yojson_of_t ev
+
+let handle_reservation_rejected ~registry (ev : Reservation_rejected.t) : unit =
+  publish ~registry "reservation_rejected" Reservation_rejected.yojson_of_t ev
+
+let handle_order_accepted ~registry (ev : Order_accepted.t) : unit =
+  publish ~registry "order_accepted" Order_accepted.yojson_of_t ev
+
+let handle_order_rejected ~registry (ev : Order_rejected.t) : unit =
+  publish ~registry "order_rejected" Order_rejected.yojson_of_t ev
+
+let handle_order_unreachable ~registry (ev : Order_unreachable.t) : unit =
+  publish ~registry "order_unreachable" Order_unreachable.yojson_of_t ev

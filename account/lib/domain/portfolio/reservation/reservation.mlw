@@ -1,0 +1,38 @@
+(** Why3 companion for [reservation.mli] — Entity invariants.
+    Models [reserved_qty] as a pure function of [side] and [cover_qty],
+    proving the case-analytic post-condition stated in the .mli's
+    Gospel annotation. *)
+
+module Reservation
+  use int.Int
+  use decimal.Decimal
+  use side.Side
+
+  (** Instrument identity is opaque at this level — see [position.mlw]
+      for the same convention. *)
+  type instrument
+
+  type t = {
+    id : int;
+    side : Side.t;
+    instrument : instrument;
+    cover_qty : Decimal.t;
+    open_qty : Decimal.t;
+    per_unit_collateral : Decimal.t;
+  }
+
+  (** [reserved_qty] per [.mli]: zero on Buy, cover_qty on Sell. *)
+  function reserved_qty (r: t) : Decimal.t =
+    match r.side with
+    | Side.Buy  -> Decimal.zero
+    | Side.Sell -> r.cover_qty
+    end
+
+  lemma reserved_qty_buy_is_zero :
+    forall r: t. r.side = Side.Buy ->
+      raw (reserved_qty r) = 0
+
+  lemma reserved_qty_sell_is_cover :
+    forall r: t. r.side = Side.Sell ->
+      raw (reserved_qty r) = raw r.cover_qty
+end

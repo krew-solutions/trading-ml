@@ -1,9 +1,24 @@
-(** Publisher of {!Workflows.Place_order_workflow} events to the SSE
-    [order] channel. *)
+(** SSE projector: per-event-type bus callbacks that forward each
+    event to the [order] SSE channel of [registry] as a discriminated
+    envelope:
 
-val json_of_event : Workflows.Place_order_workflow.event -> Yojson.Safe.t
-(** Project a single workflow event to its outbound JSON envelope. *)
+    {[ { "kind": <variant>, "payload": <event-dto-yojson> } ]}
 
-val publish : Stream.t -> Workflows.Place_order_workflow.event list -> unit
-(** Publish every event in [events] to the [order] channel of [registry]
-    in the order given. *)
+    Bus-agnostic. Each [handle_*] function is registered as the
+    callback for the matching consumer at the composition root. *)
+
+module Amount_reserved = Account_integration_events.Amount_reserved_integration_event
+module Reservation_released =
+  Account_integration_events.Reservation_released_integration_event
+module Reservation_rejected =
+  Account_integration_events.Reservation_rejected_integration_event
+module Order_accepted = Broker_integration_events.Order_accepted_integration_event
+module Order_rejected = Broker_integration_events.Order_rejected_integration_event
+module Order_unreachable = Broker_integration_events.Order_unreachable_integration_event
+
+val handle_amount_reserved : registry:Stream.t -> Amount_reserved.t -> unit
+val handle_reservation_released : registry:Stream.t -> Reservation_released.t -> unit
+val handle_reservation_rejected : registry:Stream.t -> Reservation_rejected.t -> unit
+val handle_order_accepted : registry:Stream.t -> Order_accepted.t -> unit
+val handle_order_rejected : registry:Stream.t -> Order_rejected.t -> unit
+val handle_order_unreachable : registry:Stream.t -> Order_unreachable.t -> unit

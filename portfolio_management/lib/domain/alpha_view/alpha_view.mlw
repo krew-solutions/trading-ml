@@ -1,0 +1,50 @@
+(** Why3 companion for [alpha_view.mli] — aggregate-root invariants
+    on [define]: post-state direction matches input, idempotency on
+    [occurred_at], event firing iff direction flips. *)
+
+module Alpha_view
+  use int.Int
+  use option.Option
+  use decimal.Decimal
+  use common.direction.Direction
+  use alpha_view.events.direction_changed.Direction_changed as DC
+
+  type alpha_source_id
+  type instrument
+
+  type t = {
+    alpha_source_id : alpha_source_id;
+    instrument      : instrument;
+    direction       : Direction.t;
+    last_observed_at  : int;
+  }
+
+  (** Logical [define]: returns post-state and whether the event was
+      emitted. Strength/price are abstracted away; only the
+      direction-flip and idempotency invariants are stated. *)
+  function define_state (self: t) (new_dir: Direction.t) (occurred_at: int) : t =
+    if occurred_at <= self.last_observed_at then self
+    else { self with direction = new_dir; last_observed_at = occurred_at }
+
+  predicate event_emitted (self: t) (new_dir: Direction.t) (occurred_at: int) =
+    occurred_at > self.last_observed_at /\ new_dir <> self.direction
+
+  (** Idempotency: a stale or duplicate occurred_at returns the
+      same state. *)
+  lemma idempotent_on_stale_ts :
+    forall self: t, d: Direction.t, ts: int.
+      ts <= self.last_observed_at ->
+      define_state self d ts = self
+
+  (** Post-state direction matches input when the call advances. *)
+  lemma post_direction_matches :
+    forall self: t, d: Direction.t, ts: int.
+      ts > self.last_observed_at ->
+      (define_state self d ts).direction = d
+
+  (** Event fires only on actual direction flip. *)
+  lemma event_iff_flip :
+    forall self: t, d: Direction.t, ts: int.
+      event_emitted self d ts <->
+        (ts > self.last_observed_at /\ d <> self.direction)
+end

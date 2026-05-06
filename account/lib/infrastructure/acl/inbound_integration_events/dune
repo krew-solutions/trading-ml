@@ -1,0 +1,8 @@
+(library
+ (name account_inbound_integration_events)
+ (public_name trading.account.acl.inbound_integration_events)
+ (libraries yojson ppx_yojson_conv_lib core decimal queries broker_integration_events)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -1,0 +1,12 @@
+(test
+ (name account_component_runner)
+ (libraries
+  core
+  decimal
+  rop
+  account
+  account_commands
+  account_integration_events
+  queries
+  gherkin_edsl
+  alcotest))

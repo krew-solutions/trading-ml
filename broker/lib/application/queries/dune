@@ -1,0 +1,10 @@
+(library
+ (name broker_queries)
+ (public_name trading.broker.queries)
+ (libraries yojson ppx_yojson_conv_lib core common decimal)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Common)))

@@ -1,0 +1,14 @@
+(** Why3 companion for [actual_position.mli] — VO record. Carries no
+    behavioural lemmas; structural parity only. *)
+
+module Actual_position
+  use decimal.Decimal
+
+  type instrument
+
+  type t = {
+    instrument : instrument;
+    quantity   : Decimal.t;
+    avg_price  : Decimal.t;
+  }
+end

@@ -1,0 +1,26 @@
+(library
+ (name broker_factory)
+ (public_name trading.broker.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  common
+  decimal
+  broker
+  broker_commands
+  broker_integration_events
+  broker_inbound_http
+  finam
+  bcs
+  paper
+  inbound_http
+  server
+  log
+  eio
+  eio.unix
+  yojson
+  ppx_yojson_conv_lib)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Common)))

@@ -1,0 +1,15 @@
+(library
+ (name broker_inbound_http)
+ (public_name trading.broker.inbound_http)
+ (libraries
+  core
+  common
+  decimal
+  broker
+  broker_queries
+  inbound_http
+  cohttp
+  cohttp-eio
+  log
+  yojson)
+ (flags (:standard -open Common)))

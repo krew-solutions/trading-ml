@@ -1,0 +1,31 @@
+(** Why3 companion for [pair.mli] — ordered pair with distinct legs. *)
+
+module Pair
+  (** Instrument identity is opaque at this level; structural reasoning
+      doesn't depend on its concrete semantics. *)
+  type instrument
+
+  predicate inst_eq (a b: instrument)
+
+  axiom inst_eq_refl  : forall x: instrument. inst_eq x x
+  axiom inst_eq_sym   : forall x y: instrument. inst_eq x y -> inst_eq y x
+  axiom inst_eq_trans : forall x y z: instrument.
+    inst_eq x y -> inst_eq y z -> inst_eq x z
+
+  type t = { a : instrument; b : instrument }
+
+  (** A well-formed pair has distinct legs. *)
+  predicate well_formed (p: t) = not (inst_eq p.a p.b)
+
+  (** Pair equality is order-sensitive: same legs in the same slots. *)
+  predicate equal (p q: t) = inst_eq p.a q.a /\ inst_eq p.b q.b
+
+  lemma equal_refl  : forall p: t. equal p p
+  lemma equal_sym   : forall p q: t. equal p q -> equal q p
+  lemma equal_trans : forall p q r: t. equal p q -> equal q r -> equal p r
+
+  predicate contains (p: t) (x: instrument) = inst_eq p.a x \/ inst_eq p.b x
+
+  lemma contains_a : forall p: t. contains p p.a
+  lemma contains_b : forall p: t. contains p p.b
+end

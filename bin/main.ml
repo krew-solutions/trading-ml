@@ -182,99 +182,6 @@ let cmd_backtest args =
         (Decimal.to_string r.final.realized_pnl)
         (Decimal.to_string r.final.cash)
 
-(** Build a {!Server.Http.live_setup} that bridges Finam's WebSocket
-    feed into the SSE stream registry. Connection happens up-front on
-    the server's switch; per-key SUBSCRIBE/UNSUBSCRIBE messages flow
-    on subscriber lifecycle hooks; inbound BARS events fan out via
-    [Stream.push_from_upstream]. *)
-let finam_live_setup ~env ~paper_sink (rest : Finam.Rest.t) ~sw : Server.Http.live_setup =
-  let cfg = Finam.Rest.cfg rest in
-  let auth = Finam.Rest.auth rest in
-  let registry_ref : Server.Stream.t option ref = ref None in
-  (* Forward-declared to break the mutual dependency: the bridge's
-     event handler needs to know the bridge to look up active
-     timeframes, so we close over a ref that gets set right after
-     [make] returns. *)
-  let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
-  let on_event (ev : Finam.Ws.event) =
-    match ev with
-    | Bars { instrument; timeframe; bars } -> (
-        List.iter (fun candle -> paper_sink instrument candle) bars;
-        match (!registry_ref, timeframe) with
-        | Some r, Some tf ->
-            List.iter
-              (fun candle ->
-                Server.Stream.push_from_upstream r ~instrument ~timeframe:tf candle)
-              bars
-        | Some _, None -> (
-            (* No subscription_key in the frame — fall back to the
-            legacy scan of active subs for this instrument. *)
-            match !bridge_ref with
-            | None -> ()
-            | Some b -> (
-                let tfs = Finam.Ws_bridge.timeframes_for_instrument b instrument in
-                match !registry_ref with
-                | None -> ()
-                | Some r ->
-                    List.iter
-                      (fun candle ->
-                        List.iter
-                          (fun tf ->
-                            Server.Stream.push_from_upstream r ~instrument ~timeframe:tf
-                              candle)
-                          tfs)
-                      bars))
-        | None, _ -> ())
-    | Error_ev { code; type_; message } ->
-        Log.warn "[finam ws] error %d %s: %s" code type_ message
-    | Lifecycle { event; code; reason } ->
-        Log.info "[finam ws] %s (%d) %s" event code reason
-    | _ -> ()
-  in
-  let bridge = Finam.Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event in
-  bridge_ref := Some bridge;
-  Server.Http.
-    {
-      on_first =
-        (fun ~instrument ~timeframe ->
-          try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[finam ws] subscribe failed: %s" (Printexc.to_string e));
-      on_last =
-        (fun ~instrument ~timeframe ->
-          try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[finam ws] unsubscribe failed: %s" (Printexc.to_string e));
-      bind = (fun r -> registry_ref := Some r);
-    }
-
-(** Build a {!Server.Http.live_setup} for BCS. Unlike Finam, BCS
-    opens one socket per subscription, so the bridge defers connect
-    to [on_first] and tears down on [on_last]. The BARS fan-out
-    callback pushes directly into the registry via
-    [Stream.push_from_upstream]. *)
-let bcs_live_setup ~env ~paper_sink (rest : Bcs.Rest.t) ~sw : Server.Http.live_setup =
-  let cfg = Bcs.Rest.cfg rest in
-  let auth = Bcs.Rest.auth rest in
-  let bridge = Bcs.Ws_bridge.make ~env ~sw ~cfg ~auth in
-  let registry_ref : Server.Stream.t option ref = ref None in
-  let push instrument timeframe candle =
-    paper_sink instrument candle;
-    match !registry_ref with
-    | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
-    | None -> ()
-  in
-  Server.Http.
-    {
-      on_first =
-        (fun ~instrument ~timeframe ->
-          try Bcs.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe ~on_candle:push
-          with e -> Log.warn "[bcs ws] subscribe failed: %s" (Printexc.to_string e));
-      on_last =
-        (fun ~instrument ~timeframe ->
-          try Bcs.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[bcs ws] unsubscribe failed: %s" (Printexc.to_string e));
-      bind = (fun r -> registry_ref := Some r);
-    }
-
 let cmd_serve args =
   let port =
     match arg_value "--port" args with
@@ -341,18 +248,11 @@ let cmd_serve args =
     | other -> failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
   in
   let source_client = opened_client opened in
-  let paper_t =
-    if paper_mode then Some (Paper.Paper_broker.make ~source:source_client ()) else None
-  in
-  let client =
-    match paper_t with
-    | Some p -> Paper.Paper_broker.as_broker p
-    | None -> source_client
-  in
-  (* Live engine — optional; constructed only when --strategy is set.
-     Trades [engine_symbol] through [client] (which is Paper-wrapped
-     when --paper, so engine orders are simulated in that case). *)
-  let engine_t =
+  (* Resolve [--strategy] CLI arg into a built [Strategies.Strategy.t].
+     Registry lookup and per-strategy [--param] parsing stay in the
+     composition root; the actual engine construction lives in
+     {!Strategy_factory.Factory.build} below. *)
+  let resolved_strategy =
     match strategy_name with
     | None -> None
     | Some name -> (
@@ -360,40 +260,8 @@ let cmd_serve args =
         | None ->
             Printf.eprintf "unknown --strategy: %s (use `trading list`)\n" name;
             exit 2
-        | Some spec ->
-            let strat = spec.build (strategy_params_from_args spec args) in
-            let equity = Decimal.of_int 1_000_000 in
-            let cfg : Live_engine.config =
-              {
-                broker = client;
-                strategy = strat;
-                instrument = engine_symbol;
-                initial_cash = equity;
-                limits = Engine.Risk.default_limits ~equity;
-                tif = Order.DAY;
-                fee_rate = 0.0005;
-                reconcile_every = 10;
-                max_drawdown_pct = 0.15;
-                rate_limit = None;
-              }
-            in
-            Some (Live_engine.make cfg))
+        | Some spec -> Some (spec.build (strategy_params_from_args spec args)))
   in
-  (* Wire Paper's fill events into Live_engine's reservation ledger.
-     In real live trading this will be driven by WS [order_update]
-     frames from Finam/BCS instead — Paper is the stand-in with the
-     same callback contract. *)
-  (match (paper_t, engine_t) with
-  | Some p, Some e ->
-      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
-          Live_engine.on_fill_event e
-            {
-              client_order_id = f.client_order_id;
-              actual_quantity = f.quantity;
-              actual_price = f.price;
-              actual_fee = f.fee;
-            })
-  | _ -> ());
   Log.info "broker: %s%s (account=%s)%s" (Broker.name source_client)
     (if paper_mode then " [paper]" else "")
     (Option.value account ~default:"<none>")
@@ -401,52 +269,104 @@ let cmd_serve args =
     | Some n ->
         Printf.sprintf " [engine: %s on %s]" n (Instrument.to_qualified engine_symbol)
     | None -> "");
-  (* Engine source is an [Eio.Stream] the WS sinks push candles into;
-     [Live_engine.run] reads from it in its own fiber (spawned below
-     inside the server's switch). This replaces the previous direct
-     on_bar callback with a proper pull-driven pipeline, decoupling
-     the WS producer from the engine consumer. *)
-  let engine_source = Option.map (fun _ -> Eio.Stream.create 64) engine_t in
-  let paper_sink =
-    match paper_t with
-    | Some p -> fun instrument candle -> Paper.Paper_broker.on_bar p ~instrument candle
-    | None -> fun _ _ -> ()
+  Eio.Switch.run @@ fun sw ->
+  (* One [Bus.t] per process; one [In_memory] broker registered as
+     the ["in-memory"] scheme. Replacing transport later is a one-
+     line change to [Bus.register]; nothing else moves. *)
+  let bus = Bus.create () in
+  let in_memory_broker = In_memory.create ~sw in
+  Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
+  let consumer (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
+    Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
+        t_of_yojson (Yojson.Safe.from_string s))
   in
-  let engine_sink =
-    match engine_source with
-    | Some src ->
-        fun instrument candle ->
-          if Instrument.equal instrument engine_symbol then Eio.Stream.add src candle
-    | None -> fun _ _ -> ()
-  in
-  let bar_sink instrument candle =
-    paper_sink instrument candle;
-    engine_sink instrument candle
-  in
-  (* Wrap any [Server.Http.live_setup] factory so that, when the
-     server's switch opens, we also spawn the engine fiber on the
-     same switch. Engine's lifetime is thereby tied to the server's
-     — shutdown the server, the engine daemon winds down with it. *)
-  let with_engine (base : sw:Eio.Switch.t -> Server.Http.live_setup) ~sw :
-      Server.Http.live_setup =
-    (match (engine_t, engine_source) with
-    | Some e, Some src ->
-        Eio.Fiber.fork_daemon ~sw (fun () ->
-            Live_engine.run e ~source:src;
-            `Stop_daemon)
-    | _ -> ());
-    base ~sw
-  in
-  let ws_setup =
+  let rest : Broker_factory.Factory.rest =
     match opened with
-    | Opened_finam { rest; _ } ->
-        Some (with_engine (finam_live_setup ~env ~paper_sink:bar_sink rest))
-    | Opened_bcs { rest; _ } ->
-        Some (with_engine (bcs_live_setup ~env ~paper_sink:bar_sink rest))
-    | Opened_synthetic _ -> None
+    | Opened_finam { rest; _ } -> Finam rest
+    | Opened_bcs { rest; _ } -> Bcs rest
+    | Opened_synthetic _ -> Synthetic
   in
-  Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name client);
-  Server.Http.run ?setup:ws_setup ~env ~port ~broker:client ()
+  let broker = Broker_factory.Factory.build ~bus ~env ~source_client ~rest ~paper_mode in
+  let strategy =
+    Strategy_factory.Factory.build ~bus ~sw ~broker:broker.client
+      ~strategy:resolved_strategy ~engine_symbol
+  in
+  (* Wire Paper's fill events into the engine via the factory's
+     [on_fill_event] port. In real live trading this will be driven
+     by WS [order_update] frames from Finam/BCS instead — Paper is
+     the stand-in with the same callback contract. *)
+  (match (broker.paper_broker, strategy.on_fill_event) with
+  | Some p, Some on_fill ->
+      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
+          on_fill
+            {
+              Live_engine.client_order_id = f.client_order_id;
+              actual_quantity = f.quantity;
+              actual_price = f.price;
+              actual_fee = f.fee;
+            })
+  | _ -> ());
+  let account =
+    Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
+      ~market_price:broker.market_price
+  in
+  let pm = Portfolio_management_factory.Factory.build ~bus in
+  let bc_handlers =
+    [ account.http_handler; broker.http_handler; pm.http_handler; strategy.http_handler ]
+  in
+  (* SSE projector subscribers: each event type gets its own consumer
+     in group "sse-publisher" with the publisher-side DTO
+     deserializer. SSE is part of the same logical "Trading host"
+     deployment as Broker/Account so it legitimately imports their
+     outbound types. *)
+  let register_publisher (registry : Server.Stream.t) =
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.amount-reserved" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Amount_reserved_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_amount_reserved ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.reservation-released" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Reservation_released_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_reservation_released ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://account.reservation-rejected" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Account_integration_events.Reservation_rejected_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_reservation_rejected ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-accepted" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_accepted_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_accepted ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-rejected" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_rejected_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_rejected ~registry)
+    in
+    let _ : Bus.subscription =
+      Bus.subscribe
+        (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"sse-publisher"
+           ~t_of_yojson:
+             Broker_integration_events.Order_unreachable_integration_event.t_of_yojson)
+        (Server.Publish_order_events.handle_order_unreachable ~registry)
+    in
+    ()
+  in
+  Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name broker.client);
+  Server.Http.run ?setup:broker.ws_setup ~bc_handlers ~sw ~env ~port ~broker:broker.client
+    ~register_publisher ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
     server (default http://localhost:8080); the same surface the UI
@@ -470,11 +390,11 @@ let format_order (j : Yojson.Safe.t) : string =
   let cid = j |> member "client_order_id" |> to_string in
   let symbol = j |> member "instrument" |> to_string in
   let side = j |> member "side" |> to_string in
-  let qty = j |> member "quantity" |> to_float in
-  let filled = j |> member "filled" |> to_float in
+  let qty = j |> member "quantity" |> to_string in
+  let filled = j |> member "filled" |> to_string in
   let status = j |> member "status" |> to_string in
   let kind = j |> member "kind" |> member "type" |> to_string in
-  Printf.sprintf "%-24s %-14s %-4s qty=%-8g filled=%-8g %-6s %s" cid symbol side qty
+  Printf.sprintf "%-24s %-14s %-4s qty=%-8s filled=%-8s %-6s %s" cid symbol side qty
     filled kind status
 
 let cmd_orders_list ~env ~host () =
@@ -500,7 +420,7 @@ let cmd_orders_place ~env ~host args =
     [
       ("symbol", `String (get "symbol"));
       ("side", `String (String.uppercase_ascii (get "side")));
-      ("quantity", `Float (float_of_string (get "qty")));
+      ("quantity", `String (get "qty"));
       ("client_order_id", `String (get "cid"));
       ("tif", `String (Option.value (optional "tif") ~default:"DAY"));
     ]
@@ -509,18 +429,14 @@ let cmd_orders_place ~env ~host args =
     let k = String.uppercase_ascii (Option.value (optional "kind") ~default:"MARKET") in
     match k with
     | "MARKET" -> `Assoc [ ("type", `String "MARKET") ]
-    | "LIMIT" ->
-        `Assoc
-          [ ("type", `String "LIMIT"); ("price", `Float (float_of_string (get "price"))) ]
-    | "STOP" ->
-        `Assoc
-          [ ("type", `String "STOP"); ("price", `Float (float_of_string (get "price"))) ]
+    | "LIMIT" -> `Assoc [ ("type", `String "LIMIT"); ("price", `String (get "price")) ]
+    | "STOP" -> `Assoc [ ("type", `String "STOP"); ("price", `String (get "price")) ]
     | "STOP_LIMIT" ->
         `Assoc
           [
             ("type", `String "STOP_LIMIT");
-            ("stop_price", `Float (float_of_string (get "stop")));
-            ("limit_price", `Float (float_of_string (get "price")));
+            ("stop_price", `String (get "stop"));
+            ("limit_price", `String (get "price"));
           ]
     | other ->
         Printf.eprintf "unknown --kind %s\n" other;

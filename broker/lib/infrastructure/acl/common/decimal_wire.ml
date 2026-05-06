@@ -1,5 +1,3 @@
-open Core
-
 let yojson_of_t x : Yojson.Safe.t = `String (Decimal.to_string x)
 
 let yojson_of_t_wrapped x : Yojson.Safe.t =

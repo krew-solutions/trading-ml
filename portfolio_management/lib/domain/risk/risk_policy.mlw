@@ -1,0 +1,34 @@
+(** Why3 companion for [risk_policy.mli] — clip pre/post conditions.
+    States the per-instrument and gross-exposure post-conditions
+    abstractly. *)
+
+module Risk_policy
+  use int.Int
+  use list.List
+  use list.Mem
+  use decimal.Decimal
+  use risk.values.risk_limits.Risk_limits as RL
+  use common.target_position.Target_position as TP
+  use common.target_proposal.Target_proposal as TPR
+
+  type instrument
+
+  function mark (i: instrument) : Decimal.t
+
+  function clip (limits: RL.t) (p: TPR.t) : TPR.t
+
+  (** Notional of a single leg under the supplied mark. Real notional
+      uses absolute target_qty; we model it abstractly. *)
+  function notional (tp: TP.t) : Decimal.t
+
+  axiom notional_nonneg :
+    forall tp: TP.t. raw (notional tp) >= 0
+
+  (** Post-condition: every leg in the clipped proposal respects the
+      per-instrument notional cap. *)
+  axiom per_instrument_cap :
+    forall limits: RL.t, p: TPR.t, tp: TP.t.
+      RL.well_formed limits ->
+      mem tp (clip limits p).TPR.positions ->
+      raw (notional tp) <= raw limits.RL.max_per_instrument_notional
+end

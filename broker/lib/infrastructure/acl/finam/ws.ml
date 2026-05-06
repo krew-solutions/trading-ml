@@ -207,7 +207,7 @@ let event_of_json (j : Yojson.Safe.t) : event =
               let ask = Dto.decimal_field "ask" q in
               let ts =
                 match member "timestamp" q with
-                | `String s -> Infra_common.Iso8601.parse s
+                | `String s -> Datetime.Iso8601.parse s
                 | `Int n -> Int64.of_int n
                 | _ -> 0L
               in

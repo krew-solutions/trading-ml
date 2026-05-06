@@ -219,7 +219,7 @@ let bcs_order_of_json cfg (j : Yojson.Safe.t) : Order.t =
   in
   let ts =
     match member "createdAt" j with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
   {
@@ -449,7 +449,7 @@ let bcs_execution_of_json (j : Yojson.Safe.t) : string * Order.execution =
   in
   let ts =
     match member "tradeDateTime" j with
-    | `String s -> Infra_common.Iso8601.parse s
+    | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
   ( int_or_str "orderNum",

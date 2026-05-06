@@ -1,0 +1,4 @@
+(library
+ (name account_domain_event_handlers)
+ (public_name trading.account.domain_event_handlers)
+ (libraries core decimal account queries account_integration_events))

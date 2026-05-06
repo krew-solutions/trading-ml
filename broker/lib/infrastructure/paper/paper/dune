@@ -1,4 +1,5 @@
 (library
  (name paper)
  (public_name trading.paper)
- (libraries core broker engine))
+ (libraries core common decimal account broker engine)
+ (flags (:standard -open Common)))

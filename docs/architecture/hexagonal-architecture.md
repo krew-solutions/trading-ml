@@ -13,120 +13,166 @@ validation, no mutable aggregates.
 
 ## Layered picture
 
+The codebase is split into bounded contexts. Each BC has the
+same internal three-layer shape; the picture below describes
+the layout of a single BC (Account is used as the running
+example):
+
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ Infrastructure (adapters)                                        │
-│   inbound/http/api.ml  ← projects workflow output to wire format │
-│   inbound/http/http.ml ← HTTP routing                            │
-│   acl/finam, acl/bcs, paper ← outbound broker adapters           │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ <bc>/lib/infrastructure/                                             │
+│   inbound/http/             ← HTTP routing, JSON ↔ command DTO       │
+│   acl/                      ← anti-corruption to external venues     │
+│   acl/inbound_integration_events/                                    │
+│                             ← cross-BC inbound translation           │
+│   persistence/              ← state snapshots, event store           │
+└──────────────────────────────────────────────────────────────────────┘
                               ▲
                               │ calls
-┌──────────────────────────────────────────────────────────────────┐
-│ Application                                                      │
-│                                                                  │
-│   workflows/               ← pipelines composing the steps       │
-│        ▲                                                         │
-│        │ composes                                                │
-│        │                                                         │
-│   commands/                ← inbound command DTO + validation    │
-│   domain_event_handlers/   ← reactors for single domain events   │
-│                                                                  │
-│   queries/                 ← read-side view models (DTO)         │
-│   integration_events/      ← outbound event DTOs                 │
-│   rop/                     ← accumulating Result + applicative   │
-│   broker/                  ← outbound port (Broker.S)            │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ <bc>/lib/application/                                                │
+│                                                                      │
+│   commands/                 ← <name>_command.ml         (DTO)        │
+│                               <name>_command_handler.ml             │
+│                                          (validate + aggregate call) │
+│                               <name>_command_workflow.ml             │
+│                                          (handler + publishers)      │
+│                                                                      │
+│   domain_event_handlers/    ← reactors for single domain events      │
+│   queries/                  ← read-side view models (DTO)            │
+│   integration_events/       ← outbound DTO events for other BCs      │
+│   ports/                    ← outbound module signatures             │
+└──────────────────────────────────────────────────────────────────────┘
                               ▲
                               │ uses
-┌──────────────────────────────────────────────────────────────────┐
-│ Domain (pure)                                                    │
-│   core/       ← Instrument, Candle, Order, Decimal, Side, ...    │
-│   engine/     ← Portfolio (aggregate, emits domain events)       │
-│   strategies/, indicators/, ml/, stream/                         │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ <bc>/lib/domain/  (pure)                                             │
+│   <aggregate>/              ← e.g. portfolio/                        │
+│     <aggregate>.{ml,mli,gospel,mlw}                                  │
+│     events/                 ← one file per domain event              │
+│     values/                 ← Value Objects                          │
+│   core/                     ← shared domain primitives               │
+│                                                                      │
+│   No IO, no external deps. Gospel / Why3 sidecars carry              │
+│   formal specs.                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+Cross-BC traffic (Account ↔ Broker, etc.) flows through
+integration events on the bus layer in `shared/lib/bus/`; no
+BC's library imports another BC. The composition root in
+`bin/main.ml` wires every BC's bus, publishers, HTTP adapter
+and any cross-BC ACL bridge.
 
 ## Application sub-layers
 
 ### `commands/` — what the system receives
 
-An inbound **command** is a user-initiated action: "place this
-order", "cancel this order", "run this backtest". Each lives in
-its own file: `place_order_command.ml`, etc.
+An inbound **command** is a user-initiated action: "reserve cash
+for this order", "release this reservation". Each command is
+expressed by **three sibling files** in the same
+`commands/` directory:
 
-A command module defines:
+- **`<name>_command.{ml,mli}`** — the wire-format DTO.
+  Primitive-typed, `[@@deriving yojson]`, no Value Objects.
+  Sent by HTTP, CLI, message bus, or any other transport — the
+  command module says nothing about how the bytes arrived.
+- **`<name>_command_handler.{ml,mli}`** — accepts the wire-format
+  command and is responsible for the entire single-command
+  step: parse the DTO into domain types, invoke the aggregate,
+  return the resulting domain event or a typed failure. Parse
+  is encapsulated as a private internal phase; only `handle` is
+  exported.
+- **`<name>_command_workflow.{ml,mli}`** — the ROP pipeline
+  composing the handler with the integration-event publishers.
+  One success-side projection, optionally one failure-side
+  projection.
 
-- **`type t`** — the DTO a consumer sends: primitive-typed,
-  `[@@deriving yojson]`, unvalidated.
-- **`type validation_error`** — typed union of possible parse
-  failures. Never `string`.
-- **`type unvalidated`** — the intermediate shape after primitives
-  are mapped into domain types (`Instrument.t`, `Side.t`,
-  `Decimal.t`). Not yet domain-validated.
-- **`val to_unvalidated : t -> (unvalidated, validation_error) Rop.t`** —
-  accumulates every field's parse failure into a list, doesn't
-  short-circuit on the first one.
-- Step functions that this command initiates (e.g. `reserve` for
-  PlaceOrder).
+A command's failure track is a typed union (`handle_error`),
+never a string. The variant carries enough context for the
+workflow to populate any failure-side integration event without
+re-parsing the original DTO.
 
-A command module is parameterised over *what the consumer asked
-for*, not how it travels to the system. The HTTP handler in
-`infrastructure/inbound/http/` is one way to deliver a command;
-there can be others (CLI, message bus) in the future.
+For the typing rules behind `handle_error`, the applicative
+versus monadic split, and why `validate` is private rather than
+exported alongside `handle`, see [`rop.md`](rop.md).
 
 ### `domain_event_handlers/` — what the system does in response
 
-A **handler** reacts to **one** domain event. Files named like
-`forward_order_to_broker.ml`, `release_reservation_on_broker_rejection.ml`.
-Each file has one function:
+A **domain-event handler** reacts to **one** domain event.
+Files are named for the *what* the handler does (and *when*),
+not how it does it: e.g.
+`publish_integration_event_on_amount_reserved.ml`,
+`publish_integration_event_on_reservation_released.ml`. Each
+file has one function:
 
 ```ocaml
-val handle : ... dependencies ... -> Some.Domain.event ->
-             (next_event, failure_event) Rop.t
+val handle :
+  publish_amount_reserved:(Amount_reserved_integration_event.t -> unit) ->
+  Account.Portfolio.Events.Amount_reserved.t ->
+  unit
 ```
 
 Handlers are **source-agnostic**: they care about the event
-type, not where it came from. The same `forward_order_to_broker`
-can react to `amount_reserved` from the manual `PlaceOrder`
-command or from a future strategy-driven `Entry_point_identified`
-flow.
+type, not the workflow that produced it. The same projection
+runs whether `Amount_reserved` came from a manual
+`Reserve_command` or from a future strategy-driven flow. This
+asymmetry — multiple subscribers per event versus one handler
+per command — is the reason domain-event handlers are
+extracted into their own modules while command handlers are
+not.
 
-### `workflows/` — pipelines composing steps
+### `commands/<name>_command_workflow.{ml,mli}` — pipeline file
 
-A **workflow** is the top-level function for a specific
-user-initiated action. Files named like `place_order_workflow.ml`.
-Composition is explicit OCaml code, not event-bus magic: the
-workflow decides which step runs next based on the previous
-step's result.
+The workflow is **not** a separate sub-directory; it is the
+third sibling of the command and the command handler in the
+same `commands/` directory:
 
-```ocaml
-(* place_order_workflow.ml, simplified *)
-let run ~portfolio ~place_order ~... cmd =
-  let (let*) = Result.bind in
-  let* u = Place_order_command.to_unvalidated cmd |> ... in
-  let* (p', reserved) = Place_order_command.reserve ... u |> ... in
-  match Forward_order_to_broker.handle ... reserved with
-  | Ok forwarded -> Ok (p', events @ [Order_forwarded forwarded])
-  | Error rejection ->
-    match Release_reservation_on_broker_rejection.handle ... with
-    | ...
+```
+commands/
+  reserve_command.{ml,mli}              wire DTO
+  reserve_command_handler.{ml,mli}      validate + aggregate call
+  reserve_command_workflow.{ml,mli}     handler + integration-event publishers
 ```
 
-The workflow returns **`(Portfolio.t * event list, error) result`**:
+The workflow body is one match over the handler's outcome
+calling integration-event publishers on each branch:
 
-- **Error track** — the workflow aborted before changing state
-  (validation failed, reservation invariant rejected).
-- **Success track** — events the workflow produced, in order.
-  Each event describes a real state change. Multiple events in
-  one run (reserve + forward + maybe release on rejection).
+```ocaml
+let execute ~portfolio ~next_reservation_id ~slippage_buffer ~fee_rate
+    ~publish_amount_reserved ~publish_reservation_rejected
+    (cmd : Reserve_command.t)
+    : (unit, Reserve_command_handler.handle_error) Rop.t =
+  match
+    Reserve_command_handler.handle ~portfolio ~next_reservation_id
+      ~slippage_buffer ~fee_rate cmd
+  with
+  | Ok domain_event ->
+      Account_domain_event_handlers
+      .Publish_integration_event_on_amount_reserved.handle
+        ~publish_amount_reserved domain_event;
+      Rop.succeed ()
+  | Error errs ->
+      List.iter
+        (function
+          | Reserve_command_handler.Reservation { attempted; error } ->
+              publish_reservation_rejected
+                (build_rejection_event attempted error)
+          | Reserve_command_handler.Validation _ -> ())
+        errs;
+      Error errs
+```
 
-The event list is the workflow's natural output shape: an
-internal audit trail of what the pipeline did. It's not a
-publishing mechanism, and it's not exposed to callers as-is.
-The HTTP adapter picks a terminal outcome from the list and
-projects a stable minimal response — see *Stable wire contract*
-below.
+The workflow returns the handler's `handle_error` directly —
+it does not wrap it in a workflow-local error sum. Composition
+is explicit OCaml; there is no event-bus indirection between
+the workflow and its handler.
+
+Why no validation-side integration event in the example: a
+malformed wire payload never reached the aggregate, so there
+is nothing for the workflow to broadcast as a "rejection";
+validation failures surface only through the `Rop.t` tail.
+See [`rop.md`](rop.md) for the typing rationale.
 
 ### `integration_events/` — outbound event DTOs
 
@@ -174,60 +220,77 @@ projected into VMs in the same way:
 Core.Candle.t  →  Candle_view_model.of_domain  →  primitive record + yojson
 ```
 
-Contract: [`view_model.ml`](../../lib/application/queries/view_model.ml)
-declares `module type S`; every VM conforms via a compile-time
-self-check in `queries/compile_checks.ml`.
+Contract: each BC's `application/queries/view_model.ml` declares
+the `module type S` that every view model in that BC conforms
+to (`account/lib/application/queries/view_model.ml`,
+`strategy/lib/application/queries/view_model.ml`). Conformance
+is enforced at compile time by the `queries/compile_checks.ml`
+sibling.
 
 ### `rop/` — accumulating Result
 
-A thin layer over stdlib `Result` with:
+`Rop.t = ('a, 'err list) result`: a thin layer over stdlib
+`Result` whose Error branch always carries a list, so parallel
+branches can concatenate failures rather than picking one
+arbitrarily. Provides applicative `let+ / and+` for parallel
+accumulation and monadic `let*` for sequential short-circuit.
 
-- `Rop.t = ('a, 'err list) result` — Error always carries a list.
-- `apply : ('a -> 'b, 'err) t -> ('a, 'err) t -> ('b, 'err) t` —
-  accumulates both sides' error lists when both fail.
-- `(let+)` + `(and+)` — applicative binding operators for parallel
-  accumulating validation.
-- `(let*)` — monadic bind, short-circuit on first error.
+The full operator surface, the validation-accumulation pattern,
+and how it shapes command-handler signatures live in
+[`rop.md`](rop.md).
 
-Pattern: applicative for independent field validation (all
-errors reported together), monadic for step-by-step pipelines
-(each step needs the previous to succeed).
+### `<bc>/lib/application/ports/` — outbound module signatures
 
-### `broker/` — outbound port
-
-Not new; same as in [`overview.md`](overview.md#the-core-abstraction-brokers).
-The workflow receives `place_order` as an injected function
-dependency (partial application of `Broker.place_order client`);
-workflow itself doesn't import `broker`.
+Outbound ports live in the BC that drives them. The Broker BC
+declares `Broker.S` in `broker/lib/application/ports/broker.ml`;
+its `Submit_order_command_handler` programs against the
+existential `Broker.client`, so swapping a concrete venue
+(Finam / BCS / Paper) is a one-line wiring change at the
+composition root. See
+[`overview.md`](overview.md#the-core-abstraction-brokers) for
+the historical motivation of the port style.
 
 ## Domain events
 
 Events are facts about aggregate state changes. They live
 **inside the aggregate** that emits them, not in the command
-module that happens to trigger the aggregate call.
+module that happens to trigger the aggregate call. Each event
+type is its own file under the aggregate's `events/`
+sub-directory; the aggregate's public methods return the
+matching event in their `Ok` branch.
 
 ```
-lib/domain/engine/portfolio.mli:
-  type amount_reserved = { reservation_id; side; ... }      ← event
-  type reservation_released = { reservation_id; side; ... }
-  val try_reserve : ... -> (t * amount_reserved, ...) result
+account/lib/domain/portfolio/
+  portfolio.mli:
+    val try_reserve :
+      t -> id:int -> side:Side.t -> instrument:Instrument.t ->
+      quantity:Decimal.t -> price:Decimal.t ->
+      slippage_buffer:Decimal.t -> fee_rate:Decimal.t ->
+      (t * Events.Amount_reserved.t, reservation_error) result
+    val try_release :
+      t -> id:int ->
+      (t * Events.Reservation_released.t, release_error) result
+  events/
+    amount_reserved.{ml,mli,gospel,mlw}
+    reservation_released.{ml,mli,gospel,mlw}
 ```
 
 The aggregate method emits the event as part of its return
-value; no mutable event bus inside the aggregate (that's the
-Vaughn-Vernon accumulator style — we chose the Wlaschin-style
-return-tuple form for PlaceOrder). See
-[`reputation-bot/reputation/domain/aggregates/member/`](../../../reputation-bot/reputation/domain/aggregates/member/)
-for the other flavor, for reference.
+value; there is no mutable event bus inside the aggregate
+(that is the Vaughn-Vernon accumulator style — this codebase
+uses the Wlaschin-style return-tuple form). The Gospel /
+Why3 sidecars sit beside the `.ml` to carry formal
+specifications.
 
-Event types used by the first workflow (PlaceOrder):
-
-| Event | Emitted by | Triggers |
-|---|---|---|
-| `Portfolio.amount_reserved` | `Portfolio.try_reserve` | `Forward_order_to_broker` handler |
-| `Forward_order_to_broker.order_forwarded` | handler's success | nothing (terminal) |
-| `Forward_order_to_broker.forward_rejection` | handler's failure | `Release_reservation_on_broker_rejection` handler |
-| `Portfolio.reservation_released` | `Portfolio.try_release` | nothing (terminal) |
+Domain events of the Account bounded context drive a cross-BC
+saga rather than a single in-process workflow. Account emits
+`Amount_reserved`; Broker reacts by submitting the order to the
+external venue; Broker emits `Order_accepted` /
+`Order_rejected` / `Order_unreachable`; an Account-side
+inbound ACL projects the rejection variants back into a
+`Release_command`, closing the compensation. See
+[*Cross-BC place-order saga*](#cross-bc-place-order-saga)
+below for the full flow.
 
 ## Stable wire contract
 
@@ -244,28 +307,25 @@ Two reasons:
    frontend. A stable public response insulates the client from
    domain evolution.
 
-HTTP adapter (`inbound/http/api.ml`) projects the workflow's
-event list into a **minimal stable response**:
+The Account inbound HTTP adapter accepts `POST /api/orders`
+and immediately returns `202 Accepted` with a placeholder body;
+no synchronous broker outcome is encoded in the response.
+The actual reservation outcome and any subsequent
+broker-driven status flow are delivered to the UI through the
+SSE stream of integration events, which is the only channel
+where status transitions surface. The 202 response is a
+deliberate consequence of the asynchronous command bus —
+`Reserve_command_handler.handle` runs through the bus
+fire-and-forget — and the SSE stream subscribes to the
+`Amount_reserved` / `Reservation_rejected` / `Order_accepted` /
+`Order_rejected` integration events.
 
-```ocaml
-let place_order_response_json events =
-  let forwarded = List.find_map ... in
-  let rejected  = List.find_map ... in
-  match forwarded, rejected with
-  | Some f, _ -> `Assoc [ "status", `String "placed"; "order", ... ]
-  | None, Some (Order_rejected_by_broker {reason; _}) ->
-      `Assoc [ "status", `String "rejected"; "reason", ...]
-  | None, Some (Broker_unreachable _) ->
-      `Assoc [ "status", `String "temporary_error"; ...]
-  | None, None -> ...
-```
-
-Three terminal outcomes → three possible response shapes. Adding
-a new domain event inside the workflow changes the internal list
-but **not** the HTTP contract. Renaming an event is safe. Only
-adding a genuinely new *terminal business outcome* (e.g.
-`partial_fill_at_submit`) changes the wire response — and that's
-a deliberate product decision, not a refactor side effect.
+Adding a new domain event inside any single bounded context
+changes the internal type but not the wire contract. Adding a
+genuinely new *terminal business outcome* (a new integration
+event a UI subscriber should react to) does change the SSE
+contract — and that is a deliberate product decision, not a
+refactor side effect.
 
 ## Direction of knowledge
 
@@ -277,53 +337,78 @@ domain       → knows → (nothing outside itself)
 queries / integration_events ← project ← domain entities / events
 ```
 
-Specifically for application sub-layers:
+Each bounded context is laid out as `<bc>/lib/{domain,application,infrastructure}/`
+with the same internal sub-layering. Within one BC's
+`application/`:
 
-- `commands/` imports `core`, `queries`, `rop`
-- `domain_event_handlers/` imports `core`, `engine`, `rop`
-- `workflows/` imports `commands`, `domain_event_handlers`, `core`, `engine`, `rop` — this is the only sub-layer that imports multiple peers, because it composes them.
-- `integration_events/` imports `core`, `engine`, `queries`, `domain_event_handlers` — for the domain-event types it projects.
-- `queries/` imports `core`, `engine` only.
+- `commands/` imports the BC's domain library plus `core`,
+  `queries`, `rop`. Exposes `<name>_command.t` (DTO),
+  `<name>_command_handler.handle`, and `<name>_command_workflow.execute`.
+- `domain_event_handlers/` imports the BC's domain library plus
+  `integration_events`. Each handler is a single function
+  reacting to one domain event.
+- `integration_events/` imports the BC's domain library plus
+  `queries` (for `*_view_model` projections). Holds the typed
+  DTOs that other contexts may subscribe to.
+- `queries/` imports only the BC's domain library and `core`.
 
-`infrastructure/inbound/http/` imports everything in application
-as needed. That's the hexagonal entry-point.
+`infrastructure/inbound/http/` for the BC imports anything in
+the BC's `application/` it needs. That is the hexagonal
+entry-point of the BC. Cross-BC inbound translation lives in
+`infrastructure/acl/inbound_integration_events/`.
+
+The composition root in `bin/main.ml` wires every BC's bus,
+publishers, HTTP adapter, and any cross-BC ACL subscription —
+no BC's library imports another BC.
 
 ## Design decisions
 
 Stated once; don't re-argue per command.
 
-1. **Commands and handlers are separate.** A command module
-   represents a user-initiated driving port. A handler represents
-   a reaction to an event. They compose inside a workflow, but
-   their files don't overlap — a new handler doesn't need a new
-   command, and vice versa.
+1. **Command handlers and domain-event handlers are different
+   roles, kept in separate sub-directories.** A *command
+   handler* (under `commands/`) is bound to exactly one command
+   in exactly one workflow; it owns the entire single-command
+   step including validation. A *domain-event handler* (under
+   `domain_event_handlers/`) reacts to a single domain event
+   and may have multiple subscribers across workflows (DIP) —
+   that asymmetry is why it is extracted into its own module.
+   See [`rop.md`](rop.md) for the encapsulation rule on the
+   command-handler side.
 
 2. **Errors are typed unions, never strings.** Every
-   `validation_error`, `reservation_error`, `forward_rejection`
-   is a discriminated union. Strings are for humans; code
-   pattern-matches types.
+   `validation_error`, `reservation_error`, `release_error`,
+   `handle_error` is a discriminated union. Strings are for
+   humans; code pattern-matches types. A single
+   `*_to_string` projection per error type produces the human
+   channel (the `reason` field of a rejection integration
+   event).
 
 3. **Domain events are aggregate-level.** Emitted by
-   `Portfolio.try_reserve`, not synthesized by the command
-   handler from parameters. The aggregate is the source of
-   truth for "what happened to me".
+   `Portfolio.try_reserve` / `Portfolio.try_release`, not
+   synthesised by the command handler from parameters. The
+   aggregate is the source of truth for "what happened to me".
 
 4. **Compensation is a railway switch, not an undo.**
-   `release_reservation_on_broker_rejection` is a *normal*
-   handler reacting to a failure event. There's no SAGA-style
-   rollback — the reservation wasn't "committed" yet, just
-   earmarked, so releasing it is a forward action on a
-   different track.
+   The Account inbound ACL handler reacting to
+   `Order_rejected_integration_event` is a *normal* handler
+   that dispatches a `Release_command`. There is no
+   SAGA-style rollback — the reservation was never
+   "committed" past the earmark, so releasing it is a forward
+   action on a different track of the cross-BC saga.
 
-5. **Event list as workflow output is internal.** Not a batch
-   publish mechanism (there is no bus yet), not a wire payload.
-   It's just a structured return value describing the pipeline's
-   trace. The HTTP adapter picks what's relevant.
+5. **Workflows are explicit OCaml composition, not bus magic.**
+   A workflow's body is a `match` over the handler's outcome
+   that calls integration-event publishers on each branch.
+   The bus carries commands and events; the workflow makes the
+   decisions.
 
-6. **Integration events exist for future subscribers.** They
-   live in application layer despite being DTO-shaped. When a
-   message bus / WebSocket fan-out arrives, they're the natural
-   envelope. No work required in the workflow itself.
+6. **Integration events are the only cross-BC currency.**
+   They are DTO-shaped, primitive-typed, `[@@deriving yojson]`,
+   and live in `application/integration_events/` (outbound) or
+   `infrastructure/acl/inbound_integration_events/` (inbound).
+   No BC's library imports another BC; everything cross-BC
+   travels through the bus, encoded as integration events.
 
 7. **Naming: `cmd`, not `dto`.** DTO is an architectural
    category (data transfer); `cmd` says what it is semantically
@@ -333,83 +418,125 @@ Stated once; don't re-argue per command.
 
 8. **`let+ / and+` for applicative, `let*` for monadic.** Parse
    multiple DTO fields in parallel with accumulation — use
-   `let+ / and+`. Chain dependent steps (reserve → forward) —
-   use `let*` or explicit `match` (when failure-branch needs
-   compensation).
+   `let+ / and+`. Chain dependent steps — use `let*` or explicit
+   `match` (when the failure branch needs compensation). Detail
+   in [`rop.md`](rop.md).
 
-## Example: PlaceOrder end-to-end
+## Cross-BC place-order saga
+
+Placing an order is **not** a single in-process workflow but a
+saga across the **Account** and **Broker** bounded contexts,
+choreographed through integration events on the in-memory bus.
+The Account context owns the reservation ledger; the Broker
+context owns the conversation with the external venue. Neither
+imports the other; they communicate only by publishing and
+subscribing to integration events.
 
 ```
-┌── infrastructure/inbound/http ──────────────────────────────────┐
-│                                                                 │
-│   POST /api/orders                                              │
-│     body JSON                                                   │
-│         │                                                       │
-│         ▼                                                       │
-│   Place_order_command.t_of_yojson                               │
-│         │                                                       │
-│         ▼                                                       │
-│   Place_order_workflow.run ────────────────────────┐            │
-│                                                    │            │
-│   response: Api.place_order_response_json events    │            │
-│              → 200 or 400                           │            │
-└─────────────────────────────────────────────────────│────────────┘
-                                                     │
-┌── application ──────────────────────────────────────│────────────┐
-│                                                    ▼            │
-│                                         Place_order_workflow    │
-│                                          ┌──────┬─────┬──────┐  │
-│                                          │ step │step │step  │  │
-│                                          │  0   │ 1   │ 2    │  │
-│                                          ▼      ▼     ▼      ▼  │
-│                         Place_order_command.to_unvalidated      │
-│                         Place_order_command.reserve             │
-│                         Forward_order_to_broker.handle          │
-│                         Release_reservation_on_broker_rejection │
-│                         (on failure branch only)                │
-└─────────────────────────────────────────────────────────────────┘
-                          │         │         │
-                          ▼         ▼         ▼
-┌── domain (aggregates) ──────────────────────────────────────────┐
-│    Portfolio.try_reserve ─► amount_reserved event               │
-│    Portfolio.try_release ─► reservation_released event          │
-└─────────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌── infrastructure/acl ───────────────────────────────────────────┐
-│    Broker.place_order (via Finam/BCS/Paper adapter)             │
-└─────────────────────────────────────────────────────────────────┘
+┌── Account BC ──────────────────────────────────────────────────────┐
+│                                                                    │
+│  POST /api/orders ──► Reserve_command (DTO, strings)               │
+│                              │                                     │
+│                              ▼  (Command_bus.send, fire-and-forget) │
+│                       Reserve_command_workflow.execute             │
+│                              │                                     │
+│                              ▼                                     │
+│                       Reserve_command_handler.handle               │
+│                              │                                     │
+│                              │ validate (private)                  │
+│                              │ Account.Portfolio.try_reserve       │
+│                              ▼                                     │
+│                       Events.Amount_reserved (domain)              │
+│                              │                                     │
+│                              ▼ (Publish_integration_event_on_…)    │
+│                       Amount_reserved_integration_event ──┐        │
+│                                                           │        │
+│  HTTP responds 202 Accepted; UI gets status via SSE       │        │
+└───────────────────────────────────────────────────────────│────────┘
+                                                            │
+                          (Event_bus, in-process today)     │
+                                                            │
+┌── Broker BC ──────────────────────────────────────────────│────────┐
+│                                                           ▼        │
+│                       Submit_order_command (carries reservation_id)│
+│                              │                                     │
+│                              ▼  (Command_bus.send)                 │
+│                       Submit_order_command_handler.make            │
+│                              │                                     │
+│                              ▼  (Broker.place_order via ACL)       │
+│                       Order_accepted | Order_rejected |            │
+│                                       Order_unreachable            │
+│                              │                                     │
+│                              ▼                                     │
+│                       *_integration_event ─────────────────┐       │
+└────────────────────────────────────────────────────────────│───────┘
+                                                             │
+┌── Account BC inbound ACL ──────────────────────────────────│───────┐
+│                                                            ▼       │
+│                       acl/inbound_integration_events/              │
+│                       Order_rejected_integration_event_handler     │
+│                              │                                     │
+│                              ▼  (dispatches Release_command)       │
+│                       Release_command_workflow.execute             │
+│                              │                                     │
+│                              ▼                                     │
+│                       Account.Portfolio.try_release                │
+│                              │                                     │
+│                              ▼                                     │
+│                       Reservation_released_integration_event       │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 Notes on the flow:
 
-- Steps 0, 1 are pure; no broker interaction, no IO.
-- Step 2 is the only IO call — through the injected
-  `place_order_port`, so the workflow doesn't depend on `Broker`
+- The Account validation step is purely synchronous and
+  in-process: the handler returns a typed
+  `Reserve_command_handler.handle_error` on a malformed DTO or
+  `Reservation { attempted; error }` on insufficient cash /
+  quantity. Only successful reservations cross into Broker.
+- The Broker step is the only IO call, through the injected
+  `Broker.S` port, so the Broker handler does not depend on a
+  concrete venue.
+- Compensation runs as a normal forward command: an Account
+  inbound ACL subscribes to Broker's rejection / unreachable
+  events and dispatches a `Release_command` on the Account
+  bus. There is no SAGA-style rollback — the reservation was
+  never "committed" past the earmark, so releasing it is a
+  forward action on a different track.
+- Cross-BC type isolation is structural: the inbound ACL has
+  its own DTO mirrors of Broker's outbound integration events
+  (`account/lib/infrastructure/acl/inbound_integration_events/`),
+  populated by a field-copy bridge wired in the composition
+  root. Account never types over `Broker_integration_events`
   directly.
-- Failure of step 0 or 1 is **before** any state change → return
-  `Error _`, no events emitted.
-- Failure of step 2 is **after** reservation → emits the failure
-  event, triggers release handler, emits `reservation_released`,
-  returns `Ok (portfolio', events_with_both)`.
-- HTTP adapter sees the event list and projects `placed` /
-  `rejected` / `temporary_error` from it.
 
 ## What's *not* here
 
-- **Event publishing infrastructure.** No message bus, no
-  WebSocket fan-out of events, no audit database. When those
-  arrive, they'll subscribe to workflow events without
-  modifying the workflow itself.
-- **Second command.** Only `PlaceOrder` is implemented. `CancelOrder`,
-  `RunBacktest`, `StartLiveStrategy` are planned.
-- **HTTP wiring of the workflow.** The pipeline is built but
-  `POST /api/orders` still points at the legacy direct-broker
-  path. Wiring is next.
+- **Cross-process buses.** The current bus is in-process Eio
+  (`shared/lib/bus/`). When NATS or Kafka arrives, the
+  workflows do not change — only the bus implementation
+  satisfying `Bus.Event_bus.S` / `Bus.Command_bus.S` does.
+- **Synchronous status in the HTTP response.** `POST /api/orders`
+  returns `202 Accepted` and the UI subscribes to integration
+  events via SSE; a saga key (HTTP-generated correlation id)
+  for tying SSE updates back to a request is the next
+  HTTP-side step.
+- **Other commands.** Only `Reserve_command` / `Release_command`
+  (Account) and `Submit_order_command` (Broker) are
+  implemented. `CancelOrder`, `RunBacktest`,
+  `StartLiveStrategy` are planned.
+- **Strict-by-default DTO parsing on every wire boundary.**
+  The Account inbound HTTP adapter (`account/lib/infrastructure/inbound/http/http.ml`)
+  and the Broker `Submit_order_command_handler` still parse
+  with `failwith` / `invalid_arg` rather than the ROP
+  validator pattern. Aligning them with
+  [`rop.md`](rop.md) is a planned cleanup.
 
 ## See also
 
 - [`overview.md`](overview.md) — the base hexagonal structure
+- [`rop.md`](rop.md) — Railway-Oriented Programming, command
+  handler encapsulation, validation accumulation
 - [`domain-model.md`](domain-model.md) — the types flowing
   through commands and events
 - [`state-machine.md`](state-machine.md) — how bars become

@@ -1,0 +1,53 @@
+(library
+ (name account)
+ (public_name trading.account)
+ (libraries core))
+
+; Per-aggregate domain layout (see docs/adr/0006): each aggregate is
+; a subdir with values/, entities/, events/. Qualified mode wraps
+; subdir names into the module path: portfolio/values/position.ml
+; becomes Account.Portfolio.Values.Position.
+(include_subdirs qualified)
+
+(rule
+ (alias gospel)
+ (deps
+  (glob_files_rec *.mli)
+  (glob_files ../../../shared/lib/domain/gospel_stubs/*.mli))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  grep -q '(\\*@' \"$f\" || continue
+  gospel check -L ../../../shared/lib/domain/gospel_stubs -L . \"$f\"
+done")))
+
+; Why3 deductive verification. -L includes:
+;   - lib/domain/core   (use side.Side, instrument.Instrument, ...)
+;   - shared/lib/decimal (use decimal.Decimal — moved out of core)
+;   - .                 (own subdirs via qualified paths like
+;                        `use portfolio.reservation.reservation.Reservation`)
+(rule
+ (alias why3)
+ (deps
+  (glob_files_rec *.mlw)
+  (glob_files ../../../shared/lib/domain/core/*.mlw)
+  (glob_files ../../../shared/lib/decimal/*.mlw))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+done")))
+
+; gospel-alias is intentionally NOT a runtest dep: gospel 0.3.1
+; doesn't support [module type of], which the per-aggregate ADR-0006
+; layout uses for re-export. The why3-alias still proves invariants
+; via the .mlw files. Run `dune build @gospel` manually to type-check
+; gospel annotations on files that don't use [module type of].
+(alias
+ (name runtest)
+ (deps (alias why3)))

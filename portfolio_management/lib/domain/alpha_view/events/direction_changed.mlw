@@ -1,0 +1,25 @@
+(** Why3 companion for [direction_changed.mli] — Domain Event
+    record. Pure data carrier. *)
+
+module Direction_changed
+  use int.Int
+  use decimal.Decimal
+  use common.direction.Direction
+
+  type alpha_source_id
+  type instrument
+
+  type t = {
+    alpha_source_id    : alpha_source_id;
+    instrument         : instrument;
+    previous_direction : Direction.t;
+    new_direction      : Direction.t;
+    price              : Decimal.t;
+    occurred_at        : int;
+  }
+
+  (** Producer-imposed invariant: the event only fires on actual
+      flips. Stated as a predicate; consumers may rely on it. *)
+  predicate well_formed (e: t) =
+    e.previous_direction <> e.new_direction
+end

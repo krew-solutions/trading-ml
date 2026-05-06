@@ -1,0 +1,4 @@
+(library
+ (name gherkin_edsl)
+ (public_name trading.gherkin_edsl)
+ (libraries alcotest))

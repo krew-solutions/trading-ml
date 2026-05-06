@@ -47,11 +47,18 @@ describe('AppComponent', () => {
     { name: 'RSI_MeanReversion', params: [] },
   ];
 
-  const candlesFor = (n: number): Candle[] =>
+  /** Wire-shape candle fixture: OHLCV as decimal strings, matching
+   *  the OCaml backend's `Candle_view_model.t` output. Used with
+   *  `httpCtrl.flush()` so the response goes through {!Api}'s
+   *  parser at the HTTP boundary. */
+  const candlesFor = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
       ts: 1_700_000_000 + i * 60,
-      open: 100 + i * 0.1, high: 101 + i * 0.1,
-      low: 99 + i * 0.1, close: 100 + i * 0.1, volume: 1000,
+      open:   (100 + i * 0.1).toString(),
+      high:   (101 + i * 0.1).toString(),
+      low:    (99  + i * 0.1).toString(),
+      close:  (100 + i * 0.1).toString(),
+      volume: '1000',
     }));
 
   beforeEach(async () => {
@@ -233,7 +240,7 @@ describe('AppComponent', () => {
     const req = httpCtrl.expectOne('/api/backtest');
     req.flush({
       num_trades: 3, total_return: 0.05, max_drawdown: 0.02,
-      final_cash: 1_050_000, realized_pnl: 50_000,
+      final_cash: '1050000', realized_pnl: '50000',
       equity_curve: [], fills: [],
     });
     await fixture.whenStable();

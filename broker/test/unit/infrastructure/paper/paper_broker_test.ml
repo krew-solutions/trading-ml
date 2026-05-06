@@ -202,9 +202,9 @@ let test_portfolio_updates_on_fill () =
     "position 10 @ 101 after buy"
     (Some ("SBER", d 101.0))
     (Option.map
-       (fun (pos : Engine.Portfolio.position) ->
+       (fun (pos : Account.Portfolio.Values.Position.t) ->
          (Ticker.to_string (Instrument.ticker pos.instrument), pos.avg_price))
-       (Engine.Portfolio.position pf inst));
+       (Account.Portfolio.position pf inst));
   let expected_cash = Decimal.sub (d_int 100_000) (Decimal.mul (d_int 10) (d 101.0)) in
   Alcotest.(check decimal_testable) "cash debited" expected_cash pf.cash
 
@@ -215,7 +215,7 @@ let bar_v ~ts ~o ~h ~l ~c ~v =
 let test_fee_charged_on_fill () =
   let p =
     Paper.Paper_broker.make ~initial_cash:(d_int 100_000)
-      ~fee_rate:0.0005 (* 5 bps, mirrors backtest default *)
+      ~fee_rate:(Decimal.of_string "0.0005") (* 5 bps, mirrors backtest default *)
       ~source:(mk_source ()) ()
   in
   let inst = mk_instrument "SBER" in
@@ -235,7 +235,9 @@ let test_fee_charged_on_fill () =
 
 let test_slippage_market_buy_pays_premium () =
   let p =
-    Paper.Paper_broker.make ~slippage_bps:10.0 (* 10 bps *) ~source:(mk_source ()) ()
+    Paper.Paper_broker.make
+      ~slippage_bps:(Decimal.of_int 10) (* 10 bps *)
+      ~source:(mk_source ()) ()
   in
   let inst = mk_instrument "SBER" in
   Paper.Paper_broker.on_bar p ~instrument:inst
@@ -252,7 +254,9 @@ let test_slippage_market_buy_pays_premium () =
   | _ -> Alcotest.fail "expected one fill"
 
 let test_slippage_market_sell_receives_discount () =
-  let p = Paper.Paper_broker.make ~slippage_bps:10.0 ~source:(mk_source ()) () in
+  let p =
+    Paper.Paper_broker.make ~slippage_bps:(Decimal.of_int 10) ~source:(mk_source ()) ()
+  in
   let inst = mk_instrument "SBER" in
   Paper.Paper_broker.on_bar p ~instrument:inst
     (bar ~ts:100 ~o:100.0 ~h:100.0 ~l:100.0 ~c:100.0);
@@ -269,7 +273,9 @@ let test_slippage_market_sell_receives_discount () =
   | _ -> Alcotest.fail "expected one fill"
 
 let test_slippage_does_not_apply_to_limit () =
-  let p = Paper.Paper_broker.make ~slippage_bps:50.0 ~source:(mk_source ()) () in
+  let p =
+    Paper.Paper_broker.make ~slippage_bps:(Decimal.of_int 50) ~source:(mk_source ()) ()
+  in
   let inst = mk_instrument "SBER" in
   Paper.Paper_broker.on_bar p ~instrument:inst
     (bar ~ts:100 ~o:105.0 ~h:105.0 ~l:105.0 ~c:105.0);

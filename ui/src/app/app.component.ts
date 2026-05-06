@@ -197,7 +197,7 @@ let nextSlotId = 1;
             <div><b>Trades:</b> {{r.num_trades}}</div>
             <div><b>Return:</b> {{(r.total_return * 100).toFixed(2)}}%</div>
             <div><b>Max DD:</b> {{(r.max_drawdown * 100).toFixed(2)}}%</div>
-            <div><b>Realized PnL:</b> {{r.realized_pnl.toFixed(2)}}</div>
+            <div><b>Realized PnL:</b> {{r.realized_pnl.toString()}}</div>
           </div>
         </section>
       }

@@ -18,6 +18,10 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0003](0003-stream-over-frp.md) | Custom streams on `Seq.t` over FRP libraries | Accepted | 2026-04-17 |
 | [0004](0004-pipeline-unification.md) | One `Pipeline.run` for Backtest and Live | Accepted | 2026-04-17 |
 | [0005](0005-reservations-ledger.md) | Reservations ledger for order lifecycle | Accepted | 2026-04-18 |
+| [0006](0006-domain-layer-per-aggregate-layout.md) | Per-aggregate domain layout | Accepted | 2026-04-28 |
+| [0007](0007-decimal-as-string-in-dto.md) | Decimal as canonical string in DTOs | Accepted | 2026-05-01 |
+| [0008](0008-margin-model-for-short-selling.md) | Margin model for short selling | Accepted | 2026-05-02 |
+| [0009](0009-portfolio-management-bounded-context.md) | Portfolio Management bounded context | Accepted | 2026-05-03 |
 
 ## Template
 

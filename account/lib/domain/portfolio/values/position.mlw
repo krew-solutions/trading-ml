@@ -1,0 +1,20 @@
+(** Why3 companion for [position.mli] — VO snapshot of an open position.
+    Carries no behavioural lemmas of its own; included for structural
+    parity with the OCaml side and as an anchor for future invariants
+    (e.g. VWAP non-negativity, sign convention for long/short). *)
+
+module Position
+  use decimal.Decimal
+
+  (** Instrument identity is opaque at this level — same convention
+      as for [reservation.mlw]; structural reasoning here doesn't
+      depend on the concrete identity semantics from
+      [core/instrument.mlw]. *)
+  type instrument
+
+  type t = {
+    instrument : instrument;
+    quantity   : Decimal.t;
+    avg_price  : Decimal.t;
+  }
+end

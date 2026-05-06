@@ -1,0 +1,33 @@
+(library
+ (name decimal)
+ (public_name trading.decimal))
+
+; Gospel type-check on the .mli's contract annotations.
+(rule
+ (alias gospel)
+ (deps
+  (glob_files *.mli)
+  (glob_files ../domain/gospel_stubs/*.mli))
+ (action
+  (bash "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  grep -q '(\\*@' \"$f\" || continue
+  gospel check -L ../domain/gospel_stubs -L . \"$f\"
+done")))
+
+; Why3 deductive verification of the algebraic laws stated in
+; decimal.mlw — runs in CI via `dune runtest`.
+(rule
+ (alias why3)
+ (deps (glob_files *.mlw))
+ (action
+  (bash "set -eu
+for f in %{deps}; do
+  why3 prove -L . -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -P z3 \"$f\" >/dev/null
+done")))
+
+(alias
+ (name runtest)
+ (deps (alias why3)))

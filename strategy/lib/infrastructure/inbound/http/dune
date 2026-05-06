@@ -1,0 +1,4 @@
+(library
+ (name strategy_inbound_http)
+ (public_name trading.strategy.inbound_http)
+ (libraries inbound_http cohttp cohttp-eio))

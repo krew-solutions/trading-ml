@@ -1,0 +1,8 @@
+(** Why3 companion for [portfolio_construction.mli] — module-type
+    declaration; carries no concrete state. Concrete policies live in
+    sibling subdirectories ([pair_mean_reversion/], future
+    beta_hedge / vol_target / ...) and prove their own properties. *)
+
+module Portfolio_construction
+  type unit_marker
+end

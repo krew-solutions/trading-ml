@@ -1,0 +1,19 @@
+(** Why3 companion for [actual_position_changed.mli] — Domain Event
+    record. Pure data carrier; no behavioural lemmas. *)
+
+module Actual_position_changed
+  use int.Int
+  use decimal.Decimal
+
+  type book_id
+  type instrument
+
+  type t = {
+    book_id     : book_id;
+    instrument  : instrument;
+    delta_qty   : Decimal.t;
+    new_qty     : Decimal.t;
+    avg_price   : Decimal.t;
+    occurred_at : int;
+  }
+end

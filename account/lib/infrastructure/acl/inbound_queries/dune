@@ -1,0 +1,7 @@
+(library
+ (name account_inbound_queries)
+ (public_name trading.account.acl.inbound_queries)
+ (libraries yojson ppx_yojson_conv_lib)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -8,14 +8,15 @@ let qualify (vm : Portfolio_management_inbound_queries.Instrument_view_model.t) 
 let handle
     ~(dispatch_apply_bar : Apply_bar_command.t -> unit)
     (ev : Bar_updated_integration_event.t) : unit =
-  let bar : Apply_bar_command.bar_dto =
+  let candle : Apply_bar_command.candle_dto =
     {
-      ts = ev.bar.ts;
-      open_ = ev.bar.open_;
-      high = ev.bar.high;
-      low = ev.bar.low;
-      close = ev.bar.close;
-      volume = ev.bar.volume;
+      ts = ev.candle.ts;
+      open_ = ev.candle.open_;
+      high = ev.candle.high;
+      low = ev.candle.low;
+      close = ev.candle.close;
+      volume = ev.candle.volume;
     }
   in
-  dispatch_apply_bar { instrument = qualify ev.instrument; timeframe = ev.timeframe; bar }
+  dispatch_apply_bar
+    { instrument = qualify ev.instrument; timeframe = ev.timeframe; candle }

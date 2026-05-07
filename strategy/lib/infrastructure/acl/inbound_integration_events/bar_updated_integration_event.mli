@@ -9,13 +9,16 @@
     field-by-field copy.
 
     Idempotency: handlers MUST upsert by
-    [(instrument, timeframe, bar.ts)]. Repeat publications of the
+    [(instrument, timeframe, candle.ts)]. Repeat publications of the
     same key (intra-bar updates from the venue, late-subscribe,
-    replay, reconnect) are part of the contract. *)
+    replay, reconnect) are part of the contract.
+
+    Naming: a {b bar} = ({i instrument}, {i timeframe}, {i candle}).
+    The {b candle} field holds the pure OHLCV body without context. *)
 
 type t = {
   instrument : Strategy_inbound_queries.Instrument_view_model.t;
   timeframe : string;
-  bar : Strategy_inbound_queries.Candle_view_model.t;
+  candle : Strategy_inbound_queries.Candle_view_model.t;
 }
 [@@deriving yojson]

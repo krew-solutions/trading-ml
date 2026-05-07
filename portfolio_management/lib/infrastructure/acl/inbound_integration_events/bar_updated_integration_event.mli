@@ -10,13 +10,16 @@
     {!Bus.consumer} time — JSON wire is the only contract.
 
     Idempotency: handlers MUST upsert by
-    [(instrument, timeframe, bar.ts)]. Repeat publications of the
+    [(instrument, timeframe, candle.ts)]. Repeat publications of the
     same key (intra-bar updates from the venue, late-subscribe,
-    replay, reconnect) are part of the contract. *)
+    replay, reconnect) are part of the contract.
+
+    Naming: a {b bar} = ({i instrument}, {i timeframe}, {i candle}).
+    The {b candle} field holds the pure OHLCV body without context. *)
 
 type t = {
   instrument : Portfolio_management_inbound_queries.Instrument_view_model.t;
   timeframe : string;
-  bar : Portfolio_management_inbound_queries.Candle_view_model.t;
+  candle : Portfolio_management_inbound_queries.Candle_view_model.t;
 }
 [@@deriving yojson]

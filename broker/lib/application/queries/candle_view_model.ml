@@ -1,7 +1,7 @@
 open Core
 
 type t = {
-  ts : int64;
+  ts : string;
   open_ : string; [@key "open"]
   high : string;
   low : string;
@@ -14,7 +14,7 @@ type domain = Candle.t
 
 let of_domain (c : domain) : t =
   {
-    ts = c.ts;
+    ts = Datetime.Iso8601.format c.ts;
     open_ = Decimal.to_string c.open_;
     high = Decimal.to_string c.high;
     low = Decimal.to_string c.low;

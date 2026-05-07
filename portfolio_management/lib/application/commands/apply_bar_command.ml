@@ -1,5 +1,5 @@
-type bar_dto = {
-  ts : int64;
+type candle_dto = {
+  ts : string;
   open_ : string; [@key "open"]
   high : string;
   low : string;
@@ -8,4 +8,5 @@ type bar_dto = {
 }
 [@@deriving yojson]
 
-type t = { instrument : string; timeframe : string; bar : bar_dto } [@@deriving yojson]
+type t = { instrument : string; timeframe : string; candle : candle_dto }
+[@@deriving yojson]

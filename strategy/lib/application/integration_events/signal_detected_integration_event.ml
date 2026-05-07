@@ -5,7 +5,7 @@ type t = {
   strength : float;
   price : string;
   reason : string;
-  occurred_at : int64;
+  occurred_at : string;
 }
 [@@deriving yojson]
 
@@ -24,5 +24,5 @@ let of_domain ~(strategy_id : string) ~(price : Decimal.t) (s : domain) : t =
     strength = s.strength;
     price = Decimal.to_string price;
     reason = s.reason;
-    occurred_at = s.ts;
+    occurred_at = Datetime.Iso8601.format s.ts;
   }

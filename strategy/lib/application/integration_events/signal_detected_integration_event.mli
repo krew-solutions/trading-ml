@@ -37,7 +37,9 @@ type t = {
           eliminates the timing-join class of bugs that an external
           marks-cache would introduce. *)
   reason : string;  (** Free-form audit context from [Signal.reason]. *)
-  occurred_at : int64;  (** Bar-close epoch seconds that triggered the signal. *)
+  occurred_at : string;
+      (** ISO-8601 datetime ([YYYY-MM-DDTHH:MM:SSZ]) of the bar close
+          that triggered the signal. *)
 }
 [@@deriving yojson]
 

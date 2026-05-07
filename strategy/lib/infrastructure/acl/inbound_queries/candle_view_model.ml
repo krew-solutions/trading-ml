@@ -1,5 +1,5 @@
 type t = {
-  ts : int64;
+  ts : string;
   open_ : string; [@key "open"]
   high : string;
   low : string;

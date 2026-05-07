@@ -5,7 +5,12 @@ type change = {
 }
 [@@deriving yojson]
 
-type t = { book_id : string; source : string; proposed_at : int64; changed : change list }
+type t = {
+  book_id : string;
+  source : string;
+  proposed_at : string;
+  changed : change list;
+}
 [@@deriving yojson]
 
 type domain = Portfolio_management.Target_portfolio.Events.Target_set.t
@@ -22,6 +27,6 @@ let of_domain (ev : domain) : t =
   {
     book_id = Portfolio_management.Common.Book_id.to_string ev.book_id;
     source = ev.source;
-    proposed_at = ev.proposed_at;
+    proposed_at = Datetime.Iso8601.format ev.proposed_at;
     changed = List.map of_change ev.changed;
   }

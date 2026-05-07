@@ -10,7 +10,7 @@
 type t = {
   book_id : string;
   trades : Portfolio_management_queries.Trade_intent_view_model.t list;
-  computed_at : int64;
+  computed_at : string;  (** ISO-8601 *)
 }
 [@@deriving yojson]
 

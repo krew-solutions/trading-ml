@@ -50,7 +50,7 @@ let finam_live_setup ~env ~paper_sink ~publish_bar_updated (rest : Finam.Rest.t)
                 | None -> ());
                 publish_bar_updated
                   (Broker_integration_events.Bar_updated_integration_event.of_domain
-                     ~instrument ~timeframe:tf ~bar:candle))
+                     ~instrument ~timeframe:tf ~candle))
               bars)
           tfs
     | Error_ev { code; type_; message } ->
@@ -92,7 +92,7 @@ let bcs_live_setup ~env ~paper_sink ~publish_bar_updated (rest : Bcs.Rest.t) ~sw
     | None -> ());
     publish_bar_updated
       (Broker_integration_events.Bar_updated_integration_event.of_domain ~instrument
-         ~timeframe ~bar:candle)
+         ~timeframe ~candle)
   in
   Server.Http.
     {

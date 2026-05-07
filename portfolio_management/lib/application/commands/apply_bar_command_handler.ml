@@ -4,12 +4,14 @@ module Common = Portfolio_management.Common
 type validation_error =
   | Invalid_instrument of string
   | Invalid_decimal of { field : string; value : string }
+  | Invalid_ts of string
   | Invalid_candle of string
 
 let validation_error_to_string = function
   | Invalid_instrument s -> Printf.sprintf "invalid instrument: %S" s
   | Invalid_decimal { field; value } ->
       Printf.sprintf "invalid decimal for %s: %S" field value
+  | Invalid_ts s -> Printf.sprintf "invalid ts (ISO-8601 expected): %S" s
   | Invalid_candle s -> Printf.sprintf "invalid candle: %s" s
 
 type handle_error = Validation of validation_error
@@ -23,21 +25,26 @@ let parse_decimal ~field raw : (Decimal.t, validation_error) Rop.t =
   | Some d -> Rop.succeed d
   | None -> Rop.fail (Invalid_decimal { field; value = raw })
 
-let parse_candle (bar : Apply_bar_command.bar_dto) :
+let parse_ts raw : (int64, validation_error) Rop.t =
+  let parsed = Datetime.Iso8601.parse raw in
+  if Int64.equal parsed 0L then Rop.fail (Invalid_ts raw) else Rop.succeed parsed
+
+let parse_candle (candle : Apply_bar_command.candle_dto) :
     (Core.Candle.t, validation_error) Rop.t =
-  let parsed_decimals =
+  let parsed_fields =
     let open Rop in
-    let+ open_ = parse_decimal ~field:"open" bar.open_
-    and+ high = parse_decimal ~field:"high" bar.high
-    and+ low = parse_decimal ~field:"low" bar.low
-    and+ close = parse_decimal ~field:"close" bar.close
-    and+ volume = parse_decimal ~field:"volume" bar.volume in
-    (open_, high, low, close, volume)
+    let+ ts = parse_ts candle.ts
+    and+ open_ = parse_decimal ~field:"open" candle.open_
+    and+ high = parse_decimal ~field:"high" candle.high
+    and+ low = parse_decimal ~field:"low" candle.low
+    and+ close = parse_decimal ~field:"close" candle.close
+    and+ volume = parse_decimal ~field:"volume" candle.volume in
+    (ts, open_, high, low, close, volume)
   in
-  match parsed_decimals with
+  match parsed_fields with
   | Error _ as e -> e
-  | Ok (open_, high, low, close, volume) -> (
-      try Rop.succeed (Core.Candle.make ~ts:bar.ts ~open_ ~high ~low ~close ~volume)
+  | Ok (ts, open_, high, low, close, volume) -> (
+      try Rop.succeed (Core.Candle.make ~ts ~open_ ~high ~low ~close ~volume)
       with Invalid_argument msg -> Rop.fail (Invalid_candle msg))
 
 let handle
@@ -46,7 +53,7 @@ let handle
   let parsed =
     let open Rop in
     let+ instrument = parse_instrument cmd.instrument
-    and+ candle = parse_candle cmd.bar in
+    and+ candle = parse_candle cmd.candle in
     (instrument, candle)
   in
   match parsed with

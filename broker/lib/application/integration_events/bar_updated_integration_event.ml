@@ -3,13 +3,13 @@ open Core
 type t = {
   instrument : Broker_queries.Instrument_view_model.t;
   timeframe : string;
-  bar : Broker_queries.Candle_view_model.t;
+  candle : Broker_queries.Candle_view_model.t;
 }
 [@@deriving yojson]
 
-let of_domain ~instrument ~timeframe ~bar =
+let of_domain ~instrument ~timeframe ~candle =
   {
     instrument = Broker_queries.Instrument_view_model.of_domain instrument;
     timeframe = Timeframe.to_string timeframe;
-    bar = Broker_queries.Candle_view_model.of_domain bar;
+    candle = Broker_queries.Candle_view_model.of_domain candle;
   }

@@ -18,6 +18,7 @@
 type validation_error =
   | Invalid_instrument of string
   | Invalid_decimal of { field : string; value : string }
+  | Invalid_ts of string
   | Invalid_candle of string
 
 val validation_error_to_string : validation_error -> string

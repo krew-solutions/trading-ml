@@ -4,8 +4,12 @@
 
     Wire-format DTO — primitives only, no domain values. [instrument]
     is the qualified [TICKER@MIC[/BOARD]] form parsed by the handler;
-    OHLCV fields on [bar] are decimal strings (bit-exact roundtrip
-    with [Decimal.to_string]). [ts] is unix epoch seconds int64.
+    OHLCV fields on [candle] are decimal strings (bit-exact roundtrip
+    with [Decimal.to_string]).
+
+    Naming: a {b bar} = ({i instrument}, {i timeframe}, {i candle}) —
+    the contextualised market-data observation. The {b candle} field
+    holds the pure OHLCV body without context.
 
     Triggered by:
       - the inbound [Bar_updated_integration_event] handler translating
@@ -13,8 +17,8 @@
       - future external entries (CLI replay, backtest harness) that
         want to drive pair-mr policies without going through the bus. *)
 
-type bar_dto = {
-  ts : int64;
+type candle_dto = {
+  ts : string;  (** ISO-8601 *)
   open_ : string; [@key "open"]
   high : string;
   low : string;
@@ -26,6 +30,6 @@ type bar_dto = {
 type t = {
   instrument : string;  (** [TICKER@MIC[/BOARD]] *)
   timeframe : string;
-  bar : bar_dto;
+  candle : candle_dto;
 }
 [@@deriving yojson]

@@ -190,9 +190,9 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
     ctx.target_portfolio_updated_pub := e :: !(ctx.target_portfolio_updated_pub)
   in
   let close_str = Decimal.to_string close in
-  let bar : Portfolio_management_commands.Apply_bar_command.bar_dto =
+  let candle : Portfolio_management_commands.Apply_bar_command.candle_dto =
     {
-      ts;
+      ts = Datetime.Iso8601.format ts;
       open_ = close_str;
       high = close_str;
       low = close_str;
@@ -201,7 +201,7 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
     }
   in
   let cmd : Portfolio_management_commands.Apply_bar_command.t =
-    { instrument = Core.Instrument.to_qualified instrument; timeframe = "h1"; bar }
+    { instrument = Core.Instrument.to_qualified instrument; timeframe = "h1"; candle }
   in
   let result =
     Apply_bar_wf.execute ~pair_mr_states_for ~target_portfolio_for

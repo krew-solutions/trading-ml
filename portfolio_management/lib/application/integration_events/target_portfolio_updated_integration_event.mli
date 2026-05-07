@@ -16,7 +16,12 @@ type change = {
 }
 [@@deriving yojson]
 
-type t = { book_id : string; source : string; proposed_at : int64; changed : change list }
+type t = {
+  book_id : string;
+  source : string;
+  proposed_at : string;  (** ISO-8601 *)
+  changed : change list;
+}
 [@@deriving yojson]
 
 type domain = Portfolio_management.Target_portfolio.Events.Target_set.t

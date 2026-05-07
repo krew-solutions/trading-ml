@@ -19,10 +19,12 @@ let matches_instrument
        (Option.map Board.to_string (Instrument.board filter))
 
 let candle_of_dto (vm : Strategy_inbound_queries.Candle_view_model.t) : Candle.t =
-  Candle.make ~ts:vm.ts ~open_:(Decimal.of_string vm.open_)
-    ~high:(Decimal.of_string vm.high) ~low:(Decimal.of_string vm.low)
-    ~close:(Decimal.of_string vm.close) ~volume:(Decimal.of_string vm.volume)
+  Candle.make
+    ~ts:(Datetime.Iso8601.parse vm.ts)
+    ~open_:(Decimal.of_string vm.open_) ~high:(Decimal.of_string vm.high)
+    ~low:(Decimal.of_string vm.low) ~close:(Decimal.of_string vm.close)
+    ~volume:(Decimal.of_string vm.volume)
 
 let handle (t : t) ~(instrument : Instrument.t) (ev : Bar_updated.t) : unit =
   if matches_instrument instrument ev.instrument then
-    Eio.Stream.add t.stream (candle_of_dto ev.bar)
+    Eio.Stream.add t.stream (candle_of_dto ev.candle)

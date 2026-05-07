@@ -1,7 +1,7 @@
 (library
  (name broker_queries)
  (public_name trading.broker.queries)
- (libraries yojson ppx_yojson_conv_lib core common decimal)
+ (libraries yojson ppx_yojson_conv_lib core common decimal datetime)
  (preprocess
   (pps ppx_yojson_conv))
  (flags

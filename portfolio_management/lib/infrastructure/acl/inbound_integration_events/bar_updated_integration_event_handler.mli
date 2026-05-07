@@ -1,37 +1,18 @@
-(** Stateful inbound handler for {!Bar_updated_integration_event.t}
-    that drives pair-mean-reversion policies registered against it.
+(** Inbound translation handler for {!Bar_updated_integration_event.t}.
 
-    Unlike {!Strategy_inbound_integration_events.Bar_updated_integration_event_handler},
-    this one is fully synchronous: there is no consumer fiber to
-    feed, no [Eio.Stream] buffer. On each inbound bar the handler
-    iterates the registered pair states, calls
-    {!Portfolio_management.Pair_mean_reversion.on_bar} on each one
-    whose pair contains the bar's instrument, mutates the state ref,
-    and on [Some target_proposal] dispatches a
-    {!Portfolio_management_commands.Set_target_command.t} through
-    the supplied port.
+    Pure ACL: rebuilds the qualified instrument string from the view-
+    model fields, copies bar OHLCV strings as-is, and dispatches an
+    {!Portfolio_management_commands.Apply_bar_command.t}. No domain
+    logic, no parsing of decimals or timestamps — that work belongs
+    to the command handler.
 
-    The registry starts empty. There is no caller for [register]
-    today — when a [Define_pair_mr_command] (or analogous) lands,
-    its workflow will populate this handler. Until then, every bar
-    passes through with no side-effects (zero registered pairs). *)
-
-type t
-
-val make : unit -> t
-
-val register : t -> Portfolio_management.Pair_mean_reversion.state ref -> unit
-(** Add a pair-mr state ref to the registry. The state already
-    carries its [Pair_mr_config] (book_id + pair + window +
-    thresholds), so no separate identifying parameters are needed.
-    The ref is mutated in place by {!handle} as bars arrive. *)
+    Idempotency lives one layer down: the workflow's
+    {!Portfolio_management.Target_portfolio.apply_proposal} keys by
+    [(book_id, instrument)] within the aggregate. Repeat publications
+    of the same wire bar are part of the upstream contract; this
+    handler doesn't deduplicate. *)
 
 val handle :
-  t ->
-  dispatch_set_target:(Portfolio_management_commands.Set_target_command.t -> unit) ->
+  dispatch_apply_bar:(Portfolio_management_commands.Apply_bar_command.t -> unit) ->
   Bar_updated_integration_event.t ->
   unit
-(** Bus callback. For each registered pair whose instruments
-    include the bar's instrument, advances the state via
-    {!Pair_mean_reversion.on_bar} and dispatches a
-    {!Set_target_command} on any emitted proposal. *)

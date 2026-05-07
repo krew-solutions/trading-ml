@@ -24,6 +24,24 @@ let build ~bus : t =
       Hashtbl.t =
     Hashtbl.create 16
   in
+  (* Pair-mean-reversion state registry. Keyed by (book_id, pair) so
+     two books can run independent pair-mr policies on the same Pair.t.
+     Starts empty: today no caller registers states; when a future
+     [Define_pair_mr_command] lands, its workflow will populate this
+     table. The bar pipeline iterates whatever is here. *)
+  let pair_mr_states :
+      ( Portfolio_management.Common.Book_id.t * Portfolio_management.Common.Pair.t,
+        Portfolio_management.Pair_mean_reversion.state ref )
+      Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let pair_mr_states_for instrument =
+    Hashtbl.fold
+      (fun (_book, pair) state_ref acc ->
+        if Portfolio_management.Common.Pair.contains pair instrument then state_ref :: acc
+        else acc)
+      pair_mr_states []
+  in
   let target_portfolio_for_create book_id =
     match Hashtbl.find_opt target_portfolios book_id with
     | Some r -> r
@@ -132,20 +150,28 @@ let build ~bus : t =
     | Ok () -> ()
     | Error _ -> ()
   in
+  let dispatch_apply_bar cmd =
+    match
+      Portfolio_management_commands.Apply_bar_command_workflow.execute ~pair_mr_states_for
+        ~target_portfolio_for:target_portfolio_for_create
+        ~publish_target_portfolio_updated cmd
+    with
+    | Ok () -> ()
+    | Error _ -> ()
+  in
+  (* [dispatch_set_target] is reserved scaffolding for future external
+     entries (PM HTTP route / CLI override / cross-BC import). No
+     internal pipeline routes through it today — pair-mr applies
+     proposals via [dispatch_apply_bar], alpha applies via the
+     Direction_changed DE handler. Held in scope so the workflow keeps
+     its end-to-end build coverage. *)
+  let _ = dispatch_set_target in
   (* Held in scope but currently unused — no inbound source dispatches
      these commands today. When PM HTTP routes / Strategy → PM bridge /
      a scheduler appear, these closures move into [Http.make_handler]
      and into bridge subscribers without changes here. *)
   let _ = dispatch_reconcile in
   let _ = dispatch_define_alpha_view in
-  (* Pair-mean-reversion handler: drives any registered pair-mr
-     state on bars from [broker.bar-updated] and dispatches
-     [Set_target_command] on emitted proposals. Registry starts
-     empty; a future [Define_pair_mr_command] will populate it. *)
-  let pair_mr_handler =
-    Portfolio_management_inbound_integration_events.Bar_updated_integration_event_handler
-    .make ()
-  in
   (* Eager inbound subscriptions on cross-BC outbound URIs. Today's
      publishers don't fully exist yet; the subscriptions sit inert
      until traffic arrives. Each consumer deserializes wire JSON
@@ -184,7 +210,7 @@ let build ~bus : t =
            .t_of_yojson)
       (Portfolio_management_inbound_integration_events
        .Bar_updated_integration_event_handler
-       .handle pair_mr_handler ~dispatch_set_target)
+       .handle ~dispatch_apply_bar)
   in
   let http_handler = Portfolio_management_inbound_http.Http.make_handler () in
   { http_handler }

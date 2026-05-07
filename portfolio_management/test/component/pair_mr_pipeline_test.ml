@@ -1,8 +1,8 @@
-(** BDD specification for the pair_mean_reversion → set_target →
-    reconcile pipeline. Drives the policy programmatically and checks
-    that the resulting target proposal, when applied through
-    Set_target_command, produces a reconciler announcement that names
-    both legs. *)
+(** BDD specification for the pair_mean_reversion → Apply_bar →
+    Target_portfolio → reconcile pipeline. Drives synthetic candles
+    through {!Apply_bar_command_workflow.execute} and checks that
+    once the policy emits a proposal the resulting reconciler
+    announcement names both legs of the pair. *)
 
 module Gherkin = Gherkin_edsl
 module Pm = Portfolio_management
@@ -10,12 +10,11 @@ module PMR = Pm.Pair_mean_reversion
 open Test_harness
 
 let inst sym = Core.Instrument.of_qualified sym
-
-let candle ~ts ~close =
-  Core.Candle.make ~ts ~open_:close ~high:close ~low:close ~close ~volume:Decimal.one
+let sber = inst "SBER@MISX"
+let lkoh = inst "LKOH@MISX"
 
 let make_pair_state ~window =
-  let pair = Pm.Common.Pair.make ~a:(inst "SBER@MISX") ~b:(inst "LKOH@MISX") in
+  let pair = Pm.Common.Pair.make ~a:sber ~b:lkoh in
   let cfg =
     PMR.Values.Pair_mr_config.make ~book_id:book_alpha ~pair
       ~hedge_ratio:(Pm.Common.Hedge_ratio.of_decimal Decimal.one)
@@ -26,63 +25,42 @@ let make_pair_state ~window =
   in
   PMR.init cfg
 
-let feed state ~ts ~price_a ~price_b =
-  let s, _ =
-    PMR.on_bar state ~instrument:(inst "SBER@MISX") ~candle:(candle ~ts ~close:price_a)
+(* Drive synthetic candles through Apply_bar_command_workflow until
+   the workflow applies a proposal (target_portfolio_updated_pub
+   becomes non-empty) or the iteration bound is reached. Bound
+   prevents infinite loop if hysteresis never opens on this seed. *)
+let drive_until_applied ctx ~state_ref =
+  let rec loop iter ctx =
+    if iter >= 200 then ctx
+    else if !(ctx.target_portfolio_updated_pub) <> [] then ctx
+    else
+      let ts = Int64.of_int (iter * 10) in
+      let price_a = Decimal.of_float (100. +. Float.sin (float_of_int iter)) in
+      let price_b = Decimal.of_float (100. +. (Float.cos (float_of_int iter) *. 1.5)) in
+      let ctx = apply_bar ctx ~state_ref ~instrument:sber ~ts ~close:price_a in
+      let ctx =
+        apply_bar ctx ~state_ref ~instrument:lkoh ~ts:(Int64.add ts 1L) ~close:price_b
+      in
+      loop (iter + 1) ctx
   in
-  PMR.on_bar s ~instrument:(inst "LKOH@MISX")
-    ~candle:(candle ~ts:(Int64.add ts 1L) ~close:price_b)
-
-(* Drive the policy synthetically until it emits a proposal, returning
-   the proposal. Bound iterations to avoid an infinite loop. *)
-let drive_until_proposal state =
-  let s = ref state in
-  let prop = ref None in
-  let iter = ref 0 in
-  while Option.is_none !prop && !iter < 200 do
-    incr iter;
-    let ts = Int64.of_int (!iter * 10) in
-    let price_a = Decimal.of_float (100. +. Float.sin (float_of_int !iter)) in
-    let price_b = Decimal.of_float (100. +. (Float.cos (float_of_int !iter) *. 1.5)) in
-    let s', p = feed !s ~ts ~price_a ~price_b in
-    s := s';
-    prop := p
-  done;
-  !prop
+  loop 0 ctx
 
 let pipeline_emits_two_legged_trade_list =
   Gherkin.scenario
-    "When pair_mean_reversion fires, applying its proposal and reconciling announces a \
-     two-legged trade list"
+    "When pair_mean_reversion fires through Apply_bar_command_workflow, reconciling \
+     announces a two-legged trade list"
     fresh_ctx
     [
       Gherkin.given "a pair_mean_reversion policy on (SBER, LKOH) with window=4"
         (fun ctx -> ctx);
-      Gherkin.when_ "synthetic candles drive the policy until it emits a target proposal"
-        (fun ctx ->
-          let init_state = make_pair_state ~window:4 in
-          match drive_until_proposal init_state with
-          | None ->
-              (* The hysteresis / synthetic prices may not trigger a
-                 proposal within the bound; mark the scenario as a
-                 best-effort pipeline check rather than failing. *)
-              ctx
-          | Some prop ->
-              let positions =
-                List.map
-                  (fun (tp : Pm.Common.Target_position.t) ->
-                    ({
-                       instrument = Core.Instrument.to_qualified tp.instrument;
-                       target_qty = Decimal.to_string tp.target_qty;
-                     }
-                      : Portfolio_management_commands.Set_target_command.position))
-                  prop.positions
-              in
-              let ctx =
-                set_target ctx ~source:prop.source ~proposed_at:"2026-01-01T00:00:00Z"
-                  ~positions
-              in
-              reconcile ctx ~computed_at:"2026-01-01T00:00:01Z");
+      Gherkin.when_
+        "synthetic candles are dispatched through Apply_bar_command_workflow until the \
+         workflow applies a proposal" (fun ctx ->
+          let state_ref = ref (make_pair_state ~window:4) in
+          let ctx = drive_until_applied ctx ~state_ref in
+          if !(ctx.target_portfolio_updated_pub) <> [] then
+            reconcile ctx ~computed_at:"2026-01-01T00:00:01Z"
+          else ctx);
       Gherkin.then_
         "if a proposal fired, the announcement names exactly two distinct instruments"
         (fun ctx ->

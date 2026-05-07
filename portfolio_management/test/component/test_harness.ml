@@ -28,6 +28,9 @@ module Define_alpha_view_wf =
 module Define_alpha_view_h =
   Portfolio_management_commands.Define_alpha_view_command_handler
 
+module Apply_bar_wf = Portfolio_management_commands.Apply_bar_command_workflow
+module Apply_bar_h = Portfolio_management_commands.Apply_bar_command_handler
+
 module Target_portfolio_updated_ie =
   Portfolio_management_integration_events.Target_portfolio_updated_integration_event
 
@@ -50,6 +53,7 @@ type ctx = {
   last_change_cash_result : (unit, Change_cash_h.handle_error) Rop.t option;
   last_reconcile_result : (unit, Reconcile_h.handle_error) Rop.t option;
   last_define_alpha_view_result : (unit, Define_alpha_view_h.handle_error) Rop.t option;
+  last_apply_bar_result : (unit, Apply_bar_h.handle_error) Rop.t option;
 }
 
 let fresh_ctx () =
@@ -66,6 +70,7 @@ let fresh_ctx () =
     last_change_cash_result = None;
     last_reconcile_result = None;
     last_define_alpha_view_result = None;
+    last_apply_bar_result = None;
   }
 
 let actual_portfolio_for ctx book =
@@ -165,6 +170,44 @@ let define_alpha_view
       ~target_portfolio_for ~publish_target_portfolio_updated cmd
   in
   { ctx with last_define_alpha_view_result = Some result }
+
+(** Drive an {!Apply_bar_command_workflow} call against the supplied
+    pair_mr [state_ref]. The state ref is mutated in place by the
+    workflow's handler; on success any emitted proposal is applied to
+    [ctx.target_portfolio] and a [target_portfolio_updated] event is
+    recorded. The bar is built with [open=high=low=close] for
+    convenience — sufficient for component-level driver tests. *)
+let apply_bar ctx ~state_ref ~instrument ~ts ~close =
+  let pair_mr_states_for inst =
+    let cfg = Pm.Pair_mean_reversion.Values.Pair_mr_state.config !state_ref in
+    if Pm.Common.Pair.contains cfg.pair inst then [ state_ref ] else []
+  in
+  let target_portfolio_for book =
+    if Pm.Common.Book_id.equal book book_alpha then ctx.target_portfolio
+    else ref (Pm.Target_portfolio.empty book)
+  in
+  let publish_target_portfolio_updated e =
+    ctx.target_portfolio_updated_pub := e :: !(ctx.target_portfolio_updated_pub)
+  in
+  let close_str = Decimal.to_string close in
+  let bar : Portfolio_management_commands.Apply_bar_command.bar_dto =
+    {
+      ts;
+      open_ = close_str;
+      high = close_str;
+      low = close_str;
+      close = close_str;
+      volume = Decimal.to_string Decimal.one;
+    }
+  in
+  let cmd : Portfolio_management_commands.Apply_bar_command.t =
+    { instrument = Core.Instrument.to_qualified instrument; timeframe = "h1"; bar }
+  in
+  let result =
+    Apply_bar_wf.execute ~pair_mr_states_for ~target_portfolio_for
+      ~publish_target_portfolio_updated cmd
+  in
+  { ctx with last_apply_bar_result = Some result }
 
 let reconcile ctx ~computed_at =
   let cmd : Portfolio_management_commands.Reconcile_command.t =

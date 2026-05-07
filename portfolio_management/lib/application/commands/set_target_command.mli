@@ -5,10 +5,15 @@
     is an ISO-8601 timestamp parsed by the handler. [target_qty] is
     a signed Decimal string (positive long, negative short, zero flat).
 
-    Triggered by:
-      - a portfolio_construction policy producing a {!Target_proposal}
-        (composition root pipes through this command);
-      - an external override (CLI / future REST). *)
+    Triggered by external entries only: operator override via PM
+    HTTP routes (planned), CLI rebalance commands (planned), or
+    cross-BC imports (e.g. a third-party advisor pushing target
+    portfolios). PM-internal construction policies do NOT route
+    through this command — pair_mean_reversion applies proposals via
+    {!Apply_bar_command_workflow}; alpha_view applies via the
+    [Direction_changed] domain-event handler. Both reach
+    {!Portfolio_management.Target_portfolio.apply_proposal} directly
+    on the success path of their own workflows. *)
 
 type position = {
   instrument : string;  (** [TICKER@MIC[/BOARD]] *)

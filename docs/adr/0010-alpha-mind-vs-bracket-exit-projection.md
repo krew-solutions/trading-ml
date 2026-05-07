@@ -189,12 +189,13 @@ generic position management.
   that distinction. The discipline is enforced by code review and
   by the docstring on the `direction` field.
 - `Exit_long`/`Exit_short`/`Hold` all collapse to the same wire
-  value. Any future need to act on the entry-vs-exit distinction
-  externally (e.g. an Execution BC that wants reduce-only orders
-  when the prior signal was an entry) requires either restoring
-  a separate channel or adding a typed expiry-outcome field.
-  This ADR consciously trades that future flexibility for
-  immediate semantic correctness.
+  value. If an external consumer ever needs to act on the
+  entry-vs-exit distinction (e.g. a future Execution BC choosing
+  reduce-only orders when the prior intent was an entry), it
+  reads that distinction from PM's outbound `Trade_intent` —
+  which knows the actual delta against the held position — not
+  from `Signal_detected_IE`. This ADR consciously routes that
+  information through the right contract.
 
 **To watch for:**
 
@@ -206,10 +207,28 @@ generic position management.
   `Apply_proposed_targets_on_alpha_direction_changed` and yields
   `target_qty = 0`. Whether to propagate `reason` into the
   command DTO for telemetry is a PM decision, not strategy's.
-- Cancelling in-flight orders when target moves toward zero is
-  execution-layer responsibility. The codebase currently has no
-  Execution BC; `broker` is a venue gateway, not an execution
-  engine. The dyra is acknowledged but not closed by this ADR.
+- Closing a position when target moves to zero is **not** a separate
+  cross-BC concern — it is already realised by the existing chain:
+  PM owns both `Target_portfolio` (intended state) and
+  `Actual_portfolio` (observed state); `direction = FLAT` zeroes the
+  target, the next reconcile diff produces a closing
+  `Trade_intent`, the outbound `Trade_intents_planned_IE` carries
+  it. No separate «position-management imperative» channel is
+  needed; introducing one would re-create the same category-mixing
+  this ADR removes.
+- The narrower concern that **does** sit outside PM is order
+  lifecycle management: when a new `Trade_intents_planned_IE`
+  arrives while a prior order from the previous intent is still
+  in-flight, somebody must decide whether to cancel it, let it
+  fill, or coexist with the new order. That decision is execution-
+  layer work — it requires knowledge of which orders this engine
+  has placed, which are still working, and venue-specific cancel
+  semantics. Today the codebase has no Execution BC; `broker` is a
+  venue gateway, not an execution engine. The gap is acknowledged
+  but not closed by this ADR. It does not affect the strategy → PM
+  contract — when the gap is filled, the consumer of
+  `Trade_intents_planned_IE` is the new piece, not a parallel
+  exit-signal channel.
 
 ## References
 

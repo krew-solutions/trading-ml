@@ -22,6 +22,7 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0007](0007-decimal-as-string-in-dto.md) | Decimal as canonical string in DTOs | Accepted | 2026-05-01 |
 | [0008](0008-margin-model-for-short-selling.md) | Margin model for short selling | Accepted | 2026-05-02 |
 | [0009](0009-portfolio-management-bounded-context.md) | Portfolio Management bounded context | Accepted | 2026-05-03 |
+| [0010](0010-alpha-mind-vs-bracket-exit-projection.md) | Alpha-mind vs bracket-exit projection on the strategy → PM contract | Accepted | 2026-05-05 |
 
 ## Template
 

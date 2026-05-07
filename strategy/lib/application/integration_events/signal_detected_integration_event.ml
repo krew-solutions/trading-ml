@@ -12,8 +12,9 @@ type t = {
 type domain = Signal.t
 
 let direction_of_action : Signal.action -> string = function
-  | Enter_long | Exit_short -> "UP"
-  | Enter_short | Exit_long -> "DOWN"
+  | Enter_long -> "UP"
+  | Enter_short -> "DOWN"
+  | Exit_long | Exit_short -> "FLAT"
   | Hold -> "FLAT"
 
 let of_domain ~(strategy_id : string) ~(price : Decimal.t) (s : domain) : t =

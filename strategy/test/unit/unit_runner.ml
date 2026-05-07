@@ -50,6 +50,8 @@ let () =
       ("learned policy", Learned_policy_test.tests);
       ("gbt model", Gbt_model_test.tests);
       ("triple barrier", Triple_barrier_test.tests);
+      (* Application: integration events *)
+      ("signal detected ie", Signal_detected_integration_event_test.tests);
       (* Application: live engine *)
       ("live engine", Live_engine_test.tests);
       ("bt vs live", Differential_test.tests);

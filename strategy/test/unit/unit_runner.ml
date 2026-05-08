@@ -53,6 +53,5 @@ let () =
       (* Application: integration events *)
       ("signal detected ie", Signal_detected_integration_event_test.tests);
       (* Application: live engine *)
-      ("live engine", Live_engine_test.tests);
-      ("bt vs live", Differential_test.tests);
+      ("live engine signal publish", Live_engine_signal_publish_test.tests);
     ]

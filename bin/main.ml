@@ -287,25 +287,21 @@ let cmd_serve args =
     | Opened_synthetic _ -> Synthetic
   in
   let broker = Broker_factory.Factory.build ~bus ~env ~source_client ~rest ~paper_mode in
-  let strategy =
-    Strategy_factory.Factory.build ~bus ~sw ~broker:broker.client
-      ~strategy:resolved_strategy ~engine_symbol
+  let strategy_id_of_resolved =
+    match strategy_name with
+    | Some n -> n
+    | None -> "<none>"
   in
-  (* Wire Paper's fill events into the engine via the factory's
-     [on_fill_event] port. In real live trading this will be driven
-     by WS [order_update] frames from Finam/BCS instead — Paper is
-     the stand-in with the same callback contract. *)
-  (match (broker.paper_broker, strategy.on_fill_event) with
-  | Some p, Some on_fill ->
-      Paper.Paper_broker.on_fill p (fun (f : Paper.Paper_broker.fill) ->
-          on_fill
-            {
-              Live_engine.client_order_id = f.client_order_id;
-              actual_quantity = f.quantity;
-              actual_price = f.price;
-              actual_fee = f.fee;
-            })
-  | _ -> ());
+  let strategy =
+    Strategy_factory.Factory.build ~bus ~sw ~strategy:resolved_strategy
+      ~strategy_id:strategy_id_of_resolved ~engine_symbol
+  in
+  (* After M5: Strategy is alpha-only. Paper's fill events no longer
+     have a destination on the Strategy side — order placement runs
+     through the Place_order_pm saga in execution_management.
+     Account/Broker bus consumers for Reserve/Submit aren't wired
+     yet, so end-to-end traffic is still inert; the wiring is
+     structurally complete and waits for those final hops. *)
   let account =
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
       ~market_price:broker.market_price

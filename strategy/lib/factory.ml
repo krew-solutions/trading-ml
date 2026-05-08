@@ -1,29 +1,22 @@
-type t = {
-  http_handler : Inbound_http.Route.handler;
-  on_fill_event : (Live_engine.fill_event -> unit) option;
-}
+type t = { http_handler : Inbound_http.Route.handler }
 
-let build ~bus ~sw ~broker ~strategy ~engine_symbol : t =
+let build ~bus ~sw ~strategy ~strategy_id ~engine_symbol : t =
   let http_handler = Strategy_inbound_http.Http.make_handler () in
   match strategy with
-  | None -> { http_handler; on_fill_event = None }
+  | None -> { http_handler }
   | Some strat ->
-      let equity = Decimal.of_int 1_000_000 in
-      let cfg : Live_engine.config =
-        {
-          broker;
-          strategy = strat;
-          instrument = engine_symbol;
-          initial_cash = equity;
-          max_position_notional = Decimal.div equity (Decimal.of_int 5);
-          tif = Order.DAY;
-          fee_rate = Decimal.of_string "0.0005";
-          reconcile_every = 10;
-          max_drawdown_pct = 0.15;
-          rate_limit = None;
-        }
+      let publish_signal_detected =
+        Bus.publish
+          (Bus.producer bus ~uri:"in-memory://strategy.signal-detected"
+             ~serialize:(fun v ->
+               Yojson.Safe.to_string
+                 (Strategy_integration_events.Signal_detected_integration_event
+                  .yojson_of_t v)))
       in
-      let engine = Live_engine.make cfg in
+      let cfg : Live_engine.config =
+        { strategy = strat; instrument = engine_symbol; strategy_id }
+      in
+      let engine = Live_engine.make ~config:cfg ~publish_signal_detected in
       let engine_handler =
         Strategy_inbound_integration_events.Bar_updated_integration_event_handler.make
           ~capacity:64
@@ -45,4 +38,4 @@ let build ~bus ~sw ~broker ~strategy ~engine_symbol : t =
               (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
                .source engine_handler);
           `Stop_daemon);
-      { http_handler; on_fill_event = Some (Live_engine.on_fill_event engine) }
+      { http_handler }

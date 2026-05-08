@@ -7,10 +7,9 @@
   core
   common
   decimal
-  broker
-  engine
   strategies
   live_engine
+  strategy_integration_events
   strategy_inbound_integration_events
   strategy_inbound_queries
   strategy_inbound_http

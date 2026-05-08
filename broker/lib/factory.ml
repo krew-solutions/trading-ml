@@ -146,18 +146,25 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
     produce ~uri:"in-memory://broker.bar-updated"
       ~yojson_of:Broker_integration_events.Bar_updated_integration_event.yojson_of_t
   in
-  let _dispatch_submit_order =
+  let dispatch_submit_order =
     Broker_commands.Submit_order_command_handler.make ~broker:client
       ~publish_accepted:publish_order_accepted ~publish_rejected:publish_order_rejected
       ~publish_unreachable:publish_order_unreachable
   in
-  (* Built and held in scope for end-to-end typecheck of the
-     Submit_order pipeline. The future place-order saga will replace
-     this throwaway binding with a [Bus.subscribe] on
-     [account.amount-reserved] whose callback translates the inbound
-     IE into a [Submit_order_command] and invokes the dispatcher
-     captured in its closure. The dispatcher does not leak through
-     [t] because no consumer outside this factory needs it. *)
+  (* Saga-driven Submit_order: the place-order PM in the
+     execution_management BC publishes wire-format Submit_order
+     commands on this topic in response to Amount_reserved. The wire
+     shape is byte-equivalent to [Submit_order_command.t]. *)
+  let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
+    Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
+        t_of_yojson (Yojson.Safe.from_string s))
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://broker.submit-order-command" ~group:"broker-saga"
+         ~t_of_yojson:Broker_commands.Submit_order_command.t_of_yojson)
+      dispatch_submit_order
+  in
   let ws_setup =
     match rest with
     | Finam r -> Some (finam_live_setup ~env ~paper_sink ~publish_bar_updated r)

@@ -91,9 +91,6 @@ let indicator_series
 
 let signal_json (s : Signal.t) : Yojson.Safe.t = project (module Signal_view_model) s
 
-let backtest_result_json (r : Engine.Backtest.result) : Yojson.Safe.t =
-  project (module Backtest_result_view_model) r
-
 let indicators_catalog () : Yojson.Safe.t =
   `List
     (List.map

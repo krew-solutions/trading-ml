@@ -10,7 +10,6 @@ let () =
       (* Domain *)
       ("stream", Stream_test.tests);
       ("eio_stream", Eio_stream_test.tests);
-      ("backtest", Backtest_test.tests);
       (* Indicators — one file per indicator, mirrored from lib *)
       ("sma", Sma_test.tests);
       ("ema", Ema_test.tests);

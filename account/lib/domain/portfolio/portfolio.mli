@@ -15,10 +15,10 @@
     open blocks margin via [per_unit_collateral]. See
     [reservation/reservation.mli] for the per-Entity invariants.
 
-    Backtest doesn't have the broker-RTT latency gap, so it does
-    [reserve → commit_fill] atomically per tick; Live does
-    [reserve → broker RTT → commit_fill] with reconciliation.
-    Same API, different timing.
+    Reservation lifecycle is the same regardless of timing:
+    [reserve → commit_fill / release]. Live execution adds a
+    broker round-trip between [reserve] and [commit_fill] that the
+    in-process backtest composition does not.
 
     Gospel preconditions on the transition operations document
     the safety obligations callers must satisfy. *)
@@ -123,10 +123,9 @@ val fill :
   price:Decimal.t ->
   fee:Decimal.t ->
   t
-(** Direct fill without reservation — used by the synthetic-fill
-    path (Backtest, Paper) for code that doesn't route through the
-    reserve/commit cycle. For the reserved path, use
-    [reserve] + [commit_fill].
+(** Direct fill without reservation — used by the Paper synthetic-fill
+    path for code that doesn't route through the reserve/commit cycle.
+    For the reserved path, use [reserve] + [commit_fill].
 
     Raises [Invalid_argument] on non-positive quantity. *)
 (*@ r = fill t ~instrument ~side ~quantity ~price ~fee

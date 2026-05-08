@@ -13,8 +13,12 @@
       trading list
         show registered indicators and strategies.
 
-      trading backtest <strategy> [--n N] [--symbol SBER]
-        run a backtest on synthetic data and print summary. *)
+      trading backtest <strategy> [--n N] [--symbol SBER@MISX]
+                                   [--param KEY=VALUE ...]
+        run the same in-process composition that powers [serve], with
+        the synthetic broker as data source and paper-mode order
+        interception, then report counters tallied from the saga's
+        outbound integration events. *)
 
 open Core
 open Broker_boot
@@ -135,52 +139,289 @@ let parse_strategy_param (spec : Strategies.Registry.spec) (kv : string) :
 let strategy_params_from_args spec args : (string * Strategies.Registry.param) list =
   arg_values "--param" args |> List.map (parse_strategy_param spec)
 
-let cmd_backtest args =
-  let strat_name =
-    match args with
-    | n :: _ -> n
-    | [] -> usage ()
+type backtest_summary = {
+  strategy_name : string;
+  symbol : Instrument.t;
+  candles : int;
+  signals : int;
+  intents_planned : int;
+  intents_approved : int;
+  intents_rejected : int;
+  amounts_reserved : int;
+  reservations_rejected : int;
+  orders_accepted : int;
+  orders_rejected : int;
+  orders_unreachable : int;
+  submissions_blocked : int;
+  paper_cash : Decimal.t option;
+  realized_pnl : Decimal.t option;
+}
+(** Backtest via composition: boot the same in-process trading host
+    used by [serve], substitute the synthetic broker as data source
+    with paper-mode order interception, generate [n] synthetic candles,
+    drive them through the broker's bar-updated topic, and tally the
+    outbound integration events produced by the saga. No dedicated
+    [Backtest.run] domain function exists any more; equivalence to
+    live is enforced by running the live composition itself. *)
+
+let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
+    backtest_summary =
+  let bus = Bus.create () in
+  let in_memory_broker = In_memory.create ~sw in
+  Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
+  let opened = open_synthetic () in
+  let source_client = opened_client opened in
+  let broker =
+    Broker_factory.Factory.build ~bus ~env ~source_client ~rest:Synthetic ~paper_mode:true
   in
-  let n =
-    let rec find = function
-      | "--n" :: v :: _ -> int_of_string v
-      | _ :: rest -> find rest
-      | [] -> 500
-    in
-    find args
+  let _account =
+    Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
+      ~market_price:broker.market_price
   in
-  let instrument =
-    let rec find = function
-      | "--symbol" :: v :: _ -> Instrument.of_qualified v
-      | _ :: rest -> find rest
-      | [] -> Instrument.of_qualified "SBER@MISX"
-    in
-    find args
+  let _pm = Portfolio_management_factory.Factory.build ~bus in
+  let _pre_trade_risk =
+    Pre_trade_risk_factory.Factory.build ~bus ~initial_equity:(Decimal.of_int 1_000_000)
   in
-  match Strategies.Registry.find strat_name with
-  | None ->
-      Printf.eprintf "unknown strategy %s\n" strat_name;
-      exit 1
-  | Some spec ->
-      let params = strategy_params_from_args spec args in
-      let strat = spec.build params in
-      let syn = Synthetic.Synthetic_broker.make () in
-      let candles =
-        Synthetic.Synthetic_broker.bars syn ~n ~instrument ~timeframe:Timeframe.H1
-      in
-      let cfg = Engine.Backtest.default_config () in
-      let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
-      Printf.printf
-        "Strategy: %s\n\
-         Bars: %d\n\
-         Trades: %d\n\
-         Total return: %.2f%%\n\
-         Max drawdown: %.2f%%\n\
-         Realized PnL: %s\n\
-         Final cash: %s\n"
-        strat_name n r.num_trades (r.total_return *. 100.0) (r.max_drawdown *. 100.0)
-        (Decimal.to_string r.final.realized_pnl)
-        (Decimal.to_string r.final.cash)
+  let _execution_management =
+    Execution_management_factory.Factory.build ~bus
+      ~config:
+        {
+          initial_equity = Decimal.of_int 1_000_000;
+          max_drawdown_pct = 0.15;
+          rate_limit = None;
+        }
+  in
+  let _strategy =
+    Strategy_factory.Factory.build ~bus ~sw ~strategy:(Some strategy)
+      ~strategy_id:strategy_name ~engine_symbol:symbol
+  in
+  (* Outcome counters. The saga publishes its progression through
+     these topics; tallying their cardinality yields the post-run
+     summary that used to come from [Engine.Backtest.run]. *)
+  let signals = ref 0 in
+  let intents_planned = ref 0 in
+  let intents_approved = ref 0 in
+  let intents_rejected = ref 0 in
+  let amounts_reserved = ref 0 in
+  let reservations_rejected = ref 0 in
+  let orders_accepted = ref 0 in
+  let orders_rejected = ref 0 in
+  let orders_unreachable = ref 0 in
+  let submissions_blocked = ref 0 in
+  let consume ~uri ~group = Bus.consumer bus ~uri ~group ~deserialize:Fun.id in
+  let count r = Bus.subscribe (consume ~uri:r ~group:"backtest-collector") in
+  let _ : Bus.subscription =
+    count "in-memory://strategy.signal-detected" (fun _ -> incr signals)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://pm.trade-intents-planned" (fun _ -> incr intents_planned)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://pre-trade-risk.trade-intent-approved" (fun _ ->
+        incr intents_approved)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://pre-trade-risk.trade-intent-rejected" (fun _ ->
+        incr intents_rejected)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://account.amount-reserved" (fun _ -> incr amounts_reserved)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://account.reservation-rejected" (fun _ -> incr reservations_rejected)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://broker.order-accepted" (fun _ -> incr orders_accepted)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://broker.order-rejected" (fun _ -> incr orders_rejected)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://broker.order-unreachable" (fun _ -> incr orders_unreachable)
+  in
+  let _ : Bus.subscription =
+    count "in-memory://execution-management.trade-submission-blocked" (fun _ ->
+        incr submissions_blocked)
+  in
+  let candles_list =
+    Synthetic.Generator.generate ~n ~start_ts:0L ~tf_seconds:300 ~start_price:100.0
+  in
+  let publish_bar_updated =
+    Bus.publish
+      (Bus.producer bus ~uri:"in-memory://broker.bar-updated" ~serialize:(fun v ->
+           Yojson.Safe.to_string
+             (Broker_integration_events.Bar_updated_integration_event.yojson_of_t v)))
+  in
+  let paper_sink =
+    match broker.paper_broker with
+    | Some p -> fun candle -> Paper.Paper_broker.on_bar p ~instrument:symbol candle
+    | None -> fun _ -> ()
+  in
+  (* Each candle takes one trip through:
+     bar-updated → strategy → signal-detected → PM → trade-intents-planned
+     → pre_trade_risk → trade-intent-approved → execution_management
+     → reserve-command → account → amount-reserved → execution_management
+     → submit-order-command → broker → order-accepted/rejected
+     → execution_management (terminal). Each hop is one fiber yield in
+     the in_memory bus, so a generous yield count after each bar lets
+     the saga settle before the next bar arrives. *)
+  let drain () =
+    for _ = 1 to 32 do
+      Eio.Fiber.yield ()
+    done
+  in
+  List.iter
+    (fun candle ->
+      paper_sink candle;
+      publish_bar_updated
+        (Broker_integration_events.Bar_updated_integration_event.of_domain
+           ~instrument:symbol ~timeframe:Timeframe.M5 ~candle);
+      drain ())
+    candles_list;
+  drain ();
+  let paper_cash, realized_pnl =
+    match broker.paper_broker with
+    | Some p ->
+        let port = Paper.Paper_broker.portfolio p in
+        (Some port.Account.Portfolio.cash, Some port.Account.Portfolio.realized_pnl)
+    | None -> (None, None)
+  in
+  {
+    strategy_name;
+    symbol;
+    candles = n;
+    signals = !signals;
+    intents_planned = !intents_planned;
+    intents_approved = !intents_approved;
+    intents_rejected = !intents_rejected;
+    amounts_reserved = !amounts_reserved;
+    reservations_rejected = !reservations_rejected;
+    orders_accepted = !orders_accepted;
+    orders_rejected = !orders_rejected;
+    orders_unreachable = !orders_unreachable;
+    submissions_blocked = !submissions_blocked;
+    paper_cash;
+    realized_pnl;
+  }
+
+(** Decode strategy parameters from a JSON object against the spec's
+    declared types. Mirrors {!parse_strategy_param} for the CLI: type
+    is taken from [spec.params], the inbound value is coerced; unknown
+    keys are rejected. JSON booleans / strings / ints / floats are
+    accepted in the obvious way. *)
+let strategy_params_from_json (spec : Strategies.Registry.spec) (j : Yojson.Safe.t) :
+    (string * Strategies.Registry.param) list =
+  match j with
+  | `Null -> []
+  | `Assoc kvs ->
+      List.map
+        (fun (k, v) ->
+          match List.assoc_opt k spec.params with
+          | None ->
+              invalid_arg
+                (Printf.sprintf "unknown param %S for strategy %S (expected one of: %s)" k
+                   spec.name
+                   (String.concat ", " (List.map fst spec.params)))
+          | Some (Strategies.Registry.Int _) -> (
+              match v with
+              | `Int n -> (k, Strategies.Registry.Int n)
+              | `Intlit s -> (k, Strategies.Registry.Int (int_of_string s))
+              | _ -> invalid_arg (Printf.sprintf "param %S: expected int" k))
+          | Some (Strategies.Registry.Float _) -> (
+              match v with
+              | `Float f -> (k, Strategies.Registry.Float f)
+              | `Int n -> (k, Strategies.Registry.Float (float_of_int n))
+              | _ -> invalid_arg (Printf.sprintf "param %S: expected float" k))
+          | Some (Strategies.Registry.Bool _) -> (
+              match v with
+              | `Bool b -> (k, Strategies.Registry.Bool b)
+              | _ -> invalid_arg (Printf.sprintf "param %S: expected bool" k))
+          | Some (Strategies.Registry.String _) -> (
+              match v with
+              | `String s -> (k, Strategies.Registry.String s)
+              | _ -> invalid_arg (Printf.sprintf "param %S: expected string" k)))
+        kvs
+  | _ -> invalid_arg "params: expected object"
+
+let backtest_summary_to_json (s : backtest_summary) : Yojson.Safe.t =
+  let dec_field v =
+    match v with
+    | Some d -> `String (Decimal.to_string d)
+    | None -> `Null
+  in
+  `Assoc
+    [
+      ("strategy", `String s.strategy_name);
+      ("symbol", `String (Instrument.to_qualified s.symbol));
+      ("candles", `Int s.candles);
+      ("signals", `Int s.signals);
+      ("intents_planned", `Int s.intents_planned);
+      ("intents_approved", `Int s.intents_approved);
+      ("intents_rejected", `Int s.intents_rejected);
+      ("amounts_reserved", `Int s.amounts_reserved);
+      ("reservations_rejected", `Int s.reservations_rejected);
+      ("orders_accepted", `Int s.orders_accepted);
+      ("orders_rejected", `Int s.orders_rejected);
+      ("orders_unreachable", `Int s.orders_unreachable);
+      ("submissions_blocked", `Int s.submissions_blocked);
+      ("paper_cash", dec_field s.paper_cash);
+      ("realized_pnl", dec_field s.realized_pnl);
+    ]
+
+(** Build a route handler for [POST /api/backtest]. The closure
+    captures [env] from the live serving switch; per-request work
+    runs on a fresh inner [Eio.Switch.run] so backtest fibers,
+    in-memory broker subscriptions, and HTTP-server fibers stay
+    isolated. Body shape:
+      { "strategy": "SMA_Crossover",
+        "n": 200,
+        "symbol": "SBER@MISX",
+        "params": { "fast": 10, "slow": 30 } }
+    Defaults match {!cmd_backtest}. *)
+let make_backtest_handler ~env : Inbound_http.Route.handler =
+ fun request body ->
+  let uri = Cohttp.Request.uri request in
+  let path = Uri.path uri in
+  let meth = Cohttp.Request.meth request in
+  match (meth, path) with
+  | `POST, "/api/backtest" -> (
+      try
+        let body_str = Eio.Flow.read_all body in
+        let j = Yojson.Safe.from_string body_str in
+        let open Yojson.Safe.Util in
+        let strategy_name = j |> member "strategy" |> to_string in
+        let n =
+          match j |> member "n" with
+          | `Null -> 200
+          | `Int i -> i
+          | _ -> failwith "n"
+        in
+        let symbol =
+          match j |> member "symbol" with
+          | `Null -> Instrument.of_qualified "SBER@MISX"
+          | `String s -> Instrument.of_qualified s
+          | _ -> failwith "symbol"
+        in
+        let spec =
+          match Strategies.Registry.find strategy_name with
+          | Some s -> s
+          | None -> invalid_arg ("unknown strategy: " ^ strategy_name)
+        in
+        let params = strategy_params_from_json spec (member "params" j) in
+        let strategy = spec.build params in
+        let summary =
+          Eio.Switch.run @@ fun sw ->
+          run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol
+        in
+        Some
+          (200, `Response (Inbound_http.Response.json (backtest_summary_to_json summary)))
+      with e ->
+        Some
+          ( 400,
+            `Response
+              (Inbound_http.Response.json ~status:`Bad_request
+                 (`Assoc [ ("error", `String (Printexc.to_string e)) ])) ))
+  | _ -> None
 
 let cmd_serve args =
   let port =
@@ -327,6 +568,7 @@ let cmd_serve args =
       pre_trade_risk.http_handler;
       execution_management.http_handler;
       strategy.http_handler;
+      make_backtest_handler ~env;
     ]
   in
   (* SSE projector subscribers: each event type gets its own consumer
@@ -382,6 +624,54 @@ let cmd_serve args =
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name broker.client);
   Server.Http.run ?setup:broker.ws_setup ~bc_handlers ~sw ~env ~port ~broker:broker.client
     ~register_publisher ()
+
+let cmd_backtest args =
+  let strategy_name =
+    match List.find_opt (fun s -> String.length s > 0 && s.[0] <> '-') args with
+    | Some name -> name
+    | None ->
+        prerr_endline "backtest: missing strategy name (see `trading list`)";
+        exit 2
+  in
+  let n =
+    match arg_value "--n" args with
+    | Some v -> int_of_string v
+    | None -> 200
+  in
+  let symbol =
+    match arg_value "--symbol" args with
+    | Some v -> Instrument.of_qualified v
+    | None -> Instrument.of_qualified "SBER@MISX"
+  in
+  let spec =
+    match Strategies.Registry.find strategy_name with
+    | Some s -> s
+    | None ->
+        Printf.eprintf "unknown strategy: %s (use `trading list`)\n" strategy_name;
+        exit 2
+  in
+  let strategy = spec.build (strategy_params_from_args spec args) in
+  Log.setup ~level:Logs.Warning ();
+  Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_unix.use_default ();
+  Eio.Switch.run @@ fun sw ->
+  let s = run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol in
+  Printf.printf "backtest: strategy=%s symbol=%s candles=%d\n" s.strategy_name
+    (Instrument.to_qualified s.symbol)
+    s.candles;
+  Printf.printf "  signals_emitted=%d\n" s.signals;
+  Printf.printf "  intents: planned=%d approved=%d rejected=%d\n" s.intents_planned
+    s.intents_approved s.intents_rejected;
+  Printf.printf "  reservations: ok=%d rejected=%d\n" s.amounts_reserved
+    s.reservations_rejected;
+  Printf.printf "  orders: accepted=%d rejected=%d unreachable=%d\n" s.orders_accepted
+    s.orders_rejected s.orders_unreachable;
+  Printf.printf "  submissions_blocked=%d\n" s.submissions_blocked;
+  match (s.paper_cash, s.realized_pnl) with
+  | Some c, Some r ->
+      Printf.printf "  paper_cash=%s realized_pnl=%s\n" (Decimal.to_string c)
+        (Decimal.to_string r)
+  | _ -> ()
 
 (** Tiny HTTP client for the [orders] subcommand. Talks to a running
     server (default http://localhost:8080); the same surface the UI
@@ -490,7 +780,7 @@ let cmd_orders args =
 let () =
   match Array.to_list Sys.argv with
   | _ :: "list" :: _ -> cmd_list ()
-  | _ :: "backtest" :: rest -> cmd_backtest rest
   | _ :: "serve" :: rest -> cmd_serve rest
+  | _ :: "backtest" :: rest -> cmd_backtest rest
   | _ :: "orders" :: rest -> cmd_orders rest
   | _ -> usage ()

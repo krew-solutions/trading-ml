@@ -33,13 +33,3 @@ module _ :
 module _ :
   View_model.S with type t = Order_view_model.t and type domain = Order_view_model.domain =
   Order_view_model
-
-module _ :
-  View_model.S with type t = Fill_view_model.t and type domain = Fill_view_model.domain =
-  Fill_view_model
-
-module _ :
-  View_model.S
-    with type t = Backtest_result_view_model.t
-     and type domain = Backtest_result_view_model.domain =
-  Backtest_result_view_model

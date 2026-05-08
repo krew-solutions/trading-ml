@@ -84,6 +84,27 @@ let build ~bus ~initial_cash ~market_price : t =
       (Account_inbound_integration_events.Order_unreachable_integration_event_handler
        .handle ~dispatch_release)
   in
+  (* Saga-driven Reserve/Release: the place-order PM in the
+     execution_management BC publishes wire-format commands on these
+     topics. Both shapes are byte-equivalent to
+     [Account_commands.Reserve_command.t] and
+     [Account_commands.Release_command.t], so we deserialise straight
+     into the existing command types and route through the same
+     dispatch closures used by the HTTP path. *)
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://account.reserve-command" ~group:"account-saga"
+         ~t_of_yojson:Account_commands.Reserve_command.t_of_yojson)
+      dispatch_reserve
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://account.release-command" ~group:"account-saga"
+         ~t_of_yojson:Account_commands.Release_command.t_of_yojson)
+      (fun (cmd : Account_commands.Release_command.t) ->
+        dispatch_release ~correlation_id:cmd.correlation_id
+          ~reservation_id:cmd.reservation_id)
+  in
   let http_handler =
     Account_inbound_http.Http.make_handler ~dispatch_reserve ~market_price
   in

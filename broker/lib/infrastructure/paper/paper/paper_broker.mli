@@ -32,13 +32,13 @@ val make :
   source:Broker.client ->
   unit ->
   t
-(** [initial_cash] defaults to 1_000_000 — the same scale as
-    {!Engine.Backtest.default_config}, so paper and backtest P&L are
-    comparable out of the box.
+(** [initial_cash] defaults to 1_000_000 — the same scale used by the
+    backtest composition, so paper and backtest P&L are comparable
+    out of the box.
 
     [fee_rate] (default {!Decimal.zero}) is a multiplier on fill
     notional ([qty * price]) — set to [Decimal.of_string "0.0005"]
-    to match the backtester's 5-bps commission model.
+    for a 5-bps commission model.
 
     [slippage_bps] (default {!Decimal.zero}) shifts the fill price
     against the trader on {!Market} and {!Stop} orders: buys pay

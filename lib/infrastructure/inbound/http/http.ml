@@ -42,46 +42,6 @@ let parse_timeframe s = try Timeframe.of_string s with _ -> Timeframe.H1
 let fetch_candles broker ~instrument ~n ~timeframe =
   Broker.bars broker ~n ~instrument ~timeframe
 
-let strategy_params_of_json j =
-  match j with
-  | `Null -> []
-  | `Assoc fields ->
-      List.filter_map
-        (fun (k, v) ->
-          match v with
-          | `Int n -> Some (k, Strategies.Registry.Int n)
-          | `Float f -> Some (k, Strategies.Registry.Float f)
-          | `Bool b -> Some (k, Strategies.Registry.Bool b)
-          | `String s -> Some (k, Strategies.Registry.String s)
-          | _ -> None)
-        fields
-  | _ -> []
-
-let run_backtest broker body_str =
-  let j = Yojson.Safe.from_string body_str in
-  let open Yojson.Safe.Util in
-  let instrument = Instrument.of_qualified (member "symbol" j |> to_string) in
-  let strat_name = member "strategy" j |> to_string in
-  let params = strategy_params_of_json (member "params" j) in
-  let n =
-    match member "n" j with
-    | `Int n -> n
-    | _ -> 500
-  in
-  let timeframe =
-    match member "timeframe" j with
-    | `String s -> parse_timeframe s
-    | _ -> Timeframe.H1
-  in
-  match Strategies.Registry.find strat_name with
-  | None -> `Assoc [ ("error", `String "unknown strategy") ]
-  | Some spec ->
-      let strat = spec.build params in
-      let candles = fetch_candles broker ~instrument ~n ~timeframe in
-      let cfg = Engine.Backtest.default_config () in
-      let r = Engine.Backtest.run ~config:cfg ~strategy:strat ~instrument ~candles in
-      Api.backtest_result_json r
-
 (** Per-bar-feed seed payload. Rides the [bar] SSE channel with
     [kind: "seed"], symbol+timeframe metadata identifies which feed,
     so the browser dispatches inside its single
@@ -216,9 +176,6 @@ let route ~broker ~bc_handlers ~registry request body :
         | `GET, "/api/stream" ->
             let bar_keys = parse_bars_param (get_query uri "bars") in
             (200, `Expert (sse_expert registry ~bar_keys))
-        | `POST, "/api/backtest" ->
-            let body = Eio.Flow.read_all body in
-            ok (json_response (run_backtest broker body))
         | `GET, "/" | `GET, "/health" ->
             ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
         | _ -> (404, `Response (string_response ~status:`Not_found "not found")))

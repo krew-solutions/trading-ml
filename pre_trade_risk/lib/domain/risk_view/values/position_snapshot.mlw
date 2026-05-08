@@ -1,0 +1,20 @@
+(** Why3 companion for [position_snapshot.mli] — VO snapshot of a
+    risk-view position. Structural carrier; the VO has no behavioural
+    invariants beyond the smart-constructor's instrument identity
+    (delegated to [Core.Instrument]). [quantity] may be negative
+    (short). *)
+
+module Position_snapshot
+  use decimal.Decimal
+
+  (** Instrument identity is opaque at this level — same convention as
+      in [account.portfolio.values.position.mlw]; structural reasoning
+      here doesn't depend on the concrete identity semantics. *)
+  type instrument
+
+  type t = {
+    instrument : instrument;
+    quantity   : Decimal.t;
+    avg_price  : Decimal.t;
+  }
+end

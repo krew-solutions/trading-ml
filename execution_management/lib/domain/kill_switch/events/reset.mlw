@@ -1,0 +1,12 @@
+(** Why3 companion for [reset.mli] — Domain Event record.
+    Pure data carrier: structural, no behavioural lemmas. *)
+
+module Reset
+  use int.Int
+  use decimal.Decimal
+
+  type t = {
+    new_peak_equity : Decimal.t;
+    occurred_at : int;
+  }
+end

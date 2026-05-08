@@ -1,0 +1,16 @@
+(** Why3 companion for [cash_recorded.mli] — Domain Event record.
+    A pure data carrier: structural, no behavioural lemmas. *)
+
+module Cash_recorded
+  use int.Int
+  use decimal.Decimal
+
+  type book_id
+
+  type t = {
+    book_id : book_id;
+    delta : Decimal.t;
+    new_balance : Decimal.t;
+    occurred_at : int;
+  }
+end

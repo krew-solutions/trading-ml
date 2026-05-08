@@ -1,0 +1,82 @@
+(** Why3 companion for [risk_view.mli] — aggregate-root structural
+    invariants. Pins the post-state contracts of the two mutators
+    against the symbolic record / list model. Per-instrument
+    single-valuedness is structural (the OCaml side filters by
+    instrument before consing); we model it as the obvious lemma on
+    the result of [apply_position_change]. *)
+
+module Risk_view
+  use int.Int
+  use list.List
+  use list.Length
+  use decimal.Decimal
+  use risk_view.values.position_snapshot.Position_snapshot as P
+
+  type book_id
+
+  type t = {
+    book_id : book_id;
+    cash : Decimal.t;
+    positions : list P.t;
+  }
+
+  (** Empty view: zero cash, no positions, supplied book id. *)
+  function empty (b: book_id) : t =
+    { book_id = b; cash = Decimal.zero; positions = Nil }
+
+  lemma empty_no_positions :
+    forall b: book_id. length (empty b).positions = 0
+
+  lemma empty_zero_cash :
+    forall b: book_id. raw (empty b).cash = 0
+
+  lemma empty_book_id_echoed :
+    forall b: book_id. (empty b).book_id = b
+
+  (** Structural post-state of [apply_cash_change]: the new cash equals
+      the upstream-supplied [new_balance], regardless of [delta]. The
+      upstream is authoritative on the post-state — [delta] is recorded
+      for audit, not used to derive the new value. *)
+  predicate cash_replaced (before after: t) (new_balance: Decimal.t) =
+    raw after.cash = raw new_balance /\
+    after.book_id = before.book_id /\
+    length after.positions = length before.positions
+
+  lemma cash_replaced_preserves_book :
+    forall before after: t, nb: Decimal.t.
+      cash_replaced before after nb -> after.book_id = before.book_id
+
+  (** Structural post-state of [apply_position_change] in the *upsert*
+      case ([new_qty <> 0]): the resulting list has length at most
+      [length before.positions + 1] (the entry for [instrument] is
+      either replaced — same length — or appended — length + 1). *)
+  predicate position_upserted (before after: t) =
+    after.book_id = before.book_id /\
+    raw after.cash = raw before.cash /\
+    length after.positions <= length before.positions + 1
+
+  (** Structural post-state of [apply_position_change] in the *prune*
+      case ([new_qty = 0]): the resulting list has length at most
+      [length before.positions] (the entry for [instrument] is removed
+      if it was present, otherwise the list is unchanged). *)
+  predicate position_pruned (before after: t) =
+    after.book_id = before.book_id /\
+    raw after.cash = raw before.cash /\
+    length after.positions <= length before.positions
+
+  lemma upsert_preserves_book :
+    forall before after: t.
+      position_upserted before after -> after.book_id = before.book_id
+
+  lemma prune_preserves_book :
+    forall before after: t.
+      position_pruned before after -> after.book_id = before.book_id
+
+  lemma upsert_preserves_cash :
+    forall before after: t.
+      position_upserted before after -> raw after.cash = raw before.cash
+
+  lemma prune_preserves_cash :
+    forall before after: t.
+      position_pruned before after -> raw after.cash = raw before.cash
+end

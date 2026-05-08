@@ -1,0 +1,15 @@
+(** Why3 companion for [tripped.mli] — Domain Event record.
+    Pure data carrier: structural, no behavioural lemmas. *)
+
+module Tripped
+  use int.Int
+  use real.RealInfix
+  use decimal.Decimal
+
+  type t = {
+    peak_equity : Decimal.t;
+    current_equity : Decimal.t;
+    drawdown : real;
+    occurred_at : int;
+  }
+end

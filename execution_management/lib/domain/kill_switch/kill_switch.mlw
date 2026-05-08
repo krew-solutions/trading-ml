@@ -1,0 +1,64 @@
+(** Why3 companion for [kill_switch.mli] — aggregate-root invariants.
+    Pins three structural properties:
+      - peak_equity is monotone non-decreasing under [update_equity];
+      - [halted] is one-way: once true, [update_equity] alone cannot
+        flip it back to false (only [reset] does);
+      - [reset] re-establishes [halted = false] and replaces the peak. *)
+
+module Kill_switch
+  use int.Int
+  use real.RealInfix
+  use decimal.Decimal
+  use bool.Bool
+  use kill_switch.values.max_drawdown_pct.Max_drawdown_pct as Mdp
+
+  type t = {
+    peak_equity : Decimal.t;
+    max_drawdown_pct : Mdp.t;
+    halted : bool;
+  }
+
+  function make (initial: Decimal.t) (mdp: Mdp.t) : t =
+    { peak_equity = initial; max_drawdown_pct = mdp; halted = false }
+
+  lemma make_not_halted :
+    forall i: Decimal.t, m: Mdp.t. (make i m).halted = false
+
+  lemma make_peak_echoed :
+    forall i: Decimal.t, m: Mdp.t. raw (make i m).peak_equity = raw i
+
+  (** Post-state of [update_equity]: the peak is the max of old peak
+      and new equity, so it never decreases. The halted flag stays at
+      its old value or transitions false → true; never true → false. *)
+  predicate equity_update_monotone (before after: t) =
+    raw after.peak_equity >= raw before.peak_equity /\
+    (before.halted = true -> after.halted = true)
+
+  lemma update_preserves_halt :
+    forall before after: t.
+      equity_update_monotone before after ->
+      before.halted = true -> after.halted = true
+
+  lemma update_grows_peak :
+    forall before after: t.
+      equity_update_monotone before after ->
+      raw after.peak_equity >= raw before.peak_equity
+
+  (** Post-state of [reset]: halted is cleared, peak is replaced by
+      the operator-supplied new peak. *)
+  function do_reset (before: t) (new_peak: Decimal.t) : t =
+    { peak_equity = new_peak;
+      max_drawdown_pct = before.max_drawdown_pct;
+      halted = false }
+
+  lemma reset_clears_halt :
+    forall before: t, p: Decimal.t. (do_reset before p).halted = false
+
+  lemma reset_replaces_peak :
+    forall before: t, p: Decimal.t.
+      raw (do_reset before p).peak_equity = raw p
+
+  lemma reset_preserves_threshold :
+    forall before: t, p: Decimal.t.
+      (do_reset before p).max_drawdown_pct = before.max_drawdown_pct
+end

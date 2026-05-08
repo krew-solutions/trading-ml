@@ -25,6 +25,8 @@
     upstream Account events, with different consumers and different
     invariants. *)
 
+(*@ function dec_raw (d : Decimal.t) : integer *)
+
 module Values : module type of Values
 (** Re-exports of peer subdirs. *)
 
@@ -33,6 +35,9 @@ module Events : module type of Events
 type t
 
 val empty : Common.Book_id.t -> t
+(*@ v = empty b
+    ensures dec_raw (cash v) = 0
+    ensures positions v = [] *)
 
 val book_id : t -> Common.Book_id.t
 val cash : t -> Decimal.t
@@ -58,3 +63,7 @@ val apply_cash_change :
   new_balance:Decimal.t ->
   occurred_at:int64 ->
   t * Events.Cash_recorded.t
+(*@ r = apply_cash_change v ~delta ~new_balance ~occurred_at
+    ensures match r with (v', _) ->
+              dec_raw (cash v') = dec_raw new_balance
+              /\ book_id v' = book_id v *)

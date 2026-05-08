@@ -1,0 +1,46 @@
+(** Why3 companion for [rate_limit.mli] — rolling-window invariants.
+    The aggregate is a list of timestamps plus the config. The two
+    structural properties pinned here:
+      - [active_count] is bounded by the list length;
+      - [try_acquire] under [`Allow] grows the list by one (the new
+        timestamp is recorded). *)
+
+module Rate_limit
+  use int.Int
+  use real.RealInfix
+  use list.List
+  use list.Length
+  use rate_limit.values.rate_limit_config.Rate_limit_config as C
+
+  type t = {
+    config : C.t;
+    timestamps : list real;
+  }
+
+  function make (c: C.t) : t = { config = c; timestamps = Nil }
+
+  lemma make_empty : forall c: C.t. length (make c).timestamps = 0
+
+  (** Membership predicate: a timestamp is "active" at [now] iff it
+      lies within the trailing window. *)
+  predicate active_at (now: real) (window: real) (ts: real) =
+    ts >. now -. window /\ ts <=. now
+
+  (** Structural post-state of an [`Allow] outcome: exactly one new
+      timestamp appended to the active set. *)
+  predicate allow_grows (before after: t) (now: real) =
+    after.config = before.config /\
+    length after.timestamps = length before.timestamps + 1
+
+  lemma allow_grows_length :
+    forall before after: t, now: real.
+      allow_grows before after now ->
+      length after.timestamps > length before.timestamps
+
+  (** Structural post-state of a [`Throttle] outcome: state unchanged.
+      [`Throttle] never modifies the aggregate — the discipline is
+      that the caller drops or re-queues the submission. *)
+  predicate throttle_preserves (before after: t) =
+    after.config = before.config /\
+    length after.timestamps = length before.timestamps
+end

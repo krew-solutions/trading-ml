@@ -1,0 +1,40 @@
+(** Why3 companion for [assessment.mli] — algebraic shape of the
+    pre-trade hard gate. The gate is hard-veto: on success it returns
+    the *unchanged* requested quantity, on failure it produces a
+    [Reject] with a reason. Soft clipping does not happen here; that
+    is [Portfolio_management.Risk_policy]'s job. The lemmas below pin
+    the no-down-scaling property at the type level. *)
+
+module Assessment
+  use int.Int
+  use decimal.Decimal
+
+  type outcome = Approve Decimal.t | Reject string
+
+  (** Approve carries exactly the input quantity (no clip). Surfaced
+      as a function from the input quantity. *)
+  function approve_qty (q: Decimal.t) : outcome = Approve q
+
+  lemma approve_preserves_quantity :
+    forall q: Decimal.t.
+      match approve_qty q with
+      | Approve q' -> raw q' = raw q
+      | Reject _   -> false
+      end
+
+  (** The two outcomes are disjoint: a single assessment is either an
+      Approve or a Reject, never both. *)
+  predicate is_approve (o: outcome) =
+    match o with Approve _ -> true | Reject _ -> false end
+
+  predicate is_reject (o: outcome) =
+    match o with Approve _ -> false | Reject _ -> true end
+
+  lemma outcome_disjoint :
+    forall o: outcome.
+      not (is_approve o /\ is_reject o)
+
+  lemma outcome_total :
+    forall o: outcome.
+      is_approve o \/ is_reject o
+end

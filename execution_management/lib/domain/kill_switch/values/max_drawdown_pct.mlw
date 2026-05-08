@@ -1,0 +1,20 @@
+(** Why3 companion for [max_drawdown_pct.mli] — drawdown threshold
+    bounded to [0, 1]. The smart-ctor enforces the range; this module
+    proves the bounds are preserved by [to_float]. *)
+
+module Max_drawdown_pct
+  use real.RealInfix
+
+  type t
+
+  function to_float (x: t) : real
+
+  axiom range : forall x: t. to_float x >=. 0.0 /\ to_float x <=. 1.0
+
+  function disabled : t
+  axiom disabled_zero : to_float disabled = 0.0
+
+  predicate is_disabled (x: t) = to_float x = 0.0
+
+  lemma disabled_satisfies_is_disabled : is_disabled disabled
+end

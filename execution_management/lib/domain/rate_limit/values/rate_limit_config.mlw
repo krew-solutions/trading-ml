@@ -1,0 +1,21 @@
+(** Why3 companion for [rate_limit_config.mli] — VO with two
+    invariants. *)
+
+module Rate_limit_config
+  use int.Int
+  use real.RealInfix
+
+  type t = {
+    max_orders : int;
+    window_seconds : real;
+  }
+
+  predicate well_formed (c: t) =
+    c.max_orders >= 0 /\ c.window_seconds >. 0.0
+
+  lemma well_formed_max_orders_nonneg :
+    forall c: t. well_formed c -> c.max_orders >= 0
+
+  lemma well_formed_window_positive :
+    forall c: t. well_formed c -> c.window_seconds >. 0.0
+end

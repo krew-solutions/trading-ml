@@ -8,6 +8,12 @@
     [Position_changed] integration event, but is owned by this BC so
     Risk_view never imports the Account aggregate directly. *)
 
+(*@ function dec_raw (d : Decimal.t) : integer *)
+(** Local alias for [Decimal.t]'s scaled-integer projection. See
+    [account/portfolio/reservation/reservation.mli] for the rationale —
+    Gospel 0.3.1 doesn't carry [model] declarations across files, so
+    each consumer restates it. *)
+
 type t = private {
   instrument : Core.Instrument.t;
   quantity : Decimal.t;
@@ -22,4 +28,9 @@ val make : instrument:Core.Instrument.t -> quantity:Decimal.t -> avg_price:Decim
 
 val instrument : t -> Core.Instrument.t
 val quantity : t -> Decimal.t
+(*@ q = quantity p
+    ensures dec_raw q = dec_raw p.quantity *)
+
 val avg_price : t -> Decimal.t
+(*@ a = avg_price p
+    ensures dec_raw a = dec_raw p.avg_price *)

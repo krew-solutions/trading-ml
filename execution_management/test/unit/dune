@@ -1,0 +1,11 @@
+(test
+ (name execution_management_unit_runner)
+ (libraries
+  core
+  decimal
+  execution_management
+  execution_management_inbound_integration_events
+  execution_management_process_managers
+  alcotest))
+
+(include_subdirs unqualified)

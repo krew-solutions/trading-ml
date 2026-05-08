@@ -314,12 +314,22 @@ let cmd_serve args =
   let pre_trade_risk =
     Pre_trade_risk_factory.Factory.build ~bus ~initial_equity:(Decimal.of_int 1_000_000)
   in
+  let execution_management =
+    Execution_management_factory.Factory.build ~bus
+      ~config:
+        {
+          initial_equity = Decimal.of_int 1_000_000;
+          max_drawdown_pct = 0.15;
+          rate_limit = None;
+        }
+  in
   let bc_handlers =
     [
       account.http_handler;
       broker.http_handler;
       pm.http_handler;
       pre_trade_risk.http_handler;
+      execution_management.http_handler;
       strategy.http_handler;
     ]
   in

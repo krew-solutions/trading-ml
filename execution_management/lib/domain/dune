@@ -1,0 +1,39 @@
+(library
+ (name execution_management)
+ (public_name trading.execution_management)
+ (libraries core decimal))
+
+(include_subdirs qualified)
+
+(rule
+ (alias gospel)
+ (deps
+  (glob_files_rec *.mli)
+  (glob_files ../../../shared/lib/domain/gospel_stubs/*.mli))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  grep -q '(\\*@' \"$f\" || continue
+  gospel check -L ../../../shared/lib/domain/gospel_stubs -L . \"$f\"
+done")))
+
+(rule
+ (alias why3)
+ (deps
+  (glob_files_rec *.mlw)
+  (glob_files ../../../shared/lib/domain/core/*.mlw)
+  (glob_files ../../../shared/lib/decimal/*.mlw))
+ (action
+  (bash
+   "set -eu
+for f in %{deps}; do
+  case \"$f\" in ../*) continue ;; esac
+  why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P alt-ergo \"$f\" >/dev/null 2>&1 \\
+    || why3 prove -L . -L ../../../shared/lib/domain/core -L ../../../shared/lib/decimal -P z3 \"$f\" >/dev/null
+done")))
+
+(alias
+ (name runtest)
+ (deps (alias why3)))

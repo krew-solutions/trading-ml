@@ -10,6 +10,7 @@
             account_factory
             portfolio_management_factory
             pre_trade_risk_factory
+            execution_management_factory
             strategy_factory
             broker_factory
             account_commands account_integration_events account_inbound_integration_events

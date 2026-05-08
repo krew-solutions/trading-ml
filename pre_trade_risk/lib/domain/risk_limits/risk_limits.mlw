@@ -1,0 +1,30 @@
+(** Why3 companion for [risk_limits.mli] — VO with three invariants. *)
+
+module Risk_limits
+  use int.Int
+  use real.RealInfix
+  use decimal.Decimal
+
+  type t = {
+    min_cash_buffer    : Decimal.t;
+    max_gross_exposure : Decimal.t;
+    max_leverage       : real;
+  }
+
+  predicate well_formed (l: t) =
+    raw l.min_cash_buffer >= 0 /\
+    raw l.max_gross_exposure >= 0 /\
+    l.max_leverage >. 0.0
+
+  lemma well_formed_min_cash_nonneg :
+    forall l: t. well_formed l ->
+      raw l.min_cash_buffer >= 0
+
+  lemma well_formed_gross_nonneg :
+    forall l: t. well_formed l ->
+      raw l.max_gross_exposure >= 0
+
+  lemma well_formed_leverage_positive :
+    forall l: t. well_formed l ->
+      l.max_leverage >. 0.0
+end

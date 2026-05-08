@@ -1,0 +1,12 @@
+type t = string
+
+let of_string raw =
+  let s = String.trim raw in
+  if s = "" then invalid_arg "Book_id.of_string: empty";
+  s
+
+let to_string s = s
+let equal = String.equal
+let compare = String.compare
+let hash = Hashtbl.hash
+let pp ppf s = Format.pp_print_string ppf s

@@ -1,7 +1,7 @@
 open Core
 
 type config = {
-  limits : Risk.limits;
+  max_position_notional : Decimal.t;
   instrument : Instrument.t;
   fee_rate : Decimal.t;
   margin_policy : Account.Portfolio.Margin_policy.t;
@@ -39,7 +39,8 @@ let size_for_signal ~config ~portfolio ~price (sig_ : Signal.t) :
   let equity = Account.Portfolio.equity portfolio mark in
   let entry_qty side =
     let q =
-      Risk.size_from_strength ~equity ~price ~limits:config.limits
+      Risk.size_from_strength ~equity ~price
+        ~max_position_notional:config.max_position_notional
         ~strength:(Float.max 0.1 sig_.strength)
     in
     if Decimal.is_zero q then None else Some (side, q)
@@ -64,40 +65,29 @@ let execute_pending config state (c : Candle.t) : state * (Signal.t * settled) o
   | None -> (state, None)
   | Some sig_ -> (
       let price = c.Candle.open_ in
-      let mark _ = Some price in
       let cleared = { state with pending_signal = None } in
       match size_for_signal ~config ~portfolio:state.portfolio ~price sig_ with
       | None -> (cleared, None)
-      | Some (side, qty) -> (
-          match
-            Risk.check ~portfolio:state.portfolio ~limits:config.limits
-              ~instrument:config.instrument ~side ~quantity:qty ~price ~mark
-          with
-          | Reject _ -> (cleared, None)
-          | Accept q ->
-              let fee = Decimal.mul (Decimal.mul q price) config.fee_rate in
-              let reservation_id = state.reservation_seq in
-              let portfolio_r =
-                Account.Portfolio.reserve state.portfolio ~id:reservation_id ~side
-                  ~instrument:config.instrument ~quantity:q ~price
-                  ~slippage_buffer:Decimal.zero ~fee_rate:config.fee_rate
-                  ~margin_policy:config.margin_policy
-              in
-              (* [auto_commit]: Backtest commits immediately (no broker
-           latency); Live leaves the reservation open until a fill
-           event arrives and calls {!commit_fill} externally. *)
-              let portfolio' =
-                if config.auto_commit then
-                  Account.Portfolio.commit_fill portfolio_r ~id:reservation_id
-                    ~actual_quantity:q ~actual_price:price ~actual_fee:fee
-                else portfolio_r
-              in
-              ( {
-                  cleared with
-                  portfolio = portfolio';
-                  reservation_seq = reservation_id + 1;
-                },
-                Some (sig_, { side; quantity = q; price; fee; reservation_id }) )))
+      | Some (side, qty) ->
+          let fee = Decimal.mul (Decimal.mul qty price) config.fee_rate in
+          let reservation_id = state.reservation_seq in
+          let portfolio_r =
+            Account.Portfolio.reserve state.portfolio ~id:reservation_id ~side
+              ~instrument:config.instrument ~quantity:qty ~price
+              ~slippage_buffer:Decimal.zero ~fee_rate:config.fee_rate
+              ~margin_policy:config.margin_policy
+          in
+          (* [auto_commit]: Backtest commits immediately (no broker
+             latency); Live leaves the reservation open until a fill
+             event arrives and calls {!commit_fill} externally. *)
+          let portfolio' =
+            if config.auto_commit then
+              Account.Portfolio.commit_fill portfolio_r ~id:reservation_id
+                ~actual_quantity:qty ~actual_price:price ~actual_fee:fee
+            else portfolio_r
+          in
+          ( { cleared with portfolio = portfolio'; reservation_seq = reservation_id + 1 },
+            Some (sig_, { side; quantity = qty; price; fee; reservation_id }) ))
 
 let commit_fill state ~reservation_id ~actual_quantity ~actual_price ~actual_fee =
   let portfolio' =

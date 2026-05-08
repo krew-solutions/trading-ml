@@ -30,7 +30,7 @@ type config = {
   strategy : Strategies.Strategy.t;
   instrument : Instrument.t;
   initial_cash : Decimal.t;
-  limits : Engine.Risk.limits;
+  max_position_notional : Decimal.t;
   tif : Order.time_in_force;
   fee_rate : Decimal.t;
       (** Commission multiplier on fill notional — mirrors

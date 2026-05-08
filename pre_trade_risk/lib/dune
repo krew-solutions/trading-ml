@@ -1,0 +1,20 @@
+(library
+ (name pre_trade_risk_factory)
+ (public_name trading.pre_trade_risk.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  decimal
+  pre_trade_risk
+  pre_trade_risk_commands
+  pre_trade_risk_integration_events
+  pre_trade_risk_inbound_integration_events
+  pre_trade_risk_inbound_http
+  inbound_http
+  yojson
+  ppx_yojson_conv_lib)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

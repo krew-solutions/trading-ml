@@ -17,12 +17,26 @@
     Splitting lets {!Backtest} mark-to-market at [c.close] on the
     intermediate state for its equity curve, and lets
     {!Live_engine} submit the broker order for [settled] before
-    advancing strategy state. Both callers invoke them in sequence. *)
+    advancing strategy state. Both callers invoke them in sequence.
+
+    The pre-trade risk gate that used to live inside {!execute_pending}
+    moved to the {!Pre_trade_risk} bounded context (plan M1). The
+    cross-BC veto is reintroduced at the saga boundary by
+    {!Pre_trade_risk.Assessment.assess} once Strategy publishes
+    {!Signal_detected_integration_event} in M5 — Step itself just
+    sizes the quantity from {!Risk.size_from_strength} and reserves
+    unconditionally. *)
 
 open Core
 
 type config = {
-  limits : Risk.limits;
+  max_position_notional : Decimal.t;
+      (** Per-instrument notional cap fed into
+        {!Risk.size_from_strength}. Replaces the previous
+        [limits : Risk.limits] field — the rest of [Risk.limits]
+        (cash buffer, gross exposure, leverage) is enforced
+        out-of-process at the saga boundary by
+        {!Pre_trade_risk.Assessment.assess}. *)
   instrument : Instrument.t;
   fee_rate : Decimal.t;
   margin_policy : Account.Portfolio.Margin_policy.t;
@@ -45,11 +59,6 @@ type settled = {
   price : Decimal.t;
   fee : Decimal.t;
   reservation_id : int;
-      (** Handle into [state.portfolio.reservations] — consumers call
-      {!Account.Portfolio.commit_fill} or {!Account.Portfolio.release} with this id
-      when the broker reports the corresponding fill or rejection.
-      In Backtest the commit is immediate (same tick); in live mode
-      it awaits a broker event. *)
 }
 
 type state = private {
@@ -58,9 +67,6 @@ type state = private {
   pending_signal : Signal.t option;
   last_bar_ts : int64;
   reservation_seq : int;
-      (** Monotonic counter; every {!execute_pending} that produces a
-      settled trade consumes one slot for the new
-      [reservation_id]. *)
 }
 
 val make_state : strategy:Strategies.Strategy.t -> cash:Decimal.t -> state
@@ -68,17 +74,15 @@ val make_state : strategy:Strategies.Strategy.t -> cash:Decimal.t -> state
 val execute_pending : config -> state -> Candle.t -> state * (Signal.t * settled) option
 (** Fire any pending signal at [c.open_]. Sizes via
     {!Risk.size_from_strength} (entries) or existing position
-    (exits), gates through {!Risk.check}, applies
-    {!Account.Portfolio.fill}. Returns the updated state (with pending
-    cleared) and, if a trade happened, the signal that caused it
-    plus the {!settled} trade details. Exits require a position of
-    the matching direction — Exit_long on a flat or short book
-    returns [None] rather than doubling down. *)
+    (exits), then reserves via {!Account.Portfolio.reserve}. The
+    pre-trade gate that used to run here moved to the
+    {!Pre_trade_risk} BC; reservations now succeed unconditionally
+    inside the engine and the cross-BC veto runs out-of-process via
+    integration events. Exits require a position of the matching
+    direction — Exit_long on a flat or short book returns [None]
+    rather than doubling down. *)
 
 val advance_strategy : config -> state -> Candle.t -> state
-(** Feed [c] to the strategy; any non-Hold signal becomes the new
-    pending, to be executed on the next bar's open. Also advances
-    [last_bar_ts]. *)
 
 val commit_fill :
   state ->
@@ -87,14 +91,6 @@ val commit_fill :
   actual_price:Decimal.t ->
   actual_fee:Decimal.t ->
   state
-(** Settle a reservation fully with actual broker numbers. Used in
-    Live mode when a broker fill event arrives with
-    [actual_quantity] matching the remaining reserved amount. Raises
-    [Not_found] when the id is unknown (already settled or never
-    existed).
-
-    Not called in Backtest: [auto_commit = true] handles it inside
-    {!execute_pending}. *)
 
 val commit_partial_fill :
   state ->
@@ -103,15 +99,5 @@ val commit_partial_fill :
   actual_price:Decimal.t ->
   actual_fee:Decimal.t ->
   state
-(** Partially settle a reservation — shrinks the reservation by
-    [actual_quantity] and applies that slice as a fill. When the
-    remaining amount reaches zero the reservation is removed
-    automatically.
-
-    Used when a broker reports a partial fill (split over several
-    executions). Raises [Not_found] / [Invalid_argument] per
-    {!Account.Portfolio.commit_partial_fill}. *)
 
 val release : state -> reservation_id:int -> state
-(** Drop a reservation without a fill — used on broker reject /
-    cancel. No-op when the id is unknown. *)

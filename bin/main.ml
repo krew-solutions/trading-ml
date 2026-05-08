@@ -311,8 +311,17 @@ let cmd_serve args =
       ~market_price:broker.market_price
   in
   let pm = Portfolio_management_factory.Factory.build ~bus in
+  let pre_trade_risk =
+    Pre_trade_risk_factory.Factory.build ~bus ~initial_equity:(Decimal.of_int 1_000_000)
+  in
   let bc_handlers =
-    [ account.http_handler; broker.http_handler; pm.http_handler; strategy.http_handler ]
+    [
+      account.http_handler;
+      broker.http_handler;
+      pm.http_handler;
+      pre_trade_risk.http_handler;
+      strategy.http_handler;
+    ]
   in
   (* SSE projector subscribers: each event type gets its own consumer
      in group "sse-publisher" with the publisher-side DTO

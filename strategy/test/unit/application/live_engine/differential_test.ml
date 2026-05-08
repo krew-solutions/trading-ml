@@ -59,7 +59,7 @@ let run_backtest instrument candles =
     {
       initial_cash = equity_init;
       fee_rate;
-      limits = Engine.Risk.default_limits ~equity:equity_init;
+      max_position_notional = Decimal.div equity_init (Decimal.of_int 5);
     }
   in
   let strat = Strategies.Strategy.default (module Strategies.Sma_crossover) in
@@ -77,7 +77,7 @@ let run_live instrument candles =
       strategy = strat;
       instrument;
       initial_cash = equity_init;
-      limits = Engine.Risk.default_limits ~equity:equity_init;
+      max_position_notional = Decimal.div equity_init (Decimal.of_int 5);
       tif = Order.DAY;
       fee_rate;
       reconcile_every = 0;

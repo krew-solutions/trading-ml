@@ -28,13 +28,19 @@ type result = {
   num_trades : int;
 }
 
-type config = { initial_cash : Decimal.t; fee_rate : Decimal.t; limits : Risk.limits }
+type config = {
+  initial_cash : Decimal.t;
+  fee_rate : Decimal.t;
+  max_position_notional : Decimal.t;
+}
 
 let default_config ?(initial_cash = Decimal.of_int 1_000_000) () =
   {
     initial_cash;
     fee_rate = Decimal.of_string "0.0005";
-    limits = Risk.default_limits ~equity:initial_cash;
+    max_position_notional = Decimal.div initial_cash (Decimal.of_int 5);
+    (* Matches the [Engine.Risk.default_limits.max_position_notional]
+       constant from before the M1 split. *)
   }
 
 let max_drawdown equity_curve =
@@ -74,7 +80,7 @@ let run
     ~(candles : Candle.t list) : result =
   let step_cfg : Step.config =
     {
-      limits = config.limits;
+      max_position_notional = config.max_position_notional;
       instrument;
       fee_rate = config.fee_rate;
       margin_policy =

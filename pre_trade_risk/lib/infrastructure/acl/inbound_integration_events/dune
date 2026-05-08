@@ -1,0 +1,12 @@
+(library
+ (name pre_trade_risk_inbound_integration_events)
+ (public_name trading.pre_trade_risk.acl.inbound_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  pre_trade_risk_commands
+  pre_trade_risk_inbound_queries)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

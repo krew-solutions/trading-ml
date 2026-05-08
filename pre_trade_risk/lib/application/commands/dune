@@ -1,0 +1,17 @@
+(library
+ (name pre_trade_risk_commands)
+ (public_name trading.pre_trade_risk.commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  datetime
+  pre_trade_risk
+  pre_trade_risk_queries
+  pre_trade_risk_integration_events
+  rop)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

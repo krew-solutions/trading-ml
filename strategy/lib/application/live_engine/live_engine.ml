@@ -5,7 +5,7 @@ type config = {
   strategy : Strategies.Strategy.t;
   instrument : Instrument.t;
   initial_cash : Decimal.t;
-  limits : Engine.Risk.limits;
+  max_position_notional : Decimal.t;
   tif : Order.time_in_force;
   fee_rate : Decimal.t;
   reconcile_every : int;
@@ -55,7 +55,7 @@ type t = {
 let make (cfg : config) : t =
   let step_cfg : Engine.Step.config =
     {
-      limits = cfg.limits;
+      max_position_notional = cfg.max_position_notional;
       instrument = cfg.instrument;
       fee_rate = cfg.fee_rate;
       margin_policy =
@@ -63,8 +63,10 @@ let make (cfg : config) : t =
           ~haircut:(Decimal.of_string "0.5");
       auto_commit = false;
       (* Live defers commit until the broker reports a fill via
-       {!on_fill_event}. Reservations stay open until then and
-       properly shrink [available_cash] for subsequent Risk gates. *)
+       {!on_fill_event}. Reservations stay open until then; the hard
+       pre-trade gate that used to enforce cash/leverage now runs
+       out-of-process in the {!Pre_trade_risk} BC against the
+       Trade_intents_planned IE — see plan M1. *)
     }
   in
   {

@@ -31,10 +31,17 @@ type result = {
 }
 (** Summary of a completed backtest run. *)
 
-type config = { initial_cash : Decimal.t; fee_rate : Decimal.t; limits : Risk.limits }
+type config = {
+  initial_cash : Decimal.t;
+  fee_rate : Decimal.t;
+  max_position_notional : Decimal.t;
+}
 (** Backtest configuration. [fee_rate] is a multiplier on fill
     notional ([qty × price × fee_rate]); kept as {!Decimal.t} so
-    the fill arithmetic stays in the verified Decimal domain. *)
+    the fill arithmetic stays in the verified Decimal domain.
+    [max_position_notional] feeds {!Risk.size_from_strength}; the
+    rest of the original [Engine.Risk.limits] (cash buffer, gross
+    exposure, leverage) lives in {!Pre_trade_risk} now. *)
 
 val default_config : ?initial_cash:Decimal.t -> unit -> config
 (** Sensible defaults: 1M cash, 5 bps fees, standard risk limits. *)

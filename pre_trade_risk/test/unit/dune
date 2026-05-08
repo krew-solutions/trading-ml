@@ -1,0 +1,9 @@
+(test
+ (name pre_trade_risk_unit_runner)
+ (libraries
+  core
+  decimal
+  pre_trade_risk
+  alcotest))
+
+(include_subdirs unqualified)

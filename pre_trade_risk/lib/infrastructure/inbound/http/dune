@@ -1,0 +1,4 @@
+(library
+ (name pre_trade_risk_inbound_http)
+ (public_name trading.pre_trade_risk.inbound_http)
+ (libraries inbound_http cohttp eio))

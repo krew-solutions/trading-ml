@@ -31,7 +31,7 @@ let execute
                     correlation_id = cmd.correlation_id;
                     side = Core.Side.to_string attempted.side;
                     instrument =
-                      Queries.Instrument_view_model.of_domain attempted.instrument;
+                      Account_queries.Instrument_view_model.of_domain attempted.instrument;
                     quantity = Decimal.to_string attempted.quantity;
                     reason = Reserve_command_handler.reservation_error_to_string error;
                   }

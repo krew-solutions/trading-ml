@@ -6,15 +6,21 @@ type place_order_request = {
   instrument : Instrument.t;
   side : Side.t;
   quantity : Decimal.t;
-  kind : Order.kind;
+  kind : Account_inbound_queries.Order_kind_view_model.t;
 }
 (** Parsed wire-format for [POST /api/orders] as Account needs it.
-    {!Order.time_in_force} and [client_order_id] are part of the
-    same JSON payload but Account does not consume them — they
-    belong to {!Broker_commands.Submit_order_command.t}. They will
-    be parsed by the broker BC's inbound HTTP module (or threaded
-    through a saga message) when the place-order saga is fully
-    wired. *)
+    [time_in_force] and [client_order_id] are part of the same JSON
+    payload but Account does not consume them — they belong to the
+    broker BC's submit path and will be parsed by the broker BC's
+    inbound HTTP module (or threaded through a saga message) when
+    the place-order saga is fully wired.
+
+    The [kind] field uses the BC-local wire DTO
+    {!Account_inbound_queries.Order_kind_view_model} instead of
+    reaching into the broker's typed [Order.kind]: Account is
+    cash-bounded by [price] regardless of the order's venue
+    semantics, so a string-typed wire-format representation is
+    sufficient and keeps the BC self-contained. *)
 
 (** Accept either JSON int or float for numeric fields — UI uses float,
     CLI may send ints for lot-sized quantities. *)
@@ -23,6 +29,16 @@ let to_decimal (j : Yojson.Safe.t) : Decimal.t =
   | `Int n -> Decimal.of_int n
   | `Float f -> Decimal.of_float f
   | `Intlit s | `String s -> Decimal.of_string s
+  | _ -> failwith "expected number"
+
+(** Coerce a "decimalish" JSON value to a string for the wire DTO.
+    Numbers are normalised through [Decimal] to match the canonical
+    string form used everywhere on the bus. *)
+let to_decimal_string_opt (j : Yojson.Safe.t) : string option =
+  match j with
+  | `Null -> None
+  | `String s -> Some s
+  | `Int _ | `Float _ | `Intlit _ -> Some (Decimal.to_string (to_decimal j))
   | _ -> failwith "expected number"
 
 let place_order_of_json (j : Yojson.Safe.t) : place_order_request =
@@ -41,19 +57,18 @@ let place_order_of_json (j : Yojson.Safe.t) : place_order_request =
     | `String s -> String.uppercase_ascii s (* short form: "MARKET" *)
     | _ -> kind_obj |> member "type" |> to_string |> String.uppercase_ascii
   in
-  let field_decimal name =
-    let f = member name kind_obj in
-    if f = `Null then failwith ("missing " ^ name) else to_decimal f
+  let price_field name =
+    match kind_obj with
+    | `String _ -> None
+    | _ -> to_decimal_string_opt (member name kind_obj)
   in
-  let kind : Order.kind =
-    match kind_type with
-    | "MARKET" -> Market
-    | "LIMIT" -> Limit (field_decimal "price")
-    | "STOP" -> Stop (field_decimal "price")
-    | "STOP_LIMIT" ->
-        Stop_limit
-          { stop = field_decimal "stop_price"; limit = field_decimal "limit_price" }
-    | other -> failwith ("unknown kind: " ^ other)
+  let kind : Account_inbound_queries.Order_kind_view_model.t =
+    {
+      type_ = kind_type;
+      price = price_field "price";
+      stop_price = price_field "stop_price";
+      limit_price = price_field "limit_price";
+    }
   in
   { instrument = Instrument.of_qualified symbol; side; quantity; kind }
 
@@ -67,11 +82,18 @@ let to_reserve_command
     ~(correlation_id : string)
     (market_price : market_price_port)
     (req : place_order_request) : Account_commands.Reserve_command.t =
+  let kind = req.kind in
+  let require name = function
+    | Some s -> s
+    | None -> failwith ("missing " ^ name)
+  in
   let price =
-    match req.kind with
-    | Limit p | Stop p -> Decimal.to_string p
-    | Stop_limit { limit; _ } -> Decimal.to_string limit
-    | Market -> Decimal.to_string (market_price ~instrument:req.instrument)
+    match kind.type_ with
+    | "MARKET" -> Decimal.to_string (market_price ~instrument:req.instrument)
+    | "LIMIT" -> require "price" kind.price
+    | "STOP" -> require "price" kind.price
+    | "STOP_LIMIT" -> require "limit_price" kind.limit_price
+    | other -> failwith ("unknown kind: " ^ other)
   in
   {
     correlation_id;

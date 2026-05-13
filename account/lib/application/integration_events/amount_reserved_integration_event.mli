@@ -19,7 +19,7 @@ type t = {
         to route this ack back to the originating instance. *)
   reservation_id : int;
   side : string;
-  instrument : Queries.Instrument_view_model.t;
+  instrument : Account_queries.Instrument_view_model.t;
   quantity : string;  (** Decimal string — see {!Reserve_command.t}. *)
   price : string;
   reserved_cash : string;

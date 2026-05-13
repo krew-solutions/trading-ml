@@ -1,7 +1,7 @@
 type t = {
   correlation_id : string;
   side : string;
-  instrument : Queries.Instrument_view_model.t;
+  instrument : Account_queries.Instrument_view_model.t;
   quantity : string;
   reason : string;
 }

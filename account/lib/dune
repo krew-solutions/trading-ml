@@ -5,7 +5,6 @@
  (libraries
   bus
   core
-  common
   decimal
   account
   account_commands

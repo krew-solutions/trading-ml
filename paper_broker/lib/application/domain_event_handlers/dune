@@ -1,0 +1,9 @@
+(library
+ (name paper_broker_domain_event_handlers)
+ (public_name trading.paper_broker.domain_event_handlers)
+ (libraries
+  core
+  decimal
+  paper_broker
+  paper_broker_queries
+  paper_broker_integration_events))

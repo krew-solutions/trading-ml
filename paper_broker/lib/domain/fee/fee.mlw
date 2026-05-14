@@ -1,0 +1,39 @@
+(** Why3 companion for [fee.mli] — pure non-negative fee.
+
+    Proves:
+    - [rate = 0] yields fee = 0;
+    - the fee is non-negative when all three inputs are non-negative
+      (which the VOs guarantee for [rate] and the brokerage flow
+      guarantees for [quantity] / [price] at fill time).
+
+    The exact product [quantity * price * rate] is not re-proved
+    here; [compute] is abstract and the axioms capture the
+    directional / identity claims. *)
+
+module Fee
+  use int.Int
+  use decimal.Decimal
+  use fee.values.fee_rate.Fee_rate as FR
+
+  function compute (rate: FR.t) (quantity: Decimal.t) (price: Decimal.t)
+    : Decimal.t
+
+  (** Zero-rate sentinel: no fee, regardless of quantity / price. *)
+  axiom zero_rate_zero_fee :
+    forall rate: FR.t, quantity: Decimal.t, price: Decimal.t.
+      raw (FR.to_decimal rate) = 0 ->
+      compute rate quantity price = zero
+
+  (** Non-negativity under non-negative inputs. Quantity and price
+      come from the brokerage's fill path where both are positive;
+      rate is non-negative by [Fee_rate]'s invariant. *)
+  axiom fee_nonneg :
+    forall rate: FR.t, quantity: Decimal.t, price: Decimal.t.
+      raw quantity >= 0 /\ raw price >= 0 ->
+      raw (compute rate quantity price) >= 0
+
+  lemma fee_zero_when_rate_zero :
+    forall rate: FR.t, quantity: Decimal.t, price: Decimal.t.
+      raw (FR.to_decimal rate) = 0 ->
+      is_zero (compute rate quantity price)
+end

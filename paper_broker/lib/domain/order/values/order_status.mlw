@@ -1,0 +1,49 @@
+(** Why3 companion for [order_status.mli] — lifecycle states of a
+    working order, with the [is_terminal] predicate spelled out as a
+    case-analytic boolean function. *)
+
+module Order_status
+  type t =
+    | New
+    | Partially_filled
+    | Filled
+    | Cancelled
+    | Rejected
+    | Expired
+
+  (** Terminal statuses cannot transition further. *)
+  predicate is_terminal (s: t) =
+    match s with
+    | Filled | Cancelled | Rejected | Expired -> true
+    | New | Partially_filled -> false
+    end
+
+  lemma new_is_not_terminal :
+    not (is_terminal New)
+
+  lemma partially_filled_is_not_terminal :
+    not (is_terminal Partially_filled)
+
+  lemma filled_is_terminal :
+    is_terminal Filled
+
+  lemma cancelled_is_terminal :
+    is_terminal Cancelled
+
+  lemma rejected_is_terminal :
+    is_terminal Rejected
+
+  lemma expired_is_terminal :
+    is_terminal Expired
+
+  (** Working ⇒ not terminal. The negation of [is_terminal] is a
+      useful precondition shorthand in callers. *)
+  predicate is_working (s: t) =
+    match s with
+    | New | Partially_filled -> true
+    | _ -> false
+    end
+
+  lemma working_xor_terminal :
+    forall s: t. is_working s <-> not (is_terminal s)
+end

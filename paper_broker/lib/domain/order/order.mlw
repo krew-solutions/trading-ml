@@ -1,0 +1,160 @@
+(** Why3 companion for [order.mli] — Aggregate-root invariants and
+    structural effects of the lifecycle transitions [make],
+    [commit_fill], [cancel].
+
+    Models the order as a record with status / fill-quantity
+    bookkeeping. Proves:
+
+    - well-formedness: [quantity > 0], [0 ≤ filled ≤ quantity],
+      [filled = quantity ↔ status = Filled];
+    - [make] creates a [New] order with [filled = 0];
+    - [commit_fill] is monotonic: [filled' = filled + fill_qty],
+      and the resulting status is [Filled] iff the new total fills
+      the order, else [Partially_filled];
+    - [cancel] transitions out of [New] / [Partially_filled] into
+      [Cancelled]; both transitions refuse to run from a terminal
+      status. *)
+
+module Order
+  use int.Int
+  use decimal.Decimal
+  use side.Side
+  use order.values.order_status.Order_status as OS
+  use order.values.order_kind.Order_kind as K
+  use order.values.reservation_id.Reservation_id as RI
+
+  (** Opaque carriers. Their per-VO invariants live in the dedicated
+      [.mlw] modules; structural reasoning here doesn't depend on
+      them. *)
+  type instrument
+  type time_in_force
+
+  type t = {
+    id : int;
+    reservation_id : RI.t;
+    instrument : instrument;
+    side : Side.t;
+    quantity : Decimal.t;
+    filled : Decimal.t;
+    kind : K.t;
+    tif : time_in_force;
+    status : OS.t;
+    created_ts : int;
+    placed_after_ts : int;
+  }
+
+  (** Aggregate well-formedness invariant. Combined across the
+      fields: quantity strictly positive, fill in [[0, quantity]],
+      [Filled] iff fully filled. *)
+  predicate well_formed (o: t) =
+    raw o.quantity > 0
+    /\ raw o.filled >= 0
+    /\ raw o.filled <= raw o.quantity
+    /\ ((raw o.filled = raw o.quantity) <-> (o.status = OS.Filled))
+    /\ o.created_ts >= 0
+    /\ o.placed_after_ts >= 0
+    /\ K.well_formed o.kind
+
+  function remaining (o: t) : Decimal.t
+
+  axiom remaining_def :
+    forall o: t.
+      raw (remaining o) = raw o.quantity - raw o.filled
+
+  lemma remaining_nonneg :
+    forall o: t. well_formed o -> raw (remaining o) >= 0
+
+  lemma remaining_bounded :
+    forall o: t. well_formed o -> raw (remaining o) <= raw o.quantity
+
+  (** [make] produces a fresh order in the [New] status, with no
+      filled units. *)
+  predicate make_post (o: t) =
+    o.status = OS.New
+    /\ raw o.filled = 0
+    /\ raw o.quantity > 0
+    /\ o.created_ts >= 0
+    /\ o.placed_after_ts >= 0
+    /\ K.well_formed o.kind
+
+  lemma make_post_implies_well_formed :
+    forall o: t. make_post o -> well_formed o
+
+  (** Structural effect of a successful [commit_fill]: filled total
+      grows by exactly [fill_qty]; the resulting status is [Filled]
+      iff the new total reaches [quantity], else [Partially_filled].
+
+      Other fields (id, reservation_id, instrument, side, quantity,
+      kind, tif, ts) are preserved. *)
+  predicate commit_fill_post
+    (before: t) (after: t) (fill_qty: Decimal.t) =
+    well_formed before
+    /\ not (OS.is_terminal before.status)
+    /\ raw fill_qty > 0
+    /\ raw fill_qty <= raw (remaining before)
+    /\ raw after.filled = raw before.filled + raw fill_qty
+    /\ after.quantity = before.quantity
+    /\ after.id = before.id
+    /\ after.reservation_id = before.reservation_id
+    /\ after.instrument = before.instrument
+    /\ after.side = before.side
+    /\ after.kind = before.kind
+    /\ after.tif = before.tif
+    /\ after.created_ts = before.created_ts
+    /\ after.placed_after_ts = before.placed_after_ts
+    /\ ((raw after.filled = raw after.quantity) <-> after.status = OS.Filled)
+    /\ ((raw after.filled < raw after.quantity) <-> after.status = OS.Partially_filled)
+
+  lemma commit_fill_preserves_well_formed :
+    forall before after: t, fill_qty: Decimal.t.
+      commit_fill_post before after fill_qty -> well_formed after
+
+  lemma commit_fill_is_monotonic :
+    forall before after: t, fill_qty: Decimal.t.
+      commit_fill_post before after fill_qty ->
+      raw after.filled > raw before.filled
+
+  lemma commit_fill_shrinks_remaining :
+    forall before after: t, fill_qty: Decimal.t.
+      commit_fill_post before after fill_qty ->
+      raw (remaining after) < raw (remaining before)
+
+  lemma commit_fill_terminal_iff_no_remaining :
+    forall before after: t, fill_qty: Decimal.t.
+      commit_fill_post before after fill_qty ->
+      (OS.is_terminal after.status <-> raw (remaining after) = 0)
+
+  (** Structural effect of a successful [cancel]: status becomes
+      [Cancelled]; everything else preserved. *)
+  predicate cancel_post (before after: t) =
+    well_formed before
+    /\ not (OS.is_terminal before.status)
+    /\ after.status = OS.Cancelled
+    /\ after.id = before.id
+    /\ after.reservation_id = before.reservation_id
+    /\ after.instrument = before.instrument
+    /\ after.side = before.side
+    /\ after.quantity = before.quantity
+    /\ after.filled = before.filled
+    /\ after.kind = before.kind
+    /\ after.tif = before.tif
+    /\ after.created_ts = before.created_ts
+    /\ after.placed_after_ts = before.placed_after_ts
+
+  lemma cancel_lands_in_terminal :
+    forall before after: t. cancel_post before after ->
+      OS.is_terminal after.status
+
+  (** Terminal statuses cannot transition: neither [commit_fill] nor
+      [cancel] can have a successful post-condition originating from
+      a terminal status. *)
+  lemma no_transition_from_terminal_commit_fill :
+    forall before after: t, fill_qty: Decimal.t.
+      OS.is_terminal before.status ->
+      not (commit_fill_post before after fill_qty)
+
+  lemma no_transition_from_terminal_cancel :
+    forall before after: t.
+      OS.is_terminal before.status ->
+      not (cancel_post before after)
+end

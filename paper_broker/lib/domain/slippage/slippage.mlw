@@ -1,0 +1,46 @@
+(** Why3 companion for [slippage.mli] — pure side-dependent price
+    shift. Proves:
+    - [bps = 0] is the identity (regardless of side or price);
+    - on [Buy], the result moves away from the trader upward;
+    - on [Sell], the result moves away from the trader downward.
+
+    The exact arithmetic ([price * (1 ± bps / 10_000)]) is not
+    re-proved here — we model [apply] as an abstract function whose
+    axioms capture only the directional / identity claims above. *)
+
+module Slippage
+  use int.Int
+  use decimal.Decimal
+  use side.Side
+  use slippage.values.slippage_bps.Slippage_bps as SB
+
+  function apply (b: SB.t) (s: Side.t) (price: Decimal.t) : Decimal.t
+
+  (** Identity at zero slippage. *)
+  axiom zero_is_identity :
+    forall b: SB.t, s: Side.t, price: Decimal.t.
+      raw (SB.to_decimal b) = 0 ->
+      apply b s price = price
+
+  (** Buys pay up: result ≥ original. *)
+  axiom buy_pays_up :
+    forall b: SB.t, price: Decimal.t.
+      raw price >= 0 ->
+      raw (apply b Side.Buy price) >= raw price
+
+  (** Sells receive less: result ≤ original. *)
+  axiom sell_receives_less :
+    forall b: SB.t, price: Decimal.t.
+      raw price >= 0 ->
+      raw (apply b Side.Sell price) <= raw price
+
+  lemma zero_buy_identity :
+    forall b: SB.t, price: Decimal.t.
+      raw (SB.to_decimal b) = 0 ->
+      apply b Side.Buy price = price
+
+  lemma zero_sell_identity :
+    forall b: SB.t, price: Decimal.t.
+      raw (SB.to_decimal b) = 0 ->
+      apply b Side.Sell price = price
+end

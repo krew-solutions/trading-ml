@@ -1,0 +1,41 @@
+(** Why3 companion for [order_kind.mli] — discriminated union with
+    strict-positivity invariants on the price-carrying variants.
+
+    The smart constructors on the OCaml side (`limit`, `stop`,
+    `stop_limit`) raise [Invalid_argument] on a non-positive price,
+    so any value of type [t] viewed through this module is
+    well-formed. *)
+
+module Order_kind
+  use int.Int
+  use decimal.Decimal
+
+  type t =
+    | Market
+    | Limit Decimal.t
+    | Stop Decimal.t
+    | Stop_limit Decimal.t Decimal.t  (* stop, limit *)
+
+  (** [Market] has no price; the three other variants carry strict
+      positivity. *)
+  predicate well_formed (k: t) =
+    match k with
+    | Market -> true
+    | Limit p -> raw p > 0
+    | Stop p -> raw p > 0
+    | Stop_limit s l -> raw s > 0 /\ raw l > 0
+    end
+
+  lemma market_well_formed :
+    well_formed Market
+
+  lemma limit_well_formed :
+    forall p: Decimal.t. raw p > 0 -> well_formed (Limit p)
+
+  lemma stop_well_formed :
+    forall p: Decimal.t. raw p > 0 -> well_formed (Stop p)
+
+  lemma stop_limit_well_formed :
+    forall s l: Decimal.t. raw s > 0 /\ raw l > 0 ->
+      well_formed (Stop_limit s l)
+end

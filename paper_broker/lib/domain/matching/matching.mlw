@@ -1,0 +1,102 @@
+(** Why3 companion for [matching.mli] — pure bar/order matching rules
+    and liquidity-cap arithmetic.
+
+    Proves:
+    - [fillable_qty] is non-negative;
+    - [fillable_qty] never exceeds [remaining];
+    - with [participation_rate = None] (no cap), [fillable_qty] equals
+      [remaining];
+    - directional pricing rules: a [Limit] buy fills at-or-below its
+      limit; a [Limit] sell fills at-or-above its limit; mirror rules
+      for [Stop]. [Market] always fills at the bar's open.
+
+    The exact arithmetic of [fillable_qty] (min of [remaining] and
+    [volume * rate]) and of [price_if_filled] is not re-derived
+    here; the functions are abstract and axioms capture the
+    interface-level guarantees relied on by callers. *)
+
+module Matching
+  use int.Int
+  use decimal.Decimal
+  use option.Option
+  use side.Side
+  use matching.values.participation_rate.Participation_rate as PR
+  use order.values.order_kind.Order_kind as K
+
+  (** Opaque candle used here only as the carrier of [open_], [low],
+      [high] viewed through [raw]. Full Candle invariants
+      (low ≤ open, close ≤ high) live in [core/candle.mlw]. *)
+  type candle
+
+  function candle_open (c: candle) : Decimal.t
+  function candle_high (c: candle) : Decimal.t
+  function candle_low (c: candle) : Decimal.t
+  function candle_volume (c: candle) : Decimal.t
+
+  axiom candle_invariants :
+    forall c: candle.
+      raw (candle_low c) <= raw (candle_open c)
+      /\ raw (candle_open c) <= raw (candle_high c)
+      /\ raw (candle_low c) <= raw (candle_high c)
+      /\ raw (candle_volume c) >= 0
+
+  (** [fillable_qty ~remaining ~volume ~participation_rate]: how
+      much of [remaining] a single bar can absorb. *)
+  function fillable_qty
+    (remaining: Decimal.t) (volume: Decimal.t) (rate: option PR.t)
+    : Decimal.t
+
+  axiom fillable_qty_no_cap :
+    forall remaining volume: Decimal.t.
+      fillable_qty remaining volume None = remaining
+
+  axiom fillable_qty_nonneg :
+    forall remaining volume: Decimal.t, rate: option PR.t.
+      raw remaining >= 0 /\ raw volume >= 0 ->
+      raw (fillable_qty remaining volume rate) >= 0
+
+  axiom fillable_qty_bounded_by_remaining :
+    forall remaining volume: Decimal.t, rate: option PR.t.
+      raw remaining >= 0 /\ raw volume >= 0 ->
+      raw (fillable_qty remaining volume rate) <= raw remaining
+
+  (** [price_if_filled]: [Some price] when the candle triggers a
+      fill on this kind+side; [None] otherwise. *)
+  function price_if_filled (k: K.t) (s: Side.t) (c: candle)
+    : option Decimal.t
+
+  (** Market: always fills at the bar's open. *)
+  axiom market_fills_at_open :
+    forall s: Side.t, c: candle.
+      price_if_filled K.Market s c = Some (candle_open c)
+
+  (** Stop_limit is not simulated yet — never fills. *)
+  axiom stop_limit_no_fill :
+    forall stop limit: Decimal.t, s: Side.t, c: candle.
+      price_if_filled (K.Stop_limit stop limit) s c = None
+
+  (** Limit Buy: fills at-or-below the configured limit price. *)
+  axiom limit_buy_fills_at_or_below_limit :
+    forall lim: Decimal.t, c: candle, p: Decimal.t.
+      price_if_filled (K.Limit lim) Side.Buy c = Some p ->
+      raw p <= raw lim
+
+  (** Limit Sell: fills at-or-above the configured limit price. *)
+  axiom limit_sell_fills_at_or_above_limit :
+    forall lim: Decimal.t, c: candle, p: Decimal.t.
+      price_if_filled (K.Limit lim) Side.Sell c = Some p ->
+      raw p >= raw lim
+
+  (** Stop Buy: triggers at-or-above the stop price; fill price is
+      the trigger or higher. *)
+  axiom stop_buy_fills_at_or_above_stop :
+    forall stop: Decimal.t, c: candle, p: Decimal.t.
+      price_if_filled (K.Stop stop) Side.Buy c = Some p ->
+      raw p >= raw stop
+
+  (** Stop Sell: mirror — triggers at-or-below the stop price. *)
+  axiom stop_sell_fills_at_or_below_stop :
+    forall stop: Decimal.t, c: candle, p: Decimal.t.
+      price_if_filled (K.Stop stop) Side.Sell c = Some p ->
+      raw p <= raw stop
+end

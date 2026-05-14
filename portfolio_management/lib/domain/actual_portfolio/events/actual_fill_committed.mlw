@@ -1,0 +1,19 @@
+(** Why3 companion for [actual_fill_committed.mli] — Domain Event
+    record. Pure data carrier; no behavioural lemmas. *)
+
+module Actual_fill_committed
+  use int.Int
+  use decimal.Decimal
+
+  type book_id
+  type instrument
+
+  type t = {
+    book_id               : book_id;
+    instrument            : instrument;
+    new_position_quantity : Decimal.t;
+    new_avg_price         : Decimal.t;
+    new_cash              : Decimal.t;
+    occurred_at           : int;
+  }
+end

@@ -2,7 +2,7 @@ open Core
 
 type t = { http_handler : Inbound_http.Route.handler }
 
-let build ~bus : t =
+let build ~bus ~now : t =
   (* In-memory per-book registries. Lazily allocated: the first
      reference to a book auto-creates an empty aggregate ref. No
      persistence today — restart wipes PM state. *)
@@ -50,7 +50,17 @@ let build ~bus : t =
         Hashtbl.replace target_portfolios book_id r;
         r
   in
-  let actual_portfolio_for_or_none book_id = Hashtbl.find_opt actual_portfolios book_id in
+  let actual_portfolio_for_create book_id =
+    match Hashtbl.find_opt actual_portfolios book_id with
+    | Some r -> r
+    | None ->
+        let r = ref (Portfolio_management.Actual_portfolio.empty book_id) in
+        Hashtbl.replace actual_portfolios book_id r;
+        r
+  in
+  let actual_portfolio_for_create_or_none book_id =
+    Some (actual_portfolio_for_create book_id)
+  in
   let target_portfolio_for_or_none book_id =
     Option.map (fun r -> !r) (Hashtbl.find_opt target_portfolios book_id)
   in
@@ -95,18 +105,10 @@ let build ~bus : t =
   in
   (* Workflow dispatch ports — direct calls into PM workflows.
      Match-discard the Rop tail, mirroring Account.Factory. *)
-  let dispatch_change_cash cmd =
+  let dispatch_commit_actual_fill cmd =
     match
-      Portfolio_management_commands.Change_cash_command_workflow.execute
-        ~actual_portfolio_for:actual_portfolio_for_or_none cmd
-    with
-    | Ok () -> ()
-    | Error _ -> ()
-  in
-  let dispatch_change_position cmd =
-    match
-      Portfolio_management_commands.Change_position_command_workflow.execute
-        ~actual_portfolio_for:actual_portfolio_for_or_none cmd
+      Portfolio_management_commands.Commit_actual_fill_command_workflow.execute
+        ~actual_portfolio_for:actual_portfolio_for_create_or_none cmd
     with
     | Ok () -> ()
     | Error _ -> ()
@@ -182,24 +184,14 @@ let build ~bus : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://account.cash-changed" ~group:"portfolio-management"
-         ~t_of_yojson:
-           Portfolio_management_inbound_integration_events.Cash_changed_integration_event
-           .t_of_yojson)
-      (Portfolio_management_inbound_integration_events
-       .Cash_changed_integration_event_handler
-       .handle ~dispatch_change_cash)
-  in
-  let _ : Bus.subscription =
-    Bus.subscribe
-      (consume ~uri:"in-memory://account.position-changed" ~group:"portfolio-management"
+      (consume ~uri:"in-memory://account.reservation-filled" ~group:"portfolio-management"
          ~t_of_yojson:
            Portfolio_management_inbound_integration_events
-           .Position_changed_integration_event
+           .Reservation_filled_integration_event
            .t_of_yojson)
       (Portfolio_management_inbound_integration_events
-       .Position_changed_integration_event_handler
-       .handle ~dispatch_change_position)
+       .Reservation_filled_integration_event_handler
+       .handle ~now ~dispatch_commit_actual_fill)
   in
   let _ : Bus.subscription =
     Bus.subscribe

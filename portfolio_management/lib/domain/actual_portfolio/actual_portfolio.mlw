@@ -1,7 +1,7 @@
 (** Why3 companion for [actual_portfolio.mli] — aggregate-root
     invariants. Models [positions] as a list of actual_position records
     and proves the structural properties the OCaml side maintains:
-    delta accumulation and per-instrument single-valuedness. *)
+    per-instrument single-valuedness. *)
 
 module Actual_portfolio
   use int.Int

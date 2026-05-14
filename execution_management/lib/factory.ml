@@ -59,7 +59,7 @@ let to_wire_kind ~kind_type ~kind_price ~kind_stop_price ~kind_limit_price :
     limit_price = kind_limit_price;
   }
 
-let build ~bus ~(config : config) : t =
+let build ~bus ~now ~(config : config) : t =
   let mu = Mutex.create () in
   let kill_switch =
     ref
@@ -83,11 +83,7 @@ let build ~bus ~(config : config) : t =
     Mutex.lock mu;
     Fun.protect ~finally:(fun () -> Mutex.unlock mu) f
   in
-  let now_iso8601 () =
-    let secs = Unix.gettimeofday () in
-    let secs_i = Int64.of_float (secs *. 1000.0) in
-    Datetime.Iso8601.format secs_i
-  in
+  let now_iso8601 () = Datetime.Iso8601.format (now ()) in
   let produce (type a) ~uri ~(yojson_of : a -> Yojson.Safe.t) : a -> unit =
     Bus.publish
       (Bus.producer bus ~uri ~serialize:(fun v -> Yojson.Safe.to_string (yojson_of v)))
@@ -158,8 +154,10 @@ let build ~bus ~(config : config) : t =
                 match !rate_limit with
                 | None -> true
                 | Some rl -> (
-                    let now = Unix.gettimeofday () in
-                    match Execution_management.Rate_limit.try_acquire rl ~now with
+                    let now_secs = Int64.to_float (now ()) in
+                    match
+                      Execution_management.Rate_limit.try_acquire rl ~now:now_secs
+                    with
                     | `Allow rl' ->
                         rate_limit := Some rl';
                         true
@@ -226,18 +224,24 @@ let build ~bus ~(config : config) : t =
          ~t_of_yojson:Inbound.Order_unreachable_integration_event.t_of_yojson) (fun ev ->
         Pm.Engine.on_event engine (Pm.Order_unreachable ev))
   in
-  (* Cash_changed feeds the kill-switch peak / drawdown tracking.
-     Today Account does not publish Cash_changed; the subscription is
-     wired but inert. *)
+  (* Reservation_filled feeds the kill-switch peak / drawdown tracking.
+     The IE carries [new_cash] post-fill; the kill-switch uses it as
+     an equity proxy until a mark-to-market feed lands (cash alone
+     ignores Σ qty × mark, but matches the prior implementation that
+     consumed [new_balance] from Cash_changed). *)
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://account.cash-changed"
+      (consume ~uri:"in-memory://account.reservation-filled"
          ~group:"execution-management-kill-switch"
-         ~t_of_yojson:Inbound.Cash_changed_integration_event.t_of_yojson)
-      (fun (ev : Inbound.Cash_changed_integration_event.t) ->
+         ~t_of_yojson:Inbound.Reservation_filled_integration_event.t_of_yojson)
+      (fun (ev : Inbound.Reservation_filled_integration_event.t) ->
         with_lock (fun () ->
-            let equity = try Decimal.of_string ev.new_balance with _ -> Decimal.zero in
-            let occurred_at = Datetime.Iso8601.parse ev.occurred_at in
+            let equity = try Decimal.of_string ev.new_cash with _ -> Decimal.zero in
+            (* IE carries no occurred_at; read ambient time from the
+               injected clock (epoch seconds, matching the project
+               convention used by Iso8601 and downstream IEs).
+               See ADR 0013. *)
+            let occurred_at = now () in
             let ks', tripped =
               Execution_management.Kill_switch.update_equity !kill_switch ~equity
                 ~occurred_at

@@ -2,7 +2,7 @@ open Core
 
 type t = { http_handler : Inbound_http.Route.handler }
 
-let build ~bus ~slippage_bps ~fee_rate ?participation_rate () : t =
+let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
   let participation_rate : Paper_broker.Matching.Values.Participation_rate.t option =
     participation_rate
   in
@@ -34,7 +34,7 @@ let build ~bus ~slippage_bps ~fee_rate ?participation_rate () : t =
       incr counter;
       Printf.sprintf "ex-%d" !counter
   in
-  let now_ts () = Int64.of_float (Unix.gettimeofday ()) in
+  let now_ts = now in
   let last_seen_bar_ts : (Instrument.t, int64) Hashtbl.t = Hashtbl.create 16 in
   let placed_after_ts instrument =
     match Hashtbl.find_opt last_seen_bar_ts instrument with

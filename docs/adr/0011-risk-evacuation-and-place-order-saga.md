@@ -110,8 +110,10 @@ checkpoint is the cheaper sequence.
 
 Mirror Account's per-aggregate domain layout. Aggregate
 `Risk_view` keeps cash + per-instrument quantities per `book_id`,
-maintained from `Account.Position_changed` and `Cash_changed`
-inbound IEs. Aggregate `Risk_limits` is a private record
+maintained from `Account.Reservation_filled` inbound IEs. The
+upstream IE carries cash and position together in one atomic
+payload, committed via `Record_fill_command`, so equity is never
+transiently broken between cash and positions. Aggregate `Risk_limits` is a private record
 (`min_cash_buffer ≥ 0`, `max_gross_exposure ≥ 0`,
 `max_leverage > 0`, Why3-checkable). Domain service `Assessment`
 consumes a `Trade_intent` plus `Risk_view` plus `Risk_limits` and
@@ -148,7 +150,9 @@ Subscribes to seven inbound topics (Trade_intent_approved_IE
 starts a saga instance after kill-switch / rate-limit gating;
 Amount_reserved / Reservation_rejected / Order_accepted /
 Order_rejected / Order_unreachable advance instances;
-Cash_changed feeds Kill_switch). Publishes `Trade_submission_blocked_IE`
+Reservation_filled feeds Kill_switch — its `new_cash` field
+serves as an equity proxy until a mark-to-market feed lands).
+Publishes `Trade_submission_blocked_IE`
 on a kill-switch / rate-limit halt and `Kill_switch_tripped_IE`
 on a fresh trip.
 
@@ -392,10 +396,12 @@ is the equivalence proof.
   must use their own keys (`reservation_id`); the saga store's
   per-cid uniqueness is not a substitute.
 - The kill-switch in EMS subscribes to
-  `account.cash-changed`, but Account does not yet publish that
-  event. The subscription is structurally complete and inert.
-  Until Account's outbound surface grows, the kill-switch
-  tracks initial equity only and never trips.
+  `account.reservation-filled` and feeds the IE's `new_cash`
+  field into `Kill_switch.update_equity` as an equity proxy.
+  Cash alone ignores `Σ qty × mark`, so peak-equity tracking is
+  approximate until a mark-to-market feed lands; the
+  approximation matches the original `Cash_changed`-driven
+  implementation byte-for-byte.
 
 ## References
 

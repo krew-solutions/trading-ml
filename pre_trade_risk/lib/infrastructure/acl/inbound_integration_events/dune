@@ -6,6 +6,7 @@
   ppx_yojson_conv_lib
   core
   decimal
+  datetime
   pre_trade_risk_commands
   pre_trade_risk_inbound_queries)
  (preprocess (pps ppx_yojson_conv))

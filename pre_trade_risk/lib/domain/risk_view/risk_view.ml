@@ -30,7 +30,8 @@ let positions t =
         (Values.Position_snapshot.instrument b))
     t.positions
 
-let apply_position_change t ~instrument ~delta_qty ~new_qty ~avg_price ~occurred_at =
+let commit_fill t ~instrument ~new_position_quantity ~new_avg_price ~new_cash ~occurred_at
+    =
   let others =
     List.filter
       (fun (p : Values.Position_snapshot.t) ->
@@ -38,17 +39,14 @@ let apply_position_change t ~instrument ~delta_qty ~new_qty ~avg_price ~occurred
       t.positions
   in
   let positions =
-    if Decimal.is_zero new_qty then others
-    else Values.Position_snapshot.make ~instrument ~quantity:new_qty ~avg_price :: others
+    if Decimal.is_zero new_position_quantity then others
+    else
+      Values.Position_snapshot.make ~instrument ~quantity:new_position_quantity
+        ~avg_price:new_avg_price
+      :: others
   in
   let event =
-    Events.Position_recorded.make ~book_id:t.book_id ~instrument ~delta_qty ~new_qty
-      ~occurred_at
+    Events.Fill_recorded.make ~book_id:t.book_id ~instrument ~new_position_quantity
+      ~new_avg_price ~new_cash ~occurred_at
   in
-  ({ t with positions }, event)
-
-let apply_cash_change t ~delta ~new_balance ~occurred_at =
-  let event =
-    Events.Cash_recorded.make ~book_id:t.book_id ~delta ~new_balance ~occurred_at
-  in
-  ({ t with cash = new_balance }, event)
+  ({ t with cash = new_cash; positions }, event)

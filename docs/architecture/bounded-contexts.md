@@ -53,8 +53,8 @@ sits one level above and is concerned only with the graph.
         │       │   margin)        │         │   Finam / BCS /    │
         │       └────────┬─────────┘         │   Synthetic)       │
         │                │                   └────────┬───────────┘
-        │                │  Position_changed_IE       │
-        └────────────────┘  Cash_changed_IE           │  Bar_updated_IE
+        │                │  Reservation_filled_IE     │
+        └────────────────┘                            │  Bar_updated_IE
                                        ▲              │
                                        │              ▼
                               Order_filled_IE  ┌────────────────────┐
@@ -142,10 +142,10 @@ today is `define_alpha_view → apply_proposed_targets_on_alpha_direction_change
 target-vs-actual delta.
 
 **Inbound** ← `strategy.signal-detected` (alpha mind);
-`account.position-changed`, `account.cash-changed` (observed
-state, when Account publishes them); composition-driven
-`Reconcile_command` (today via test or HTTP, periodic dispatch is
-a known follow-up).
+`account.reservation-filled` (atomic fill fact — new cash
++ position + avg_price in one payload, preserving the equity
+invariant); composition-driven `Reconcile_command` (today via
+test or HTTP, periodic dispatch is a known follow-up).
 **Outbound** → `pm.target-portfolio-updated` (target-set
 notification); `pm.trade-intents-planned` (per-leg trade
 intents with `correlation_id` per leg).
@@ -160,7 +160,7 @@ plus `Risk_view` plus `Risk_limits` and emits
 `Approve _ | Reject reason`.
 
 **Inbound** ← `pm.trade-intents-planned`;
-`account.position-changed`, `account.cash-changed`.
+`account.reservation-filled`.
 **Outbound** → `pre-trade-risk.trade-intent-approved` |
 `pre-trade-risk.trade-intent-rejected` (each carries the per-leg
 `correlation_id` echoed from the input).
@@ -191,8 +191,9 @@ starter; runs the kill-switch / rate-limit gate then
 `Engine.start`); `account.amount-reserved`,
 `account.reservation-rejected`,
 `broker.order-{accepted,rejected,unreachable}` (saga
-transitions); `account.cash-changed` (kill-switch peak/drawdown
-update).
+transitions); `account.reservation-filled` (kill-switch
+peak/drawdown update — uses the IE's `new_cash` field as an
+equity proxy until a mark-to-market feed lands).
 **Outbound** → `account.reserve-command`, `account.release-command`,
 `broker.submit-order-command` (saga-driven commands published as
 wire JSON; Account / Broker subscribe and deserialise straight
@@ -219,10 +220,12 @@ compensation when the saga didn't run, e.g. legacy paths);
 direct `dispatch_reserve` from `POST /api/orders` (still in
 place for manual order placement smoke-tests).
 **Outbound** → `account.amount-reserved`,
-`account.reservation-released`, `account.reservation-rejected`.
-`account.position-changed` and `account.cash-changed` are not
-yet emitted; subscribers (`pre_trade_risk`, EMS kill-switch) are
-wired and inert until that gap closes.
+`account.reservation-released`, `account.reservation-rejected`,
+`account.reservation-filled` (atomic fill fact — carries
+`new_cash`, `new_position_quantity`, `new_avg_price` together so
+downstream readers in PM, `pre_trade_risk`, and EMS never
+observe a transient state that violates
+`equity = cash + Σ qty × mark`).
 
 ### `broker` — brokerage abstraction
 
@@ -416,6 +419,11 @@ through fills, with `cid` denoting the saga `correlation_id`:
 13. account            ← broker.order-filled
     Commit_fill_command_workflow → Portfolio.commit_fill
     → account.reservation-filled                      (atomic: new cash + position + avg)
+14. portfolio_management, pre_trade_risk, execution_management
+    ← account.reservation-filled
+    PM:   Commit_actual_fill_command_workflow → Actual_portfolio.commit_fill
+    PTR:  Record_fill_command_workflow         → Risk_view.commit_fill
+    EMS:  Kill_switch.update_equity (new_cash as equity proxy)
 ```
 
 The pure saga transitions (steps 6, 8, 10) are pinned by
@@ -423,9 +431,7 @@ The pure saga transitions (steps 6, 8, 10) are pinned by
 `Definition.transition` function — bus-free, Eio-free. End-to-end
 component tests that drive the saga through the in-memory bus are
 a follow-up; the pure test plus the per-BC component tests
-(Account, Broker) cover the moving parts today. Stage 12's
-outbound side is the open Account-publishes-Position/Cash gap
-noted in ADR 0011's "to watch for" section.
+(Account, Broker) cover the moving parts today.
 
 ## Backtest as composition
 

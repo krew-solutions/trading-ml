@@ -1,9 +1,9 @@
 (** Why3 companion for [risk_view.mli] — aggregate-root structural
-    invariants. Pins the post-state contracts of the two mutators
+    invariants. Pins the post-state contract of [commit_fill]
     against the symbolic record / list model. Per-instrument
     single-valuedness is structural (the OCaml side filters by
     instrument before consing); we model it as the obvious lemma on
-    the result of [apply_position_change]. *)
+    the result of the commit. *)
 
 module Risk_view
   use int.Int
@@ -33,50 +33,39 @@ module Risk_view
   lemma empty_book_id_echoed :
     forall b: book_id. (empty b).book_id = b
 
-  (** Structural post-state of [apply_cash_change]: the new cash equals
-      the upstream-supplied [new_balance], regardless of [delta]. The
-      upstream is authoritative on the post-state — [delta] is recorded
-      for audit, not used to derive the new value. *)
-  predicate cash_replaced (before after: t) (new_balance: Decimal.t) =
-    raw after.cash = raw new_balance /\
-    after.book_id = before.book_id /\
-    length after.positions = length before.positions
-
-  lemma cash_replaced_preserves_book :
-    forall before after: t, nb: Decimal.t.
-      cash_replaced before after nb -> after.book_id = before.book_id
-
-  (** Structural post-state of [apply_position_change] in the *upsert*
-      case ([new_qty <> 0]): the resulting list has length at most
+  (** Structural post-state of [commit_fill] in the *upsert* case
+      ([new_position_quantity <> 0]): cash is replaced by [new_cash];
+      the resulting position list has length at most
       [length before.positions + 1] (the entry for [instrument] is
-      either replaced — same length — or appended — length + 1). *)
-  predicate position_upserted (before after: t) =
+      either replaced — same length — or appended — length + 1).
+      Book id is preserved. *)
+  predicate fill_committed_upsert (before after: t) (new_cash: Decimal.t) =
+    raw after.cash = raw new_cash /\
     after.book_id = before.book_id /\
-    raw after.cash = raw before.cash /\
     length after.positions <= length before.positions + 1
 
-  (** Structural post-state of [apply_position_change] in the *prune*
-      case ([new_qty = 0]): the resulting list has length at most
-      [length before.positions] (the entry for [instrument] is removed
-      if it was present, otherwise the list is unchanged). *)
-  predicate position_pruned (before after: t) =
+  (** Structural post-state of [commit_fill] in the *prune* case
+      ([new_position_quantity = 0]): cash is replaced by [new_cash];
+      the resulting position list has length at most
+      [length before.positions]. Book id is preserved. *)
+  predicate fill_committed_prune (before after: t) (new_cash: Decimal.t) =
+    raw after.cash = raw new_cash /\
     after.book_id = before.book_id /\
-    raw after.cash = raw before.cash /\
     length after.positions <= length before.positions
 
-  lemma upsert_preserves_book :
-    forall before after: t.
-      position_upserted before after -> after.book_id = before.book_id
+  lemma fill_upsert_preserves_book :
+    forall before after: t, nc: Decimal.t.
+      fill_committed_upsert before after nc -> after.book_id = before.book_id
 
-  lemma prune_preserves_book :
-    forall before after: t.
-      position_pruned before after -> after.book_id = before.book_id
+  lemma fill_prune_preserves_book :
+    forall before after: t, nc: Decimal.t.
+      fill_committed_prune before after nc -> after.book_id = before.book_id
 
-  lemma upsert_preserves_cash :
-    forall before after: t.
-      position_upserted before after -> raw after.cash = raw before.cash
+  lemma fill_upsert_replaces_cash :
+    forall before after: t, nc: Decimal.t.
+      fill_committed_upsert before after nc -> raw after.cash = raw nc
 
-  lemma prune_preserves_cash :
-    forall before after: t.
-      position_pruned before after -> raw after.cash = raw before.cash
+  lemma fill_prune_replaces_cash :
+    forall before after: t, nc: Decimal.t.
+      fill_committed_prune before after nc -> raw after.cash = raw nc
 end

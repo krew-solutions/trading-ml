@@ -5,7 +5,7 @@ let () =
     [
       Set_target_command_test.feature;
       Reconcile_command_test.feature;
-      Projection_test.feature;
+      Commit_actual_fill_command_test.feature;
       Pair_mr_pipeline_test.feature;
       Define_alpha_view_command_test.feature;
     ]

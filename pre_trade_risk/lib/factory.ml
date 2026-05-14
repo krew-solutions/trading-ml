@@ -1,6 +1,6 @@
 type t = { http_handler : Inbound_http.Route.handler }
 
-let build ~bus ~initial_equity : t =
+let build ~bus ~now ~initial_equity : t =
   let limits = Pre_trade_risk.Risk_limits.default ~equity:initial_equity in
   (* Per-book Risk_view aggregates. Created on-demand on first event /
      query for a book; same lazy pattern as PM. *)
@@ -49,17 +49,9 @@ let build ~bus ~initial_equity : t =
     (* Validation failure of the inbound command is a contract bug
        upstream; logged elsewhere, no IE emitted by design. *)
   in
-  let dispatch_record_position cmd =
+  let dispatch_record_fill cmd =
     match
-      Pre_trade_risk_commands.Record_position_command_workflow.execute ~risk_view_ref_for
-        cmd
-    with
-    | Ok () -> ()
-    | Error _ -> ()
-  in
-  let dispatch_record_cash cmd =
-    match
-      Pre_trade_risk_commands.Record_cash_command_workflow.execute ~risk_view_ref_for cmd
+      Pre_trade_risk_commands.Record_fill_command_workflow.execute ~risk_view_ref_for cmd
     with
     | Ok () -> ()
     | Error _ -> ()
@@ -81,23 +73,14 @@ let build ~bus ~initial_equity : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://account.position-changed"
-         ~group:"pre-trade-risk-projection"
+      (consume ~uri:"in-memory://account.reservation-filled"
+         ~group:"pre-trade-risk-fill-commit"
          ~t_of_yojson:
-           Pre_trade_risk_inbound_integration_events.Position_changed_integration_event
+           Pre_trade_risk_inbound_integration_events.Reservation_filled_integration_event
            .t_of_yojson)
       (Pre_trade_risk_inbound_integration_events
-       .Position_changed_integration_event_handler
-       .handle ~dispatch_record_position)
-  in
-  let _ : Bus.subscription =
-    Bus.subscribe
-      (consume ~uri:"in-memory://account.cash-changed" ~group:"pre-trade-risk-projection"
-         ~t_of_yojson:
-           Pre_trade_risk_inbound_integration_events.Cash_changed_integration_event
-           .t_of_yojson)
-      (Pre_trade_risk_inbound_integration_events.Cash_changed_integration_event_handler
-       .handle ~dispatch_record_cash)
+       .Reservation_filled_integration_event_handler
+       .handle ~now ~dispatch_record_fill)
   in
   let http_handler = Pre_trade_risk_inbound_http.Http.make_handler () in
   { http_handler }

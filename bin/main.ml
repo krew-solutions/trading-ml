@@ -169,13 +169,35 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
   let bus = Bus.create () in
   let in_memory_broker = In_memory.create ~sw in
   Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
+  (* Backtest deployment: virtual clock subscribed to the bar
+     stream so ambient time follows the simulated timeline rather
+     than the host's wall clock. See ADR 0013. *)
+  let virtual_clock = Datetime.Virtual_clock.make () in
+  let now () = Datetime.Clock.now (Datetime.Virtual_clock.as_clock virtual_clock) in
+  let _ : Bus.subscription =
+    let bar_consumer =
+      Bus.consumer bus ~uri:"in-memory://broker.bar-updated" ~group:"clock-tick"
+        ~deserialize:Yojson.Safe.from_string
+    in
+    Bus.subscribe bar_consumer (fun (j : Yojson.Safe.t) ->
+        match j with
+        | `Assoc fields -> (
+            match List.assoc_opt "candle" fields with
+            | Some (`Assoc candle_fields) -> (
+                match List.assoc_opt "ts" candle_fields with
+                | Some (`String ts) ->
+                    Datetime.Virtual_clock.set virtual_clock (Datetime.Iso8601.parse ts)
+                | _ -> ())
+            | _ -> ())
+        | _ -> ())
+  in
   let opened = open_synthetic () in
   let source_client = opened_client opened in
   let broker =
     Broker_factory.Factory.build ~bus ~env ~source_client ~rest:Synthetic ~paper_mode:true
   in
   let _paper_broker =
-    Paper_broker_factory.Factory.build ~bus
+    Paper_broker_factory.Factory.build ~bus ~now
       ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
       ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero ()
   in
@@ -183,12 +205,13 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
       ~market_price:broker.market_price
   in
-  let _pm = Portfolio_management_factory.Factory.build ~bus in
+  let _pm = Portfolio_management_factory.Factory.build ~bus ~now in
   let _pre_trade_risk =
-    Pre_trade_risk_factory.Factory.build ~bus ~initial_equity:(Decimal.of_int 1_000_000)
+    Pre_trade_risk_factory.Factory.build ~bus ~now
+      ~initial_equity:(Decimal.of_int 1_000_000)
   in
   let _execution_management =
-    Execution_management_factory.Factory.build ~bus
+    Execution_management_factory.Factory.build ~bus ~now
       ~config:
         {
           initial_equity = Decimal.of_int 1_000_000;
@@ -512,6 +535,10 @@ let cmd_serve args =
   let bus = Bus.create () in
   let in_memory_broker = In_memory.create ~sw in
   Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
+  (* Live deployment: wall-clock for any Application-Layer caller
+     that needs ambient time. See ADR 0013. *)
+  let clock = Datetime.Unix_clock.make () in
+  let now () = Datetime.Clock.now clock in
   let consumer (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
         t_of_yojson (Yojson.Safe.from_string s))
@@ -526,7 +553,7 @@ let cmd_serve args =
   let _paper_broker =
     if paper_mode then
       Some
-        (Paper_broker_factory.Factory.build ~bus
+        (Paper_broker_factory.Factory.build ~bus ~now
            ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
            ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero ())
     else None
@@ -550,12 +577,13 @@ let cmd_serve args =
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
       ~market_price:broker.market_price
   in
-  let pm = Portfolio_management_factory.Factory.build ~bus in
+  let pm = Portfolio_management_factory.Factory.build ~bus ~now in
   let pre_trade_risk =
-    Pre_trade_risk_factory.Factory.build ~bus ~initial_equity:(Decimal.of_int 1_000_000)
+    Pre_trade_risk_factory.Factory.build ~bus ~now
+      ~initial_equity:(Decimal.of_int 1_000_000)
   in
   let execution_management =
-    Execution_management_factory.Factory.build ~bus
+    Execution_management_factory.Factory.build ~bus ~now
       ~config:
         {
           initial_equity = Decimal.of_int 1_000_000;

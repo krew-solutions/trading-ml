@@ -13,19 +13,30 @@ let limits =
     ~max_gross_exposure:(d "1000000") ~max_leverage:5.0
 
 let view_with ~cash ~positions =
+  (* Seed the view in one shot via [commit_fill]: the last call's
+     [new_cash] wins. To set cash without leaving a position, we
+     commit-fill the seed instrument at quantity 0 — the filter step
+     in [commit_fill] keeps [others] untouched (nothing matches
+     [sber] yet) and the [is_zero] branch prevents insertion, so
+     only [cash] advances. *)
   let v = Pre_trade_risk.Risk_view.empty book in
-  let v, _ =
-    Pre_trade_risk.Risk_view.apply_cash_change v ~delta:cash ~new_balance:cash
-      ~occurred_at:0L
-  in
-  List.fold_left
-    (fun v (instrument, qty, avg_price) ->
-      let v', _ =
-        Pre_trade_risk.Risk_view.apply_position_change v ~instrument ~delta_qty:qty
-          ~new_qty:qty ~avg_price ~occurred_at:0L
+  match positions with
+  | [] ->
+      let v, _ =
+        Pre_trade_risk.Risk_view.commit_fill v ~instrument:sber
+          ~new_position_quantity:(d "0") ~new_avg_price:(d "0") ~new_cash:cash
+          ~occurred_at:0L
       in
-      v')
-    v positions
+      v
+  | _ ->
+      List.fold_left
+        (fun v (instrument, qty, avg_price) ->
+          let v', _ =
+            Pre_trade_risk.Risk_view.commit_fill v ~instrument ~new_position_quantity:qty
+              ~new_avg_price:avg_price ~new_cash:cash ~occurred_at:0L
+          in
+          v')
+        v positions
 
 let test_zero_quantity_rejects () =
   let view = view_with ~cash:(d "1000") ~positions:[] in

@@ -6,8 +6,7 @@ module Events = Events
 
 (* Local shortcuts. *)
 module Actual_position = Values.Actual_position
-module Actual_position_changed = Events.Actual_position_changed
-module Actual_cash_changed = Events.Actual_cash_changed
+module Actual_fill_committed = Events.Actual_fill_committed
 
 type t = {
   book_id : Common.Book_id.t;
@@ -53,26 +52,25 @@ let upsert positions (pos : Actual_position.t) =
   in
   go [] positions
 
-let apply_position_change
+let commit_fill
     p
     ~(instrument : Instrument.t)
-    ~(delta_qty : Decimal.t)
-    ~(new_qty : Decimal.t)
-    ~(avg_price : Decimal.t)
-    ~(occurred_at : int64) : t * Actual_position_changed.t =
-  let pos : Actual_position.t = { instrument; quantity = new_qty; avg_price } in
+    ~(new_position_quantity : Decimal.t)
+    ~(new_avg_price : Decimal.t)
+    ~(new_cash : Decimal.t)
+    ~(occurred_at : int64) : t * Actual_fill_committed.t =
+  let pos : Actual_position.t =
+    { instrument; quantity = new_position_quantity; avg_price = new_avg_price }
+  in
   let positions' = upsert p.positions pos in
-  let event : Actual_position_changed.t =
-    { book_id = p.book_id; instrument; delta_qty; new_qty; avg_price; occurred_at }
+  let event : Actual_fill_committed.t =
+    {
+      book_id = p.book_id;
+      instrument;
+      new_position_quantity;
+      new_avg_price;
+      new_cash;
+      occurred_at;
+    }
   in
-  ({ p with positions = positions' }, event)
-
-let apply_cash_change
-    p
-    ~(delta : Decimal.t)
-    ~(new_balance : Decimal.t)
-    ~(occurred_at : int64) : t * Actual_cash_changed.t =
-  let event : Actual_cash_changed.t =
-    { book_id = p.book_id; delta; new_balance; occurred_at }
-  in
-  ({ p with cash = new_balance }, event)
+  ({ p with cash = new_cash; positions = positions' }, event)

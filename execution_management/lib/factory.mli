@@ -16,4 +16,7 @@ type config = {
         [None] disables. *)
 }
 
-val build : bus:Bus.bus -> config:config -> t
+val build : bus:Bus.bus -> now:(unit -> int64) -> config:config -> t
+(** [now] supplies ambient time (epoch seconds), used by the
+    rate-limit gate, the kill-switch [occurred_at] stamp, and the
+    [Trade_submission_blocked] event timestamp. See ADR 0013. *)

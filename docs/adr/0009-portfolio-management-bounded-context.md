@@ -84,10 +84,11 @@ target plus view:
   root with invariants on per-instrument single-valuedness,
   zero-target pruning, idempotent re-application, and book-id
   consistency.
-- `Actual_portfolio` — the *observed* state of a book, projected
-  from inbound integration events arriving from `account`.
-  Aggregate root with invariants on delta accumulation and
-  per-instrument single-valuedness.
+- `Actual_portfolio` — the *observed* state of a book. Aggregate
+  root with its own invariants (per-instrument single-valuedness,
+  zero-qty pruning, cash sign tolerance), synchronised from
+  inbound `Reservation_filled` integration events arriving from
+  `account` through the BC's ACL.
 
 Both are domain models with behavioural invariants. Read-side
 projections of either are view-models living in the BC's
@@ -121,7 +122,7 @@ portfolio_management/
 │   │   ├── actual_portfolio/
 │   │   │   ├── actual_portfolio.{ml,mli,mlw}  # aggregate root
 │   │   │   ├── values/actual_position.{ml,mli,mlw}
-│   │   │   └── events/{actual_position_changed,actual_cash_changed}.{ml,mli,mlw}
+│   │   │   └── events/actual_fill_committed.{ml,mli,mlw}
 │   │   ├── reconciliation/
 │   │   │   ├── reconciliation.{ml,mli,mlw}    # pure domain service
 │   │   │   └── events/trades_planned.{ml,mli,mlw}
@@ -138,14 +139,15 @@ portfolio_management/
 │   │   ├── integration_events/                # library .integration_events
 │   │   ├── domain_event_handlers/             # library .domain_event_handlers
 │   │   └── commands/                          # library .commands
-│   │       (set_target / change_position /
-│   │        change_cash / reconcile, each as the
-│   │        wire-format DTO + handler + workflow triplet)
+│   │       (set_target / commit_actual_fill / reconcile,
+│   │        each as the wire-format DTO + handler +
+│   │        workflow triplet)
 │   └── infrastructure/
 │       └── acl/inbound_integration_events/    # library .acl.inbound_integration_events
-│           (forward-looking mirrors of the account-side
-│            Position_changed / Cash_changed events; functorised
-│            handlers Make(Bus.Event_bus.S))
+│           (mirror of Account's Reservation_filled IE —
+│            atomic fill fact; cash and position
+│            advance together preserving
+│            equity = cash + Σ qty × mark)
 └── test/
     ├── unit/
     └── component/                             # Gherkin BDD scenarios
@@ -327,8 +329,8 @@ public surface later is a noticeable refactor of every caller.
 - Future risk-as-gatekeeper, pair-research, and execution-saga
   BCs can sit cleanly around PM through integration events
   (`Target_portfolio_updated`, `Trade_intents_planned` outbound;
-  `Position_changed`, `Cash_changed` inbound) without disturbing
-  account or broker.
+  `Reservation_filled` inbound) without disturbing account or
+  broker.
 - The `Book_id`-partitioned design lets multiple strategies run
   side by side in the future without retrofitting the BC's APIs.
 
@@ -345,10 +347,15 @@ public surface later is a noticeable refactor of every caller.
   `account.queries` and `strategy.queries`) is the cost of
   keeping the BC graph acyclic. Wire-shape parity is structural;
   divergence would surface in JSON contract tests.
-- The forward-looking ACL adapter mirrors `Position_changed` /
-  `Cash_changed` events that `account` does not yet publish.
-  Until account's outbound surface grows to include them, the
-  inbound branch of the saga is live but unfed.
+- The ACL adapter mirrors Account's `Reservation_filled`
+  integration event — an atomic payload carrying both the new
+  cash balance and the new position snapshot. PM commits them
+  together via `Commit_actual_fill_command`, preserving
+  `equity = cash + Σ qty × mark` across consumer observation.
+  Splitting that fact into separate `Cash_changed` and
+  `Position_changed` events would let downstream readers see a
+  transiently invalid equity between the two — the rejected
+  state-diff antipattern.
 
 **To watch for**:
 
@@ -374,7 +381,7 @@ public surface later is a noticeable refactor of every caller.
 - The composition root (`bin/main.ml`) is **not** wired to PM in
   this delivery. PM builds and tests stand-alone; the saga
   plumbing (target → reconcile → trade intents → Submit_order
-  with reservation → fills → Position_changed → actual_portfolio)
+  with reservation → fills → Reservation_filled → actual_portfolio)
   is the next milestone, after the surrounding BCs are tidied.
 
 ## References

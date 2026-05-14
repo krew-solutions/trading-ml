@@ -26,8 +26,8 @@ let actual_with deltas =
   List.fold_left
     (fun acc (instrument, qty) ->
       let p, _ =
-        Actual_portfolio.apply_position_change acc ~instrument ~delta_qty:qty ~new_qty:qty
-          ~avg_price:Decimal.one ~occurred_at:1L
+        Actual_portfolio.commit_fill acc ~instrument ~new_position_quantity:qty
+          ~new_avg_price:Decimal.one ~new_cash:Decimal.zero ~occurred_at:1L
       in
       p)
     (Actual_portfolio.empty book) deltas

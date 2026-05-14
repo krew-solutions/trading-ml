@@ -7,24 +7,21 @@
     Invariants enforced here:
 
     - per-instrument single-valuedness: at most one entry per
-      instrument. The aggregate records [delta_qty] applied on top of
-      [new_qty] from the upstream event, but the canonical answer to
-      "what's my current position" is a single [Decimal.t] per
       instrument;
-    - delta accumulation: [position(after) = position(before) +
-      delta_qty] for every applied change;
-    - zero-qty pruning: an apply that drives [new_qty] to zero removes
-      the entry from [positions], so [position] yields [Decimal.zero]
-      for an absent instrument by the same path as for a never-held
-      one;
-    - cash sign tolerance: [cash] can be negative (margin); applies
+    - zero-qty pruning: a commit that drives [new_position_quantity]
+      to zero removes the entry from [positions], so [position]
+      yields [Decimal.zero] for an absent instrument by the same path
+      as for a never-held one;
+    - cash sign tolerance: [cash] can be negative (margin); commits
       do not validate the sign — that is upstream's concern.
 
-    Updated by {!Change_position_command} and
-    {!Change_cash_command} — never by direct mutation. PM
-    never reads [Account.Portfolio] directly; the observed state
-    arrives as integration events and is re-modelled here in PM's
-    vocabulary. *)
+    Updated by {!Commit_actual_fill_command} — never by direct
+    mutation. PM never reads [Account.Portfolio] directly; the
+    observed state arrives as a [Reservation_filled] integration
+    event from Account and is re-modelled here in PM's vocabulary.
+    The commit carries the post-fill [cash], [position_quantity] and
+    [avg_price] together, preserving the equity invariant
+    ([equity = cash + Σ qty × mark]) across consumer observation. *)
 
 module Values : module type of Values
 (** Re-exports of peer subdirs. *)
@@ -45,26 +42,19 @@ val position : t -> Core.Instrument.t -> Decimal.t
 val positions : t -> Values.Actual_position.t list
 (** Snapshot view, in deterministic instrument-compare order. *)
 
-val apply_position_change :
+val commit_fill :
   t ->
   instrument:Core.Instrument.t ->
-  delta_qty:Decimal.t ->
-  new_qty:Decimal.t ->
-  avg_price:Decimal.t ->
+  new_position_quantity:Decimal.t ->
+  new_avg_price:Decimal.t ->
+  new_cash:Decimal.t ->
   occurred_at:int64 ->
-  t * Events.Actual_position_changed.t
-(** Accumulating apply: the current position for [instrument] becomes
-    [new_qty] (not [previous + delta_qty] — the upstream event is
-    authoritative on the post-state). [delta_qty] is recorded on the
-    emitted event for downstream subscribers that want the change
-    rather than the new value. If [new_qty = 0], the entry is removed
-    from [positions]. *)
-
-val apply_cash_change :
-  t ->
-  delta:Decimal.t ->
-  new_balance:Decimal.t ->
-  occurred_at:int64 ->
-  t * Events.Actual_cash_changed.t
-(** Accumulating apply: [cash] becomes [new_balance]; [delta] is
-    recorded on the emitted event. *)
+  t * Events.Actual_fill_committed.t
+(** Atomic post-fill commit: replaces the entry for [instrument] with
+    the new [new_position_quantity] / [new_avg_price] and replaces
+    [cash] with [new_cash], emitting a single
+    [Actual_fill_committed] event. If
+    [new_position_quantity = Decimal.zero], the entry is removed
+    from [positions]. Cash and position move together; consumers
+    never see a transiently inconsistent (cash-only or position-only)
+    state. *)

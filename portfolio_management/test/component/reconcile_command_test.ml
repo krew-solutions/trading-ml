@@ -59,8 +59,8 @@ let matching_actual_emits_no_trades =
                ~positions:[ one_position ~symbol:"SBER@MISX" ~qty:"5" ]);
       Gherkin.and_ "an actual position of +5 SBER" (fun ctx ->
           ctx
-          |> change_position ~instrument:"SBER@MISX" ~delta_qty:"5" ~new_qty:"5"
-               ~avg_price:"100" ~occurred_at:"2026-01-01T00:00:30Z");
+          |> commit_actual_fill ~instrument:"SBER@MISX" ~new_position_quantity:"5"
+               ~new_avg_price:"100" ~new_cash:"-500" ~occurred_at:"2026-01-01T00:00:30Z");
       Gherkin.when_ "the reconciler runs" (fun ctx ->
           ctx |> reconcile ~computed_at:"2026-01-01T00:01:00Z");
       Gherkin.then_ "one announcement carries an empty trade list" (fun ctx ->

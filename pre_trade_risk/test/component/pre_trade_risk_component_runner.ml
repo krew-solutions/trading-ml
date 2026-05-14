@@ -2,8 +2,4 @@
 
 let () =
   Alcotest.run "trading-pre-trade-risk-component"
-    [
-      Assess_trade_intent_command_test.feature;
-      Record_position_command_test.feature;
-      Record_cash_command_test.feature;
-    ]
+    [ Assess_trade_intent_command_test.feature; Record_fill_command_test.feature ]

@@ -48,25 +48,39 @@ sits one level above and is concerned only with the graph.
         │                         ▼                   ▼
         │       ┌──────────────────┐         ┌────────────────────┐
         │       │  Account         │         │  Broker            │
-        │       │  (cash, holdings,│         │  (brokerage:       │
-        │       │   reservations,  │         │   Finam / BCS /    │
-        │       │   margin)        │◀── fill │   Synthetic /      │
-        │       └────────┬─────────┘  events │   Paper)           │
+        │       │  (cash, holdings,│         │  (brokerage data   │
+        │       │   reservations,  │         │   source:          │
+        │       │   margin)        │         │   Finam / BCS /    │
+        │       └────────┬─────────┘         │   Synthetic)       │
         │                │                   └────────┬───────────┘
         │                │  Position_changed_IE       │
         └────────────────┘  Cash_changed_IE           │  Bar_updated_IE
-                                                      │
-                                                      └────────────────► back to top
+                                       ▲              │
+                                       │              ▼
+                              Order_filled_IE  ┌────────────────────┐
+                                       │      │  paper_broker      │
+                                       └──────┤  (in-memory order  │
+                                              │   matching against │
+                                              │   the bar stream;  │
+                                              │   optional, paper  │
+                                              │   deployments only)│
+                                              └────────────────────┘
 ```
 
-The seven boxes are the bounded contexts of the system. The eighth
-piece — the **trading host** — is the composition root in
+The eight boxes are the bounded contexts of the system. The
+ninth piece — the **trading host** — is the composition root in
 `bin/main.ml` and `lib/infrastructure/inbound/http`; it builds a
 `Bus.t`, registers the in-memory broker, instantiates each BC's
 factory, and exposes one HTTP server that delegates to per-BC route
 handlers via `Inbound_http.Route.handler`. The host is not a BC; it
 holds no domain model and publishes no integration events of its
 own.
+
+`paper_broker` is the only optional BC: it is instantiated only
+when the trading host is started with `--paper` (or for the
+backtest path). The other seven are always present. ADR 0012
+covers paper_broker's role and why it is a separate BC instead of
+a Paper decorator inside broker.
 
 The seven **canonical pipeline stages** (Alpha → Construction →
 Risk → Execution) of LEAN's Algorithm Framework correspond to four
@@ -219,17 +233,49 @@ back. The `venues : t -> Mic.t list` method on the port reflects
 the asymmetry: a brokerage covers one or more venues; the BC is
 *not* a venue itself. Adapters: Finam REST + WS, BCS
 REST + WS, Synthetic (deterministic random walk for demos and
-backtest), Paper (in-memory order simulator wrapping any of the
-three). The WS bridges fan inbound bars into
-`broker.bar-updated`.
+backtest). The WS bridges fan inbound bars into
+`broker.bar-updated`. Order matching against the bar stream is
+not this BC's responsibility; see `paper_broker` below for the
+simulated-execution side.
 
 **Inbound** ← `broker.submit-order-command` (saga-driven,
-ADR 0011 §7);
+ADR 0011 §7) — gated off in paper deployments where the
+paper_broker BC owns this channel;
 direct REST/HTTP for manual orders.
 **Outbound** → `broker.order-accepted`, `broker.order-rejected`,
 `broker.order-unreachable` (the three terminal saga events, with
 `correlation_id` echoed); `broker.bar-updated` (the upstream
-candle stream that drives Strategy and PM downstream).
+candle stream that drives Strategy, PM, and paper_broker
+downstream).
+
+### `paper_broker` — simulated execution
+
+Optional BC instantiated when the host runs with `--paper` (or
+for the backtest path). Subscribes to `broker.submit-order-command`
+(saga channel, wire-byte-equivalent to broker's local
+`Submit_order_command`) and `broker.bar-updated` (mirrored via
+this BC's own inbound ACL), maintains a {!Pending_order} store
+keyed by paper-broker order id, and emits fills against the bar
+stream using a pure-FP matching engine (`Matching.price_if_filled`
++ `Slippage.apply` + `Fee.compute`). The Domain layer has Why3
+specs for the entity (`Order`), the matching rules, and the VOs.
+
+**Inbound** ← `broker.submit-order-command`,
+`broker.cancel-order-command` (saga-driven command channels;
+shapes are byte-equivalent to local DTOs, no handler file needed),
+`broker.bar-updated` (ACL'd into `Apply_bar_command`).
+**Outbound** → `broker.order-accepted`, `broker.order-rejected`,
+`broker.order-filled`, `broker.order-cancelled` (every event
+carries the original `correlation_id` and the round-trip
+`reservation_id` so Account can locate the matching reservation
+on `commit_fill_command`).
+
+In paper deployments paper_broker is the only producer of
+`broker.order-*`; in live deployments the broker BC is the only
+producer; the two never publish at the same time (broker BC's
+submit-order subscriber is gated off when `--paper` is on). The
+wire format is identical, so Account and execution_management
+consume the same shape regardless of who produced it.
 
 ### `shared` — cross-BC kernel
 
@@ -285,9 +331,12 @@ Topic conventions per BC:
 | `in-memory://account.reservation-rejected`     | account               | Cid echoed                     |
 | `in-memory://account.reservation-released`     | account               |                                |
 | `in-memory://broker.submit-order-command`      | execution_management  | Saga-driven command channel    |
-| `in-memory://broker.order-accepted`            | broker                | Cid echoed                     |
-| `in-memory://broker.order-rejected`            | broker                | Cid echoed                     |
-| `in-memory://broker.order-unreachable`         | broker                | Cid echoed                     |
+| `in-memory://broker.cancel-order-command`      | execution_management  | Saga compensation channel      |
+| `in-memory://broker.order-accepted`            | broker or paper_broker | Cid echoed                    |
+| `in-memory://broker.order-rejected`            | broker or paper_broker | Cid echoed                    |
+| `in-memory://broker.order-unreachable`         | broker                | Cid echoed (live only)         |
+| `in-memory://broker.order-filled`              | paper_broker          | Cid + reservation_id echoed    |
+| `in-memory://broker.order-cancelled`           | paper_broker          | Cid + reservation_id echoed    |
 | `in-memory://broker.bar-updated`               | broker                | Upstream candles               |
 | `in-memory://execution-management.trade-submission-blocked` | execution_management | Telemetry only      |
 | `in-memory://execution-management.kill-switch-tripped` | execution_management |                              |
@@ -348,8 +397,9 @@ through fills, with `cid` denoting the saga `correlation_id`:
 8. execution_management ← account.amount-reserved
    Place_order_pm.transition: Awaiting_reservation → Submitted
    → broker.submit-order-command                      [cid_n]
-9. broker             ← broker.submit-order-command
-   Submit_order_command_handler.make
+9. broker (live) or paper_broker (--paper)  ← broker.submit-order-command
+   Submit_order_command_handler.make (live) or
+   Submit_order_command_workflow.execute (paper)
    → broker.order-{accepted,rejected,unreachable}     [cid_n]
 10. execution_management ← broker.order-{rejected,unreachable}
     Place_order_pm.transition: Submitted → Compensated
@@ -357,9 +407,12 @@ through fills, with `cid` denoting the saga `correlation_id`:
 11. account            ← account.release-command
     Release_command_workflow
     → account.reservation-released
-12. broker WS bridge  → fill events
-    → account commits the reservation against actual fill numbers
-    → account.position-changed, account.cash-changed (when wired)
+12. paper_broker.Apply_bar_command_workflow (in --paper) or
+    broker WS bridge (live) → fill events
+    → broker.order-filled                             [cid_n + reservation_id]
+13. account            ← broker.order-filled
+    Commit_fill_command_workflow → Portfolio.commit_fill
+    → account.reservation-filled                      (atomic: new cash + position + avg)
 ```
 
 The pure saga transitions (steps 6, 8, 10) are pinned by
@@ -400,8 +453,12 @@ because the cross-BC code already programs against ports.
 
 This is the ADR 0001 hexagonal payoff realised at the BC
 granularity: the same code that makes `Broker.S` swappable
-(Finam ↔ BCS ↔ Synthetic ↔ Paper) makes `Bus.Adapter` swappable
-(in-memory ↔ Kafka) at the next layer up.
+(Finam ↔ BCS ↔ Synthetic) makes `Bus.Adapter` swappable
+(in-memory ↔ Kafka) at the next layer up. paper_broker plugs in
+at the BC granularity rather than as a `Broker.S` adapter
+because it is the simulated brokerage (an entire BC's worth of
+ports, state, and emitted events), not a wrapper around a data
+source — see ADR 0012.
 
 ## See also
 

@@ -6,7 +6,7 @@
     Orders that match are atomically updated in the
     {!Paper_broker_store.Order_store.S} via
     {!Paper_broker_store.Order_store.S.update}; resulting
-    {!Paper_broker.Order.Events.Fill_observed.t} domain events are
+    {!Paper_broker.Order.Events.Order_filled.t} domain events are
     returned for the enclosing workflow to translate into outbound
     integration events.
 
@@ -30,7 +30,7 @@ type handle_error = Validation of validation_error
 
 type fill_outcome = {
   order : Paper_broker.Order.t;
-  event : Paper_broker.Order.Events.Fill_observed.t;
+  event : Paper_broker.Order.Events.Order_filled.t;
 }
 (** Per-order fill: the post-fill {!Paper_broker.Order.t} (reflecting
     new [filled]/[status]) plus the corresponding domain event. *)

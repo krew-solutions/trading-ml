@@ -15,7 +15,7 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Paper_broker.Order.Events.Fill_observed.t
+type domain = Paper_broker.Order.Events.Order_filled.t
 
 let of_domain ~(correlation_id : string) (ev : domain) : t =
   {

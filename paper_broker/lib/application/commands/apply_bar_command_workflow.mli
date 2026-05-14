@@ -5,7 +5,7 @@
     publication.
 
     Each {!Paper_broker.Order.t} that the bar fills emits a
-    {!Paper_broker.Order.Events.Fill_observed.t}. The bar itself
+    {!Paper_broker.Order.Events.Order_filled.t}. The bar itself
     carries no [correlation_id], so for each fill the workflow
     recovers the originating-Submit's [correlation_id] from the
     {!Paper_broker_store.Order_command_log.S} (see *Process

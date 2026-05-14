@@ -62,7 +62,7 @@ val apply_fill :
   fill_price:Decimal.t ->
   fee:Decimal.t ->
   fill_ts:int64 ->
-  (t * Events.Fill_observed.t, apply_fill_error) result
+  (t * Events.Order_filled.t, apply_fill_error) result
 (** Applies a partial or full fill. The new status is
     [Partially_filled] when filled total is below [quantity], else
     [Filled]. *)

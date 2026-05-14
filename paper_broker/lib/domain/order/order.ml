@@ -75,7 +75,7 @@ let apply_fill t ~exec_id ~fill_quantity ~fill_price ~fee ~fill_ts =
         if Decimal.equal new_total_filled t.quantity then Filled else Partially_filled
       in
       let t' = { t with filled = new_total_filled; status = new_status } in
-      let event : Events.Fill_observed.t =
+      let event : Events.Order_filled.t =
         {
           id = t.id;
           reservation_id = t.reservation_id;

@@ -16,7 +16,7 @@ type t = {
           own). *)
   reservation_id : int;
       (** Client's identifier of the order, sourced from the Domain
-          {!Paper_broker.Order.Events.Fill_observed.reservation_id}.
+          {!Paper_broker.Order.Events.Order_filled.reservation_id}.
           Account uses it to locate the matching ledger state on
           [commit_fill_command]. *)
   id : string;
@@ -31,6 +31,6 @@ type t = {
 }
 [@@deriving yojson]
 
-type domain = Paper_broker.Order.Events.Fill_observed.t
+type domain = Paper_broker.Order.Events.Order_filled.t
 
 val of_domain : correlation_id:string -> domain -> t

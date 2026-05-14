@@ -129,7 +129,7 @@ paper_broker/lib/domain/
       filled_quantity.{ml,mli,mlw}     -- 0 ≤ filled ≤ quantity
     events/
       order_accepted.{ml,mli,mlw}      -- DE
-      fill_observed.{ml,mli,mlw}       -- DE
+      order_filled.{ml,mli,mlw}       -- DE
       order_cancelled.{ml,mli,mlw}     -- DE
     order.{ml,mli,mlw}                 -- transitions, status monotonicity
   matching/
@@ -204,7 +204,7 @@ following the project's CQRS-command naming convention):
   `Matching.price_if_filled` against the candle → if `Some price`,
   apply `Slippage.apply` → `Fee.compute` → call `update` with a
   pure transition that produces the new `Order` state and a
-  `Fill_observed` DE.
+  `Order_filled` DE.
 - `cancel_pending_order_command` — `update` with a transition that
   emits `Order_cancelled` DE if the current status is non-terminal.
 
@@ -212,7 +212,7 @@ Three DEHs translate DEs into IEs:
 
 - `publish_integration_event_on_order_accepted.ml` →
   `in-memory://broker.order-accepted`
-- `publish_integration_event_on_fill_observed.ml` →
+- `publish_integration_event_on_order_filled.ml` →
   `in-memory://broker.order-filled` (**new topic, this ADR**)
 - `publish_integration_event_on_order_cancelled.ml` →
   `in-memory://broker.order-cancelled` (also new)

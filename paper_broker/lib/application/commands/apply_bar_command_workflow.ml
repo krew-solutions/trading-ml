@@ -34,7 +34,7 @@ let execute
                    sagas key by reservation_id anyway. *)
                 ""
           in
-          Paper_broker_domain_event_handlers.Publish_integration_event_on_fill_observed
+          Paper_broker_domain_event_handlers.Publish_integration_event_on_order_filled
           .handle ~publish_order_filled ~correlation_id f.event)
         fills;
       Rop.succeed ()

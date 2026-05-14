@@ -1,4 +1,4 @@
-(** Domain Event handler: translates {!Paper_broker.Order.Events.Fill_observed.t}
+(** Domain Event handler: translates {!Paper_broker.Order.Events.Order_filled.t}
     into {!Paper_broker_integration_events.Order_filled_integration_event.t}
     and publishes it through the supplied port closure.
 
@@ -13,5 +13,5 @@ module Order_filled :
 val handle :
   publish_order_filled:(Order_filled.t -> unit) ->
   correlation_id:string ->
-  Paper_broker.Order.Events.Fill_observed.t ->
+  Paper_broker.Order.Events.Order_filled.t ->
   unit

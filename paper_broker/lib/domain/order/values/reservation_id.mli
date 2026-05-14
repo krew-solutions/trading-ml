@@ -4,7 +4,7 @@
     the brokerage receives this identifier alongside the new-order
     intent, stores it as part of the order's identity, and echoes
     it on every lifecycle event the brokerage emits to the client
-    (Order_accepted, Fill_observed, Order_cancelled, Order_rejected).
+    (Order_accepted, Order_filled, Order_cancelled, Order_rejected).
 
     In our system the only client of paper_broker is the
     execution_management saga, which threads the Account-side

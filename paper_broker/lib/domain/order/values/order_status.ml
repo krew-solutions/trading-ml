@@ -1,10 +1,4 @@
-type t =
-  | New
-  | Partially_filled
-  | Filled
-  | Cancelled
-  | Rejected
-  | Expired
+type t = New | Partially_filled | Filled | Cancelled | Rejected | Expired
 
 let is_terminal = function
   | Filled | Cancelled | Rejected | Expired -> true

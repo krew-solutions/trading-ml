@@ -31,8 +31,7 @@ let make
     ~placed_after_ts =
   if not (Decimal.is_positive quantity) then
     invalid_arg
-      (Printf.sprintf "Order.make: quantity %s — must be > 0"
-         (Decimal.to_string quantity));
+      (Printf.sprintf "Order.make: quantity %s — must be > 0" (Decimal.to_string quantity));
   if Int64.compare created_ts 0L < 0 then invalid_arg "Order.make: created_ts < 0";
   if Int64.compare placed_after_ts 0L < 0 then
     invalid_arg "Order.make: placed_after_ts < 0";
@@ -100,6 +99,11 @@ let cancel t ~cancelled_ts =
   else
     let t' = { t with status = Cancelled } in
     let event : Events.Order_cancelled.t =
-      { id = t.id; client_order_id = t.client_order_id; instrument = t.instrument; cancelled_ts }
+      {
+        id = t.id;
+        client_order_id = t.client_order_id;
+        instrument = t.instrument;
+        cancelled_ts;
+      }
     in
     Ok (t', event)

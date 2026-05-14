@@ -2,6 +2,7 @@ open Core
 
 type t = {
   correlation_id : string;
+  reservation_id : int;
   id : string;
   client_order_id : string;
   exec_id : string;
@@ -17,9 +18,10 @@ type t = {
 
 type domain = Paper_broker.Order.Events.Fill_observed.t
 
-let of_domain ~(correlation_id : string) (ev : domain) : t =
+let of_domain ~(correlation_id : string) ~(reservation_id : int) (ev : domain) : t =
   {
     correlation_id;
+    reservation_id;
     id = ev.id;
     client_order_id = ev.client_order_id;
     exec_id = ev.exec_id;

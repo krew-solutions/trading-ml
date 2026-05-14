@@ -11,6 +11,11 @@ type t = {
   correlation_id : string;
       (** Saga-instance identifier echoed from the originating
           [submit_order_command]. *)
+  reservation_id : int;
+      (** Opaque correlation token round-tripped from
+          [submit_order_command]. Account uses it to locate the
+          matching reserved cash/position on
+          [commit_fill_command]. *)
   id : string;
   client_order_id : string;
   exec_id : string;
@@ -26,4 +31,4 @@ type t = {
 
 type domain = Paper_broker.Order.Events.Fill_observed.t
 
-val of_domain : correlation_id:string -> domain -> t
+val of_domain : correlation_id:string -> reservation_id:int -> domain -> t

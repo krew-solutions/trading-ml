@@ -1,0 +1,17 @@
+(library
+ (name paper_broker_commands)
+ (public_name trading.paper_broker.commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  datetime
+  paper_broker
+  paper_broker_queries
+  paper_broker_integration_events
+  paper_broker_domain_event_handlers
+  rop)
+ (modules_without_implementation order_store)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

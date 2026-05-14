@@ -66,6 +66,7 @@ val apply_fill :
 
 type cancel_error = Order_already_terminal of Values.Order_status.t
 
-val cancel : t -> cancelled_ts:int64 -> (t * Events.Order_cancelled.t, cancel_error) result
+val cancel :
+  t -> cancelled_ts:int64 -> (t * Events.Order_cancelled.t, cancel_error) result
 (** Transitions a working order to [Cancelled]. Fails when the
     order is already in a terminal status. *)

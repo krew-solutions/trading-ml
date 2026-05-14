@@ -9,7 +9,10 @@
 
 type t = {
   correlation_id : string;
-  client_order_id : string;
+  reservation_id : int;
+      (** Opaque correlation token from the originating
+          [submit_order_command]. Account releases the reservation
+          on this event. *)
   reason : string;
 }
 [@@deriving yojson]

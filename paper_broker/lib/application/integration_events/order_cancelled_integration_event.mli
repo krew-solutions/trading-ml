@@ -4,6 +4,10 @@
 
 type t = {
   correlation_id : string;
+  reservation_id : int;
+      (** Opaque correlation token from the originating
+          [submit_order_command]. Account releases the remaining
+          reservation on this event. *)
   id : string;
   client_order_id : string;
   instrument : Paper_broker_queries.Instrument_view_model.t;
@@ -13,4 +17,4 @@ type t = {
 
 type domain = Paper_broker.Order.Events.Order_cancelled.t
 
-val of_domain : correlation_id:string -> domain -> t
+val of_domain : correlation_id:string -> reservation_id:int -> domain -> t

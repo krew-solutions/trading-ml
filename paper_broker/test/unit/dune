@@ -1,5 +1,14 @@
 (test
  (name paper_broker_unit_runner)
- (libraries core decimal paper_broker alcotest))
+ (libraries
+  core
+  decimal
+  datetime
+  rop
+  paper_broker
+  paper_broker_queries
+  paper_broker_integration_events
+  paper_broker_commands
+  alcotest))
 
 (include_subdirs unqualified)

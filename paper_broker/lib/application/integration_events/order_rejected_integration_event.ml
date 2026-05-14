@@ -1,2 +1,2 @@
-type t = { correlation_id : string; client_order_id : string; reason : string }
+type t = { correlation_id : string; reservation_id : int; reason : string }
 [@@deriving yojson]

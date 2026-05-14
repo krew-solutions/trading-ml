@@ -3,7 +3,7 @@ type validation_error = Non_positive_reservation_id of int
 let validation_error_to_string = function
   | Non_positive_reservation_id n -> Printf.sprintf "reservation_id must be > 0, got %d" n
 
-let release_error_to_string = function
+let release_error_to_string : Account.Portfolio.release_error -> string = function
   | Account.Portfolio.Reservation_not_found id ->
       Printf.sprintf "reservation %d not found" id
 
@@ -27,7 +27,7 @@ let handle ~(portfolio : Account.Portfolio.t ref) (cmd : Release_command.t) :
   match validate cmd with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)
   | Ok v -> (
-      match Account.Portfolio.try_release !portfolio ~id:v.reservation_id with
+      match Account.Portfolio.release !portfolio ~id:v.reservation_id with
       | Ok (portfolio', domain_event) ->
           portfolio := portfolio';
           Rop.succeed domain_event

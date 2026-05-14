@@ -222,16 +222,30 @@ let test_commit_fill_removes_reservation () =
       ~price:(d 100.0) ~slippage_buffer:(d 0.01) ~fee_rate:(d 0.001)
       ~margin_policy:stub_policy
   in
-  let p =
-    Portfolio.commit_fill p ~id:3 ~actual_quantity:(d 10.0) ~actual_price:(d 99.5)
-      ~actual_fee:(d 0.995)
+  let p, event =
+    match
+      Portfolio.commit_fill p ~id:3 ~actual_quantity:(d 10.0) ~actual_price:(d 99.5)
+        ~actual_fee:(d 0.995)
+    with
+    | Ok pair -> pair
+    | Error _ -> Alcotest.fail "expected the reservation to exist"
   in
   Alcotest.(check (float 1e-3))
     "cash debited at actual" 9004.005 (Decimal.to_float p.cash);
   Alcotest.(check (float 1e-3))
     "available = cash again" (Decimal.to_float p.cash)
     (Decimal.to_float (Portfolio.available_cash p));
-  Alcotest.(check int) "no reservations left" 0 (List.length p.reservations)
+  Alcotest.(check int) "no reservations left" 0 (List.length p.reservations);
+  Alcotest.(check int) "event reservation_id" 3 event.reservation_id;
+  Alcotest.(check (float 1e-3))
+    "event filled_quantity" 10.0
+    (Decimal.to_float event.filled_quantity);
+  Alcotest.(check (float 1e-3))
+    "event fill_price" 99.5
+    (Decimal.to_float event.fill_price);
+  Alcotest.(check (float 1e-3))
+    "event new_cash" 9004.005
+    (Decimal.to_float event.new_cash)
 
 let test_release_removes_reservation_without_touching_cash () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
@@ -240,21 +254,25 @@ let test_release_removes_reservation_without_touching_cash () =
       ~price:(d 100.0) ~slippage_buffer:(d 0.01) ~fee_rate:(d 0.001)
       ~margin_policy:stub_policy
   in
-  let p = Portfolio.release p ~id:4 in
+  let p =
+    match Portfolio.release p ~id:4 with
+    | Ok (p', _event) -> p'
+    | Error _ -> Alcotest.fail "expected the reservation to exist"
+  in
   Alcotest.(check (float 1e-6)) "cash untouched" 10_000.0 (Decimal.to_float p.cash);
   Alcotest.(check int) "reservation gone" 0 (List.length p.reservations);
   Alcotest.(check (float 1e-6))
     "available = cash" 10_000.0
     (Decimal.to_float (Portfolio.available_cash p))
 
-let test_commit_unknown_id_raises () =
+let test_commit_unknown_id_returns_not_found () =
   let p = Portfolio.empty ~cash:(d 1000.0) in
-  Alcotest.check_raises "commit unknown id" Not_found (fun () ->
-      let _ =
-        Portfolio.commit_fill p ~id:42 ~actual_quantity:(d 1.0) ~actual_price:(d 1.0)
-          ~actual_fee:Decimal.zero
-      in
-      ())
+  match
+    Portfolio.commit_fill p ~id:42 ~actual_quantity:(d 1.0) ~actual_price:(d 1.0)
+      ~actual_fee:Decimal.zero
+  with
+  | Error (Portfolio.Reservation_not_found 42) -> ()
+  | _ -> Alcotest.fail "expected Reservation_not_found 42"
 
 let test_commit_partial_fill_shrinks_reservation () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
@@ -337,7 +355,9 @@ let tests =
     ( "release does not touch cash",
       `Quick,
       test_release_removes_reservation_without_touching_cash );
-    ("commit unknown id raises", `Quick, test_commit_unknown_id_raises);
+    ( "commit unknown id returns Reservation_not_found",
+      `Quick,
+      test_commit_unknown_id_returns_not_found );
     ("multiple reservations stack", `Quick, test_multiple_reservations_stack);
     ( "partial fill shrinks reservation",
       `Quick,

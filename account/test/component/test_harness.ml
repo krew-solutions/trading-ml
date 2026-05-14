@@ -10,6 +10,7 @@
 
 module Reserve_wf = Account_commands.Reserve_command_workflow
 module Release_wf = Account_commands.Release_command_workflow
+module Commit_fill_wf = Account_commands.Commit_fill_command_workflow
 
 module Reserve_h = Account_commands.Reserve_command_handler
 (** Re-exposed only for the [handle_error] variants — the test
@@ -17,7 +18,7 @@ module Reserve_h = Account_commands.Reserve_command_handler
     when the [Validation] track fires. *)
 
 module Release_h = Account_commands.Release_command_handler
-
+module Commit_fill_h = Account_commands.Commit_fill_command_handler
 module Amount_reserved_ie = Account_integration_events.Amount_reserved_integration_event
 
 module Reservation_rejected_ie =
@@ -25,6 +26,9 @@ module Reservation_rejected_ie =
 
 module Reservation_released_ie =
   Account_integration_events.Reservation_released_integration_event
+
+module Reservation_filled_ie =
+  Account_integration_events.Reservation_filled_integration_event
 
 type ctx = {
   portfolio : Account.Portfolio.t ref;
@@ -36,8 +40,10 @@ type ctx = {
   amount_reserved_pub : Amount_reserved_ie.t list ref;
   reservation_rejected_pub : Reservation_rejected_ie.t list ref;
   reservation_released_pub : Reservation_released_ie.t list ref;
+  reservation_filled_pub : Reservation_filled_ie.t list ref;
   last_reserve_result : (unit, Reserve_h.handle_error) Rop.t option;
   last_release_result : (unit, Release_h.handle_error) Rop.t option;
+  last_commit_fill_result : (unit, Commit_fill_h.handle_error) Rop.t option;
 }
 
 let make_id_counter () =
@@ -67,8 +73,10 @@ let fresh_ctx () =
     amount_reserved_pub = ref [];
     reservation_rejected_pub = ref [];
     reservation_released_pub = ref [];
+    reservation_filled_pub = ref [];
     last_reserve_result = None;
     last_release_result = None;
+    last_commit_fill_result = None;
   }
 
 let with_cash ctx ~cash =
@@ -121,3 +129,21 @@ let release ctx ~reservation_id =
     Release_wf.execute ~portfolio:ctx.portfolio ~publish_reservation_released cmd
   in
   { ctx with last_release_result = Some result }
+
+let commit_fill ctx ~reservation_id ~quantity ~price ~fee =
+  let cmd : Account_commands.Commit_fill_command.t =
+    {
+      correlation_id = Correlation_id.to_string (Correlation_id.generate ());
+      reservation_id;
+      quantity;
+      price;
+      fee;
+    }
+  in
+  let publish_reservation_filled e =
+    ctx.reservation_filled_pub := e :: !(ctx.reservation_filled_pub)
+  in
+  let result =
+    Commit_fill_wf.execute ~portfolio:ctx.portfolio ~publish_reservation_filled cmd
+  in
+  { ctx with last_commit_fill_result = Some result }

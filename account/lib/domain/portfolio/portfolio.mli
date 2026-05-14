@@ -98,12 +98,12 @@ val try_reserve :
 
 type release_error = Reservation_not_found of int
 
-val try_release : t -> id:int -> (t * Events.Reservation_released.t, release_error) result
+val release : t -> id:int -> (t * Events.Reservation_released.t, release_error) result
 (** Releases a reservation by id, returning new state and the
     event. Returns [Reservation_not_found] if no reservation
     with that id exists — callers that want idempotent behaviour
     can treat this as a no-op. *)
-(*@ r = try_release p ~id
+(*@ r = release p ~id
     ensures match r with
             | Ok (p', ev) ->
                 ev.reservation_id = id
@@ -156,17 +156,26 @@ val reserve :
     open_qty remainder reserves
     [open_qty × price × margin_pct] collateral. *)
 
+type commit_fill_error = Reservation_not_found of int
+
 val commit_fill :
   t ->
   id:int ->
   actual_quantity:Decimal.t ->
   actual_price:Decimal.t ->
   actual_fee:Decimal.t ->
-  t
-(** Settle reservation [id] fully with actual broker numbers. Removes
-    the reservation and applies a real {!fill} using the actual
-    values. If the reservation is absent (already committed or never
-    existed), raises [Not_found]. *)
+  (t * Events.Reservation_filled.t, commit_fill_error) result
+(** Settle reservation [id] fully with the broker's actual fill
+    numbers. Removes the reservation, applies a real {!fill}, and
+    returns the new portfolio plus the [Reservation_filled] domain
+    event describing the atomic transactional effect (both new
+    cash and new position post-images in one fact).
+
+    Returns [Reservation_not_found] when [id] is absent. The
+    application layer decides what to do with the typed error —
+    silently drop (saga compensation already released the
+    reservation), log, alert, or surface to a caller. Mirrors the
+    Result-shape of [release]. *)
 
 val commit_partial_fill :
   t ->
@@ -185,10 +194,6 @@ val commit_partial_fill :
     Raises [Not_found] when the id is absent. Raises
     [Invalid_argument] if [actual_quantity] exceeds the
     reservation's combined remaining quantity. *)
-
-val release : t -> id:int -> t
-(** Drop reservation [id] with no other state change — used on
-    cancel/reject. No-op if the reservation is absent. *)
 
 val available_cash : t -> Decimal.t
 (** [cash − Σ reserved_cash r for all r in reservations]. What

@@ -13,6 +13,7 @@ module Margin_policy = Margin_policy
 module Position = Values.Position
 module Amount_reserved = Events.Amount_reserved
 module Reservation_released = Events.Reservation_released
+module Reservation_filled = Events.Reservation_filled
 
 type t = {
   cash : Decimal.t;
@@ -154,18 +155,37 @@ let reserve
 let find_reservation reservations id =
   List.partition (fun (r : Reservation.t) -> r.id = id) reservations
 
-let release p ~id =
-  let _matched, rest = find_reservation p.reservations id in
-  { p with reservations = rest }
+type commit_fill_error = Reservation_not_found of int
 
 let commit_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   let matched, rest = find_reservation p.reservations id in
   match matched with
-  | [] -> raise Not_found
+  | [] -> Error (Reservation_not_found id)
   | (r : Reservation.t) :: _ ->
       let p' = { p with reservations = rest } in
-      fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
-        ~price:actual_price ~fee:actual_fee
+      let p'' =
+        fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
+          ~price:actual_price ~fee:actual_fee
+      in
+      let new_position_quantity, new_avg_price =
+        match position p'' r.instrument with
+        | Some (pos : Position.t) -> (pos.quantity, pos.avg_price)
+        | None -> (Decimal.zero, Decimal.zero)
+      in
+      let event : Events.Reservation_filled.t =
+        {
+          reservation_id = id;
+          instrument = r.instrument;
+          side = r.side;
+          filled_quantity = actual_quantity;
+          fill_price = actual_price;
+          fee = actual_fee;
+          new_position_quantity;
+          new_avg_price;
+          new_cash = p''.cash;
+        }
+      in
+      Ok (p'', event)
 
 let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   let matched, rest = find_reservation p.reservations id in
@@ -281,7 +301,7 @@ let try_reserve
 
 type release_error = Reservation_not_found of int
 
-let try_release p ~id =
+let release p ~id =
   let matched, rest = find_reservation p.reservations id in
   match matched with
   | [] -> Error (Reservation_not_found id)

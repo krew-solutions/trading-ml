@@ -2,7 +2,7 @@
 
     Symmetric with {!Reserve_command_handler}: accepts the
     wire-format command, validates internally, invokes
-    {!Account.Portfolio.try_release}, and yields the resulting
+    {!Account.Portfolio.release}, and yields the resulting
     domain event. Validation is a private phase — see the design
     rationale in {!Reserve_command_handler}. *)
 
@@ -14,7 +14,7 @@ type validation_error =
         positive-counter, so a [reservation_id <= 0] cannot have
         come from a successful {!Reserve_command_workflow.execute}
         and is rejected at the parse boundary rather than handed
-        on to {!Account.Portfolio.try_release}. *)
+        on to {!Account.Portfolio.release}. *)
 
 val validation_error_to_string : validation_error -> string
 

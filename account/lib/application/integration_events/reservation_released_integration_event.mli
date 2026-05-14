@@ -1,6 +1,6 @@
 (** Integration event: Account released a previously-reserved
-    earmark. Published by {!Release_command_handler} after
-    {!Account.Portfolio.try_release} succeeds — compensation
+    earmark. Published by {!Release_command_workflow} when
+    {!Account.Portfolio.release} returns [Some _] — compensation
     completion. The released cash / quantity is again available
     to subsequent commands. *)
 

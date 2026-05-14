@@ -2,4 +2,8 @@
 
 let () =
   Alcotest.run "trading-account-component"
-    [ Reserve_command_test.feature; Release_command_test.feature ]
+    [
+      Reserve_command_test.feature;
+      Release_command_test.feature;
+      Commit_fill_command_test.feature;
+    ]

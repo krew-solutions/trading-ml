@@ -1,7 +1,9 @@
 module Order_rejected = Order_rejected_integration_event
 
 let handle
-    ~(dispatch_release : correlation_id:string -> reservation_id:int -> unit)
+    ~(dispatch_release : Account_commands.Release_command.t -> unit)
     (ev : Order_rejected.t) : unit =
-  dispatch_release ~correlation_id:ev.Order_rejected.correlation_id
-    ~reservation_id:ev.Order_rejected.reservation_id
+  let cmd : Account_commands.Release_command.t =
+    { correlation_id = ev.correlation_id; reservation_id = ev.reservation_id }
+  in
+  dispatch_release cmd

@@ -1,11 +1,13 @@
 (** Handler for the inbound {!Order_rejected_integration_event.t}.
-    Bus-agnostic — translates the inbound DTO into a release dispatch
-    via the supplied port. The composition root subscribes this
-    function to whatever bus consumer is appropriate. *)
+
+    Translates the broker-side rejection event into a local
+    {!Account_commands.Release_command.t} and dispatches via the
+    supplied port. The [reason] field is dropped — release is
+    unconditional once a rejection has been observed. *)
 
 module Order_rejected = Order_rejected_integration_event
 
 val handle :
-  dispatch_release:(correlation_id:string -> reservation_id:int -> unit) ->
+  dispatch_release:(Account_commands.Release_command.t -> unit) ->
   Order_rejected.t ->
   unit

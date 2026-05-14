@@ -6,7 +6,8 @@
   ppx_yojson_conv_lib
   core
   decimal
-  account_inbound_queries)
+  account_inbound_queries
+  account_commands)
  (preprocess
   (pps ppx_yojson_conv))
  (flags

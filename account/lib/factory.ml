@@ -38,6 +38,11 @@ let build ~bus ~initial_cash ~market_price : t =
       ~yojson_of:
         Account_integration_events.Reservation_rejected_integration_event.yojson_of_t
   in
+  let publish_reservation_filled =
+    produce ~uri:"in-memory://account.reservation-filled"
+      ~yojson_of:
+        Account_integration_events.Reservation_filled_integration_event.yojson_of_t
+  in
   let dispatch_reserve cmd =
     match
       Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
@@ -51,16 +56,29 @@ let build ~bus ~initial_cash ~market_price : t =
        Rop tail is discarded. *)
     | Error _ -> ()
   in
-  let dispatch_release ~correlation_id ~reservation_id =
+  let dispatch_release (cmd : Account_commands.Release_command.t) =
     match
       Account_commands.Release_command_workflow.execute ~portfolio:portfolio_ref
-        ~publish_reservation_released
-        Account_commands.Release_command.{ correlation_id; reservation_id }
+        ~publish_reservation_released cmd
     with
     | Ok () -> ()
     (* Idempotent compensation: a duplicated or late rejection event
        for a reservation that has already been released is silently
        dropped. *)
+    | Error _ -> ()
+  in
+  let dispatch_commit_fill (cmd : Account_commands.Commit_fill_command.t) =
+    match
+      Account_commands.Commit_fill_command_workflow.execute ~portfolio:portfolio_ref
+        ~publish_reservation_filled cmd
+    with
+    | Ok () -> ()
+    (* Reservation-not-found surfaces here as a typed
+       [Commit_fill_command_handler.Commit (Reservation_not_found _)]
+       error. Today it is dropped silently, matching the same
+       compensation-idempotency policy applied to
+       [account.release-command] above; future deployments that
+       want to log / alert / surface it can branch on the variant. *)
     | Error _ -> ()
   in
   let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
@@ -84,6 +102,14 @@ let build ~bus ~initial_cash ~market_price : t =
       (Account_inbound_integration_events.Order_unreachable_integration_event_handler
        .handle ~dispatch_release)
   in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://broker.order-filled" ~group:"account-commit"
+         ~t_of_yojson:
+           Account_inbound_integration_events.Order_filled_integration_event.t_of_yojson)
+      (Account_inbound_integration_events.Order_filled_integration_event_handler.handle
+         ~dispatch_commit_fill)
+  in
   (* Saga-driven Reserve/Release: the place-order PM in the
      execution_management BC publishes wire-format commands on these
      topics. Both shapes are byte-equivalent to
@@ -101,9 +127,7 @@ let build ~bus ~initial_cash ~market_price : t =
     Bus.subscribe
       (consume ~uri:"in-memory://account.release-command" ~group:"account-saga"
          ~t_of_yojson:Account_commands.Release_command.t_of_yojson)
-      (fun (cmd : Account_commands.Release_command.t) ->
-        dispatch_release ~correlation_id:cmd.correlation_id
-          ~reservation_id:cmd.reservation_id)
+      dispatch_release
   in
   let http_handler =
     Account_inbound_http.Http.make_handler ~dispatch_reserve ~market_price

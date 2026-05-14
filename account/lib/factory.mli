@@ -18,7 +18,16 @@
 
 open Core
 
-type t = { http_handler : Inbound_http.Route.handler }
+type t = {
+  http_handler : Inbound_http.Route.handler;
+  portfolio_snapshot : unit -> Account.Portfolio.t;
+      (** Pull a snapshot of the live portfolio. Read-only — callers
+          may inspect [cash], [realized_pnl], [positions] etc. but
+          cannot mutate the aggregate. Concrete uses: backtest
+          summary, diagnostics, smoke tests. Production callers
+          should prefer the HTTP query API; this is a host-side
+          shortcut to avoid round-tripping through the bus. *)
+}
 (** External surface of an Account instance. The HTTP route handler
     is registered by the Trading-host server. Workflow ports
     ([dispatch_reserve], [dispatch_release]), the mutable

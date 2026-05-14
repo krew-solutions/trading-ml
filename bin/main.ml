@@ -174,7 +174,12 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
   let broker =
     Broker_factory.Factory.build ~bus ~env ~source_client ~rest:Synthetic ~paper_mode:true
   in
-  let _account =
+  let _paper_broker =
+    Paper_broker_factory.Factory.build ~bus
+      ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
+      ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero
+  in
+  let account =
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
       ~market_price:broker.market_price
   in
@@ -252,19 +257,14 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
            Yojson.Safe.to_string
              (Broker_integration_events.Bar_updated_integration_event.yojson_of_t v)))
   in
-  let paper_sink =
-    match broker.paper_broker with
-    | Some p -> fun candle -> Paper.Paper_broker.on_bar p ~instrument:symbol candle
-    | None -> fun _ -> ()
-  in
   (* Each candle takes one trip through:
      bar-updated → strategy → signal-detected → PM → trade-intents-planned
      → pre_trade_risk → trade-intent-approved → execution_management
      → reserve-command → account → amount-reserved → execution_management
-     → submit-order-command → broker → order-accepted/rejected
-     → execution_management (terminal). Each hop is one fiber yield in
-     the in_memory bus, so a generous yield count after each bar lets
-     the saga settle before the next bar arrives. *)
+     → submit-order-command → paper_broker → order-accepted/filled
+     → account → reservation-filled (terminal). Each hop is one fiber
+     yield in the in_memory bus, so a generous yield count after each
+     bar lets the saga settle before the next bar arrives. *)
   let drain () =
     for _ = 1 to 32 do
       Eio.Fiber.yield ()
@@ -272,20 +272,15 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
   in
   List.iter
     (fun candle ->
-      paper_sink candle;
       publish_bar_updated
         (Broker_integration_events.Bar_updated_integration_event.of_domain
            ~instrument:symbol ~timeframe:Timeframe.M5 ~candle);
       drain ())
     candles_list;
   drain ();
-  let paper_cash, realized_pnl =
-    match broker.paper_broker with
-    | Some p ->
-        let port = Paper.Paper_broker.portfolio p in
-        (Some port.Account.Portfolio.cash, Some port.Account.Portfolio.realized_pnl)
-    | None -> (None, None)
-  in
+  let portfolio = account.portfolio_snapshot () in
+  let paper_cash = Some portfolio.cash in
+  let realized_pnl = Some portfolio.realized_pnl in
   {
     strategy_name;
     symbol;
@@ -528,6 +523,14 @@ let cmd_serve args =
     | Opened_synthetic _ -> Synthetic
   in
   let broker = Broker_factory.Factory.build ~bus ~env ~source_client ~rest ~paper_mode in
+  let _paper_broker =
+    if paper_mode then
+      Some
+        (Paper_broker_factory.Factory.build ~bus
+           ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
+           ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero)
+    else None
+  in
   let strategy_id_of_resolved =
     match strategy_name with
     | Some n -> n

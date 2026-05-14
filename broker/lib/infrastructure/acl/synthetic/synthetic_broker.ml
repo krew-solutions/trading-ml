@@ -59,16 +59,17 @@ let bars t ~n ~instrument:_ ~timeframe =
 let venues _ = [ Mic.of_string "MISX" ]
 
 (** Synthetic is a data-only source — order execution is out of scope.
-    For synthetic order simulation, wrap this adapter in
-    {!Paper.Paper_broker}: it delegates market data here and owns the
-    order book itself. Calling order methods directly raises so the
-    misconfiguration surfaces at the first call instead of silently
-    returning empty lists. *)
+    For synthetic order simulation, run the paper_broker BC against
+    the bus: it consumes [broker.bar-updated] (published by this
+    adapter through the broker BC's factory) and owns the order
+    matching. Calling order methods directly on this adapter raises
+    so the misconfiguration surfaces at the first call instead of
+    silently returning empty lists. *)
 let unsupported fn =
   failwith
     (Printf.sprintf
-       "synthetic broker does not support %s — wrap it in Paper.Paper_broker for order \
-        simulation"
+       "synthetic broker does not support %s — orders flow through the paper_broker BC \
+        on the bus, not through the data source"
        fn)
 
 let place_order _ ~instrument:_ ~side:_ ~quantity:_ ~kind:_ ~tif:_ ~client_order_id:_ =

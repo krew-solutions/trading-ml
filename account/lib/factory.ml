@@ -1,6 +1,9 @@
 open Core
 
-type t = { http_handler : Inbound_http.Route.handler }
+type t = {
+  http_handler : Inbound_http.Route.handler;
+  portfolio_snapshot : unit -> Account.Portfolio.t;
+}
 
 let build ~bus ~initial_cash ~market_price : t =
   let portfolio_ref = ref (Account.Portfolio.empty ~cash:initial_cash) in
@@ -132,4 +135,5 @@ let build ~bus ~initial_cash ~market_price : t =
   let http_handler =
     Account_inbound_http.Http.make_handler ~dispatch_reserve ~market_price
   in
-  { http_handler }
+  let portfolio_snapshot () = !portfolio_ref in
+  { http_handler; portfolio_snapshot }

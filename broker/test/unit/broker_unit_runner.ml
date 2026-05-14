@@ -1,6 +1,6 @@
-(** Unit test runner for Broker BC. Mirrors {!lib/broker/}; covers
-    ACL adapters (Finam, BCS) for now — paper decorator and any
-    new application-layer tests will land in this same runner. *)
+(** Unit test runner for Broker BC. Covers the ACL adapters (Finam,
+    BCS), the BCS refresh-token store, the WebSocket framing layer,
+    and the outbound integration-event DTOs. *)
 
 let () =
   Alcotest.run "trading-broker-unit"
@@ -16,8 +16,6 @@ let () =
       ("bcs ws", Bcs_ws_test.tests);
       ("bcs orders", Bcs_order_test.tests);
       ("bcs deals", Bcs_deals_test.tests);
-      (* Infrastructure: Paper decorator *)
-      ("paper broker", Paper_broker_test.tests);
       (* Infrastructure: secret storage (BCS refresh-token) *)
       ("token store", Token_store_test.tests);
       (* Infrastructure: WebSocket framing *)

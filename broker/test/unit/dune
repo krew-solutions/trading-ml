@@ -9,7 +9,6 @@
   websocket
   finam
   bcs
-  paper
   token_store
   acl_common
   eio

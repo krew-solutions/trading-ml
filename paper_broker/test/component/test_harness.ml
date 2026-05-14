@@ -68,6 +68,7 @@ type ctx = {
   next_exec_id : unit -> string;
   slippage_bps : Slippage_bps.t;
   fee_rate : Fee_rate.t;
+  participation_rate : Paper_broker.Matching.Values.Participation_rate.t option;
   now_ts_ref : int64 ref;
   last_seen_bar_ts : (Core.Instrument.t, int64) Hashtbl.t;
   order_accepted_pub : Order_accepted_ie.t list ref;
@@ -89,6 +90,7 @@ let fresh_ctx () =
     next_exec_id = make_id_seq "ex";
     slippage_bps = Slippage_bps.zero;
     fee_rate = Fee_rate.zero;
+    participation_rate = None;
     now_ts_ref = ref 1_700_000_000L;
     last_seen_bar_ts = Hashtbl.create 8;
     order_accepted_pub = ref [];
@@ -102,6 +104,15 @@ let with_slippage_bps ctx ~bps =
 
 let with_fee_rate ctx ~rate =
   { ctx with fee_rate = Fee_rate.of_decimal (Decimal.of_string rate) }
+
+let with_participation_rate ctx ~rate =
+  {
+    ctx with
+    participation_rate =
+      Some
+        (Paper_broker.Matching.Values.Participation_rate.of_decimal
+           (Decimal.of_string rate));
+  }
 
 let placed_after_ts_for ctx instrument =
   match Hashtbl.find_opt ctx.last_seen_bar_ts instrument with
@@ -217,7 +228,8 @@ let bar_arrives
   let publish_filled e = ctx.order_filled_pub := e :: !(ctx.order_filled_pub) in
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:ctx.store
-      ~slippage_bps:ctx.slippage_bps ~fee_rate:ctx.fee_rate ~next_exec_id:ctx.next_exec_id
+      ~slippage_bps:ctx.slippage_bps ~fee_rate:ctx.fee_rate
+      ~participation_rate:ctx.participation_rate ~next_exec_id:ctx.next_exec_id
       ~publish_order_filled:publish_filled cmd
   in
   let bar_ts = Datetime.Iso8601.parse ts in

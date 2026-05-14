@@ -196,6 +196,49 @@ let market_sell_opens_a_short_and_fills_at_slipped_open =
                 (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
     ]
 
+let participation_cap_splits_large_order_across_bars =
+  Gherkin.scenario
+    "A large order under a 10% participation cap fills in slices across consecutive bars"
+    fresh_ctx
+    [
+      Gherkin.given "the paper broker enforces a 10% participation cap" (fun ctx ->
+          ctx |> with_participation_rate ~rate:"0.1");
+      Gherkin.and_ "I submit a market buy for 100 SBER@MISX" (fun ctx ->
+          ctx
+          |> submit_market_buy ~correlation_id:"saga-PC" ~reservation_id:55
+               ~symbol:"SBER@MISX" ~quantity:"100" ());
+      Gherkin.when_ "a bar arrives at 10:00 with volume 200" (fun ctx ->
+          ctx
+          |> bar_arrives ~ts:"2024-01-01T10:00:00Z" ~symbol:"SBER@MISX" ~open_:"100"
+               ~volume:"200" ());
+      Gherkin.then_ "the first fill is exactly the bar's capped share (20)" (fun ctx ->
+          match !(ctx.order_filled_pub) with
+          | [ ie ] ->
+              Alcotest.(check string) "fill_quantity = 200 * 0.1" "20" ie.fill_quantity;
+              Alcotest.(check string)
+                "new_total_filled = 20 (still working)" "20" ie.new_total_filled
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+      Gherkin.when_ "a second bar arrives at 10:01 with volume 1000" (fun ctx ->
+          ctx
+          |> bar_arrives ~ts:"2024-01-01T10:01:00Z" ~symbol:"SBER@MISX" ~open_:"100"
+               ~volume:"1000" ());
+      Gherkin.then_
+        "the residual 80 fills in one slice (cap 100, residual 80 < cap → full residual)"
+        (fun ctx ->
+          match !(ctx.order_filled_pub) with
+          | [ second; _first ] ->
+              Alcotest.(check string)
+                "second fill_quantity = residual 80" "80" second.fill_quantity;
+              Alcotest.(check string)
+                "new_total_filled = 100 (terminal)" "100" second.new_total_filled
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected two Order_filled after second bar, got %d"
+                   (List.length other)));
+    ]
+
 let feature =
   Gherkin.feature "paper_broker pipeline"
     [
@@ -205,4 +248,5 @@ let feature =
       cancellation_announces_release_and_terminalises_the_order;
       invalid_side_is_refused_with_round_trip_reservation_id;
       market_sell_opens_a_short_and_fills_at_slipped_open;
+      participation_cap_splits_large_order_across_bars;
     ]

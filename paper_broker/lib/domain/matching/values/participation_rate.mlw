@@ -1,0 +1,23 @@
+(** Why3 companion for [participation_rate.mli] — the wrapper enforces
+    [0 < rate <= 1], so any [t] viewed through [to_decimal] is a
+    strictly-positive [Decimal.t] capped at [1]. *)
+
+module Participation_rate
+  use int.Int
+  use decimal.Decimal
+
+  type t
+
+  function to_decimal (r: t) : Decimal.t
+
+  (** Participation rate is strictly positive: a zero cap would
+      mean no order ever fills, which is degenerate. *)
+  axiom positive : forall r: t. raw (to_decimal r) > 0
+
+  (** Participation rate is bounded above by [1]: claiming more
+      than the printed bar volume is meaningless. [unit_] is the
+      scaled-integer representation of [Decimal.one]. *)
+  axiom bounded_above : forall r: t. raw (to_decimal r) <= unit_
+
+  lemma not_negative : forall r: t. not (is_negative (to_decimal r))
+end

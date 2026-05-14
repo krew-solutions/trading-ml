@@ -1,5 +1,8 @@
+module Values : module type of Values
+
 (** Bar-against-order matching rules: decide whether an incoming
-    candle triggers a fill for a working order, and at what price.
+    candle triggers a fill for a working order, at what price, and
+    for how much of the order's remaining quantity.
 
     Conventions (conservative, no-lookahead — favouring the trader
     on intra-bar prints):
@@ -25,3 +28,24 @@ val price_if_filled :
   side:Core.Side.t ->
   candle:Core.Candle.t ->
   Decimal.t option
+
+val fillable_qty :
+  remaining:Decimal.t ->
+  volume:Decimal.t ->
+  participation_rate:Values.Participation_rate.t option ->
+  Decimal.t
+(** How much of [remaining] can be matched against a bar with the
+    given traded [volume].
+
+    - [participation_rate = None]: no liquidity cap, returns
+      [remaining] unchanged. This is the default for tests and
+      synthetic backtests where liquidity is not modelled.
+    - [participation_rate = Some rate]: returns [min remaining
+      (volume * rate)], so a single bar can absorb at most
+      [rate]-fraction of its own printed volume from this order.
+
+    [remaining] is required positive (the working order has at
+    least one unit to fill); [volume] is required non-negative
+    (Candle invariants guarantee this). When [volume = 0] the
+    return is [0] — the bar absorbed nothing, the order stays
+    working for the next bar. *)

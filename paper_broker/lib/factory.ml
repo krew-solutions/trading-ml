@@ -2,7 +2,10 @@ open Core
 
 type t = { http_handler : Inbound_http.Route.handler }
 
-let build ~bus ~slippage_bps ~fee_rate : t =
+let build ~bus ~slippage_bps ~fee_rate ?participation_rate () : t =
+  let participation_rate : Paper_broker.Matching.Values.Participation_rate.t option =
+    participation_rate
+  in
   let store : Paper_broker_persistence.In_memory_order_store.t =
     Paper_broker_persistence.In_memory_order_store.create ()
   in
@@ -70,8 +73,8 @@ let build ~bus ~slippage_bps ~fee_rate : t =
     let bar_ts_parsed = Datetime.Iso8601.parse cmd.candle.ts in
     (match
        Paper_broker_commands.Apply_bar_command_workflow.execute ~store:store_module
-         ~store_handle:store ~slippage_bps ~fee_rate ~next_exec_id ~publish_order_filled
-         cmd
+         ~store_handle:store ~slippage_bps ~fee_rate ~participation_rate ~next_exec_id
+         ~publish_order_filled cmd
      with
     | Ok () -> ()
     | Error _ -> ());

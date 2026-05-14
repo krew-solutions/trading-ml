@@ -177,7 +177,7 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
   let _paper_broker =
     Paper_broker_factory.Factory.build ~bus
       ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
-      ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero
+      ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero ()
   in
   let account =
     Account_factory.Factory.build ~bus ~initial_cash:(Decimal.of_int 1_000_000)
@@ -528,7 +528,7 @@ let cmd_serve args =
       Some
         (Paper_broker_factory.Factory.build ~bus
            ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
-           ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero)
+           ~fee_rate:Paper_broker.Fee.Values.Fee_rate.zero ())
     else None
   in
   let strategy_id_of_resolved =

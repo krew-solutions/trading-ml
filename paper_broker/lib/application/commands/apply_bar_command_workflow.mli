@@ -24,6 +24,7 @@ val execute :
   store_handle:'store ->
   slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.t ->
   fee_rate:Paper_broker.Fee.Values.Fee_rate.t ->
+  participation_rate:Paper_broker.Matching.Values.Participation_rate.t option ->
   next_exec_id:(unit -> string) ->
   publish_order_filled:(Order_filled.t -> unit) ->
   Apply_bar_command.t ->

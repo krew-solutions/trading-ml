@@ -102,7 +102,8 @@ let test_bar_fills_market_buy_at_open () =
   let filled = ref [] in
   let result =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store
-      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~next_exec_id
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:None
+      ~next_exec_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
@@ -129,7 +130,8 @@ let test_bar_at_placed_after_ts_does_not_fill () =
   let filled = ref [] in
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store
-      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~next_exec_id
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:None
+      ~next_exec_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
@@ -148,11 +150,64 @@ let test_bar_for_different_instrument_does_not_fill () =
   let other_bar : Apply_bar.t = { (bar_cmd ()) with instrument = "GAZP@MISX" } in
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store
-      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~next_exec_id
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:None
+      ~next_exec_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       other_bar
   in
   Alcotest.(check int) "no cross-instrument fill" 0 (List.length !filled)
+
+module Participation_rate = Paper_broker.Matching.Values.Participation_rate
+
+let test_participation_rate_caps_market_buy_to_partial_fill () =
+  let store = Test_store.create () in
+  let next_order_id = make_id_seq "po" in
+  let next_exec_id = make_id_seq "ex" in
+  submit_market_buy ~store ~next_id:next_order_id
+    ~now_ts:(fun () -> 1_700_000_000L)
+    ~placed_after_ts:(fun _ -> 1_700_000_000L)
+    ~correlation_id:"saga-PR" ~reservation_id:606 ~quantity:"100";
+  let filled = ref [] in
+  let rate = Some (Participation_rate.of_decimal (Decimal.of_string "0.1")) in
+  let _ =
+    Apply_bar_wf.execute ~store:store_module ~store_handle:store
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:rate
+      ~next_exec_id
+      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      (* Bar volume = 200; cap = 200 * 0.1 = 20 < remaining 100. *)
+      (bar_cmd ~volume:"200" ())
+  in
+  (match !filled with
+  | [ ie ] ->
+      Alcotest.(check string) "partial fill_quantity = 20" "20" ie.fill_quantity;
+      Alcotest.(check string)
+        "new_total_filled = 20 (still working)" "20" ie.new_total_filled
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+  (* The order is not terminal; one entry stays in store waiting for
+     subsequent bars to absorb the remaining 80. *)
+  Alcotest.(check int) "order still tracked for residual" 1 (Test_store.length store)
+
+let test_zero_volume_bar_does_not_fill_under_cap () =
+  let store = Test_store.create () in
+  let next_order_id = make_id_seq "po" in
+  let next_exec_id = make_id_seq "ex" in
+  submit_market_buy ~store ~next_id:next_order_id
+    ~now_ts:(fun () -> 1_700_000_000L)
+    ~placed_after_ts:(fun _ -> 1_700_000_000L)
+    ~correlation_id:"saga-ZV" ~reservation_id:707 ~quantity:"10";
+  let filled = ref [] in
+  let rate = Some (Participation_rate.of_decimal (Decimal.of_string "0.5")) in
+  let _ =
+    Apply_bar_wf.execute ~store:store_module ~store_handle:store
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:rate
+      ~next_exec_id
+      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      (bar_cmd ~volume:"0" ())
+  in
+  Alcotest.(check int) "no fill on zero-volume bar under cap" 0 (List.length !filled);
+  Alcotest.(check int) "order still tracked" 1 (Test_store.length store)
 
 let test_limit_sell_above_bar_high_does_not_fill () =
   let store = Test_store.create () in
@@ -165,7 +220,8 @@ let test_limit_sell_above_bar_high_does_not_fill () =
   let filled = ref [] in
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store
-      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~next_exec_id
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:None
+      ~next_exec_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (* Bar prints 95..105; sell-limit at 110 cannot trigger. *)
       (bar_cmd ~open_:"100" ~high:"105" ~low:"95" ~close:"102" ())
@@ -180,7 +236,8 @@ let test_invalid_bar_returns_error () =
   let bad : Apply_bar.t = { (bar_cmd ()) with instrument = "GARBAGE" } in
   let result =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store
-      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~next_exec_id
+      ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero ~participation_rate:None
+      ~next_exec_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       bad
   in
@@ -199,5 +256,11 @@ let tests =
     ( "limit sell above bar high does not fill",
       `Quick,
       test_limit_sell_above_bar_high_does_not_fill );
+    ( "participation_rate caps market buy to partial fill",
+      `Quick,
+      test_participation_rate_caps_market_buy_to_partial_fill );
+    ( "zero-volume bar under participation cap does not fill",
+      `Quick,
+      test_zero_volume_bar_does_not_fill_under_cap );
     ("invalid bar instrument returns Error", `Quick, test_invalid_bar_returns_error);
   ]

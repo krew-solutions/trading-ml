@@ -1,3 +1,4 @@
+module Values = Values
 open Core
 
 let price_if_filled
@@ -26,3 +27,13 @@ let price_if_filled
       else if Decimal.compare low stop <= 0 then Some stop
       else None
   | Stop_limit _, _ -> None
+
+let fillable_qty
+    ~(remaining : Decimal.t)
+    ~(volume : Decimal.t)
+    ~(participation_rate : Values.Participation_rate.t option) : Decimal.t =
+  match participation_rate with
+  | None -> remaining
+  | Some rate ->
+      let cap = Decimal.mul volume (Values.Participation_rate.to_decimal rate) in
+      if Decimal.compare cap remaining < 0 then cap else remaining

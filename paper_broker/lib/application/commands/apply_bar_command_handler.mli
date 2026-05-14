@@ -44,10 +44,17 @@ val handle :
   store_handle:'store ->
   slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.t ->
   fee_rate:Paper_broker.Fee.Values.Fee_rate.t ->
+  participation_rate:Paper_broker.Matching.Values.Participation_rate.t option ->
   next_exec_id:(unit -> string) ->
   Apply_bar_command.t ->
   (fill_outcome list, handle_error) Rop.t
 (** Parse the bar, sweep active orders on the matching instrument,
     atomically apply fills and yield the list of resulting fills.
     Wire-format validation failures short-circuit before any store
-    interaction. *)
+    interaction.
+
+    [participation_rate]: liquidity cap. [None] means no cap (every
+    matching order fills its full [Order.remaining] at the
+    canonical-then-slipped price). [Some rate] caps a single fill at
+    [bar.volume * rate]; the residual stays working for subsequent
+    bars. *)

@@ -59,6 +59,7 @@ let try_fill_one
     ~(store_handle : store)
     ~(slippage_bps : Slippage.Values.Slippage_bps.t)
     ~(fee_rate : Fee.Values.Fee_rate.t)
+    ~(participation_rate : Matching.Values.Participation_rate.t option)
     ~(next_exec_id : unit -> string)
     ~(instrument : Core.Instrument.t)
     ~(candle : Core.Candle.t)
@@ -72,27 +73,37 @@ let try_fill_one
     | None -> None
     | Some canonical_price ->
         let fill_price = Slippage.apply ~bps:slippage_bps order.side canonical_price in
-        let fill_quantity = Order.remaining order in
-        let fee = Fee.compute ~rate:fee_rate ~quantity:fill_quantity ~price:fill_price in
-        let exec_id = next_exec_id () in
-        let outcome = ref None in
-        let _ =
-          S.update store_handle ~id:(Pending_order.id pending) ~f:(fun current ->
-              match
-                Order.apply_fill current.order ~exec_id ~fill_quantity ~fill_price ~fee
-                  ~fill_ts:candle.ts
-              with
-              | Ok (order', event) ->
-                  let pending' = Pending_order.with_order current order' in
-                  outcome := Some { pending = pending'; event };
-                  `Replace pending'
-              | Error _ ->
-                  (* Race: the order's status changed between [find_active]
-                     and [update] (e.g. a concurrent cancel landed). Leave
-                     the entry untouched and skip the fill. *)
-                  `Replace current)
+        let fill_quantity =
+          Matching.fillable_qty ~remaining:(Order.remaining order) ~volume:candle.volume
+            ~participation_rate
         in
-        !outcome
+        if not (Decimal.is_positive fill_quantity) then
+          (* Volume too thin under the configured participation cap;
+             the order stays working for the next bar. *)
+          None
+        else
+          let fee =
+            Fee.compute ~rate:fee_rate ~quantity:fill_quantity ~price:fill_price
+          in
+          let exec_id = next_exec_id () in
+          let outcome = ref None in
+          let _ =
+            S.update store_handle ~id:(Pending_order.id pending) ~f:(fun current ->
+                match
+                  Order.apply_fill current.order ~exec_id ~fill_quantity ~fill_price ~fee
+                    ~fill_ts:candle.ts
+                with
+                | Ok (order', event) ->
+                    let pending' = Pending_order.with_order current order' in
+                    outcome := Some { pending = pending'; event };
+                    `Replace pending'
+                | Error _ ->
+                    (* Race: the order's status changed between [find_active]
+                       and [update] (e.g. a concurrent cancel landed). Leave
+                       the entry untouched and skip the fill. *)
+                    `Replace current)
+          in
+          !outcome
 
 let handle
     (type store)
@@ -100,6 +111,7 @@ let handle
     ~(store_handle : store)
     ~(slippage_bps : Slippage.Values.Slippage_bps.t)
     ~(fee_rate : Fee.Values.Fee_rate.t)
+    ~(participation_rate : Matching.Values.Participation_rate.t option)
     ~(next_exec_id : unit -> string)
     (cmd : Apply_bar_command.t) : (fill_outcome list, handle_error) Rop.t =
   let module S = (val store : Store with type t = store) in
@@ -115,8 +127,8 @@ let handle
       let active = S.find_active store_handle in
       let fills =
         List.filter_map
-          (try_fill_one ~store ~store_handle ~slippage_bps ~fee_rate ~next_exec_id
-             ~instrument ~candle)
+          (try_fill_one ~store ~store_handle ~slippage_bps ~fee_rate ~participation_rate
+             ~next_exec_id ~instrument ~candle)
           active
       in
       Rop.succeed fills

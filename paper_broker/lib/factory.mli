@@ -19,6 +19,8 @@ val build :
   bus:Bus.bus ->
   slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.t ->
   fee_rate:Paper_broker.Fee.Values.Fee_rate.t ->
+  ?participation_rate:Paper_broker.Matching.Values.Participation_rate.t ->
+  unit ->
   t
 (** Construct the paper_broker runtime.
 
@@ -32,4 +34,11 @@ val build :
     [slippage_bps] / [fee_rate] are simulator configuration. Tests
     and synthetic-data backtests typically pass
     {!Paper_broker.Slippage.Values.Slippage_bps.zero} and
-    {!Paper_broker.Fee.Values.Fee_rate.zero}. *)
+    {!Paper_broker.Fee.Values.Fee_rate.zero}.
+
+    [participation_rate] (optional) caps each single fill at
+    [bar.volume * rate]; the residual stays working for subsequent
+    bars. Omit (the default) for "no liquidity cap" — the working
+    order fills its full remaining quantity on the first matching
+    bar, suitable for tests and synthetic backtests where liquidity
+    is not modelled. *)

@@ -1,0 +1,18 @@
+(** Why3 companion for [fee_rate.mli] — the wrapper enforces
+    [0 <= rate < 1], so any [t] viewed through [to_decimal] sits
+    inside that half-open range. *)
+
+module Fee_rate
+  use int.Int
+  use decimal.Decimal
+
+  type t
+
+  function to_decimal (r: t) : Decimal.t
+
+  axiom non_negative : forall r: t. raw (to_decimal r) >= 0
+
+  axiom below_one : forall r: t. raw (to_decimal r) < unit_
+
+  lemma not_negative : forall r: t. not (is_negative (to_decimal r))
+end

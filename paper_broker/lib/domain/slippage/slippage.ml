@@ -1,8 +1,7 @@
 module Values = Values
 open Core
 
-let apply ~(bps : Values.Slippage_bps.t) (side : Side.t) (price : Decimal.t) : Decimal.t
-    =
+let apply ~(bps : Values.Slippage_bps.t) (side : Side.t) (price : Decimal.t) : Decimal.t =
   let bps_d = Values.Slippage_bps.to_decimal bps in
   if Decimal.is_zero bps_d then price
   else

@@ -1,0 +1,20 @@
+(library
+ (name paper_broker_factory)
+ (public_name trading.paper_broker.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  decimal
+  datetime
+  unix
+  yojson
+  ppx_yojson_conv_lib
+  inbound_http
+  paper_broker
+  paper_broker_commands
+  paper_broker_integration_events
+  paper_broker_persistence
+  paper_broker_inbound_integration_events)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

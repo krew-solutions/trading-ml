@@ -1,0 +1,10 @@
+(library
+ (name paper_broker_inbound_integration_events)
+ (public_name trading.paper_broker.acl.inbound_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  paper_broker_inbound_queries
+  paper_broker_commands)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

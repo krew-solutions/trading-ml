@@ -1,0 +1,4 @@
+(library
+ (name paper_broker_persistence)
+ (public_name trading.paper_broker.persistence)
+ (libraries paper_broker_commands))

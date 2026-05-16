@@ -10,8 +10,8 @@
   strategies
   live_engine
   strategy_integration_events
-  strategy_inbound_integration_events
-  strategy_inbound_queries
+  strategy_external_integration_events
+  strategy_external_view_models
   strategy_inbound_http
   inbound_http
   yojson

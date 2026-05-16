@@ -5,7 +5,7 @@ type t = {
   placement_id : int;
   id : string;
   exec_id : string;
-  instrument : Paper_broker_queries.Instrument_view_model.t;
+  instrument : Paper_broker_view_models.Instrument_view_model.t;
   side : string;
   fill_quantity : string;
   fill_price : string;
@@ -23,7 +23,7 @@ let of_domain ~(correlation_id : string) (ev : domain) : t =
     placement_id = Paper_broker.Order.Values.Placement_id.to_int ev.placement_id;
     id = ev.id;
     exec_id = ev.exec_id;
-    instrument = Paper_broker_queries.Instrument_view_model.of_domain ev.instrument;
+    instrument = Paper_broker_view_models.Instrument_view_model.of_domain ev.instrument;
     side = Side.to_string ev.side;
     fill_quantity = Decimal.to_string ev.fill_quantity;
     fill_price = Decimal.to_string ev.fill_price;

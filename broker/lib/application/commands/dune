@@ -5,7 +5,7 @@
   yojson
   ppx_yojson_conv_lib
   core broker_domain decimal
-  broker_queries
+  broker_view_models
   broker
   broker_integration_events)
  (preprocess

@@ -1,5 +1,5 @@
 (library
  (name account_inbound_http)
  (public_name trading.account.inbound_http)
- (libraries core decimal account account_commands account_inbound_queries
+ (libraries core decimal account account_commands account_external_view_models
             correlation_id inbound_http cohttp cohttp-eio eio yojson uri))

@@ -1,7 +1,7 @@
 type t = {
   reservation_id : int;
   side : string;
-  instrument : Account_queries.Instrument_view_model.t;
+  instrument : Account_view_models.Instrument_view_model.t;
 }
 [@@deriving yojson]
 
@@ -11,5 +11,5 @@ let of_domain (ev : domain) : t =
   {
     reservation_id = ev.reservation_id;
     side = Core.Side.to_string ev.side;
-    instrument = Account_queries.Instrument_view_model.of_domain ev.instrument;
+    instrument = Account_view_models.Instrument_view_model.of_domain ev.instrument;
   }

@@ -6,7 +6,7 @@ type place_order_request = {
   instrument : Instrument.t;
   side : Side.t;
   quantity : Decimal.t;
-  kind : Account_inbound_queries.Order_kind_view_model.t;
+  kind : Account_external_view_models.Order_kind_view_model.t;
 }
 (** Parsed wire-format for [POST /api/orders] as Account needs it.
     [time_in_force] and [client_order_id] are part of the same JSON
@@ -16,7 +16,7 @@ type place_order_request = {
     the place-order saga is fully wired.
 
     The [kind] field uses the BC-local wire DTO
-    {!Account_inbound_queries.Order_kind_view_model} instead of
+    {!Account_external_view_models.Order_kind_view_model} instead of
     reaching into the broker's typed [Order.kind]: Account is
     cash-bounded by [price] regardless of the order's venue
     semantics, so a string-typed wire-format representation is
@@ -62,7 +62,7 @@ let place_order_of_json (j : Yojson.Safe.t) : place_order_request =
     | `String _ -> None
     | _ -> to_decimal_string_opt (member name kind_obj)
   in
-  let kind : Account_inbound_queries.Order_kind_view_model.t =
+  let kind : Account_external_view_models.Order_kind_view_model.t =
     {
       type_ = kind_type;
       price = price_field "price";

@@ -3,7 +3,7 @@
     actual fill numbers."
 
     Triggered by an inbound
-    {!Account_inbound_integration_events.Order_filled_integration_event.t}
+    {!Account_external_integration_events.Order_filled_integration_event.t}
     arriving on the [in-memory://broker.order-filled] topic, which
     the saga-driven paper / real broker emits when a venue (or the
     matching simulator) reports a fill. The handler updates

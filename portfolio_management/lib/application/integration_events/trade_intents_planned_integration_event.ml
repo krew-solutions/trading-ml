@@ -1,6 +1,6 @@
 type leg = {
   correlation_id : string;
-  intent : Portfolio_management_queries.Trade_intent_view_model.t;
+  intent : Portfolio_management_view_models.Trade_intent_view_model.t;
 }
 [@@deriving yojson]
 
@@ -16,7 +16,7 @@ let of_domain (ev : domain) : t =
         (fun i ->
           {
             correlation_id = Correlation_id.to_string (Correlation_id.generate ());
-            intent = Portfolio_management_queries.Trade_intent_view_model.of_domain i;
+            intent = Portfolio_management_view_models.Trade_intent_view_model.of_domain i;
           })
         ev.trades;
     computed_at = Datetime.Iso8601.format ev.computed_at;

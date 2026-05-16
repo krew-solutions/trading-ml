@@ -1,5 +1,5 @@
 module Pm = Execution_management_process_managers.Place_order_pm
-module Inbound = Execution_management_inbound_integration_events
+module Inbound = Execution_management_external_integration_events
 module Outbound_ie = Execution_management_integration_events
 
 type t = { http_handler : Inbound_http.Route.handler }

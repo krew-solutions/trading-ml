@@ -51,17 +51,17 @@ type state =
 
 type event =
   | Amount_reserved of
-      Execution_management_inbound_integration_events.Amount_reserved_integration_event.t
+      Execution_management_external_integration_events.Amount_reserved_integration_event.t
   | Reservation_rejected of
-      Execution_management_inbound_integration_events
+      Execution_management_external_integration_events
       .Reservation_rejected_integration_event
       .t
   | Order_accepted of
-      Execution_management_inbound_integration_events.Order_accepted_integration_event.t
+      Execution_management_external_integration_events.Order_accepted_integration_event.t
   | Order_rejected of
-      Execution_management_inbound_integration_events.Order_rejected_integration_event.t
+      Execution_management_external_integration_events.Order_rejected_integration_event.t
   | Order_unreachable of
-      Execution_management_inbound_integration_events.Order_unreachable_integration_event
+      Execution_management_external_integration_events.Order_unreachable_integration_event
       .t
 
 (** Saga-local command union. The factory's [dispatch] closure

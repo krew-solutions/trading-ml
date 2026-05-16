@@ -1,11 +1,11 @@
 (** JSON encoders for the HTTP API. Per-resource projection goes
-    through {!Queries.View_model.S} modules: domain value →
+    through {!View_models.View_model.S} modules: domain value →
     [of_domain] → [yojson_of_t]. HTTP-response framing (the
     [{"candles": [...]}] wrappers, catalogs, catch-all shapes)
     stays here. *)
 
 open Core
-open Queries
+open View_models
 
 (** Thin wrapper used for readability at call sites:
     [project Candle_view_model c] instead of a longer

@@ -21,7 +21,7 @@ type t = {
       (** Saga-instance identifier echoed from the upstream
           {!Commit_fill_command.t}. *)
   reservation_id : int;
-  instrument : Account_queries.Instrument_view_model.t;
+  instrument : Account_view_models.Instrument_view_model.t;
   side : string;  (** ["BUY"] | ["SELL"]. *)
   filled_quantity : string;
       (** Actual fill quantity, decimal string. Always positive —

@@ -13,7 +13,7 @@ type t = {
       (** Saga-instance identifier echoed verbatim from
         {!Reserve_command.t}.correlation_id. *)
   side : string;
-  instrument : Account_queries.Instrument_view_model.t;
+  instrument : Account_view_models.Instrument_view_model.t;
   quantity : string;  (** Decimal string — see {!Reserve_command.t}. *)
   reason : string;
 }

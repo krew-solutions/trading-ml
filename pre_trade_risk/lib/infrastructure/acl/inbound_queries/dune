@@ -1,6 +1,0 @@
-(library
- (name pre_trade_risk_inbound_queries)
- (public_name trading.pre_trade_risk.acl.inbound_queries)
- (libraries yojson ppx_yojson_conv_lib)
- (preprocess (pps ppx_yojson_conv))
- (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -81,7 +81,7 @@ module Definition = struct
 
   type status_event =
     | Reservation_accepted of int
-    | Placed of Queries.Order_view_model.t
+    | Placed of Broker_view_models.Order_view_model.t
     | Rejected_by_account of string
     | Rejected_by_broker of string
     | Broker_unreachable of string
@@ -107,7 +107,7 @@ module Definition = struct
       symbol = Instrument.to_qualified payload.instrument;
       side = Side.to_string payload.side;
       quantity = Decimal.to_string payload.quantity;
-      kind = Queries.Order_kind_view_model.of_domain payload.kind;
+      kind = Broker_view_models.Order_kind_view_model.of_domain payload.kind;
       tif = Order.tif_to_string payload.tif;
     }
 

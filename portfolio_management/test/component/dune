@@ -8,6 +8,6 @@
   portfolio_management
   portfolio_management_commands
   portfolio_management_integration_events
-  portfolio_management_queries
+  portfolio_management_view_models
   gherkin_edsl
   alcotest))

@@ -3,7 +3,7 @@ open Core
 type t = {
   correlation_id : string;
   reservation_id : int;
-  instrument : Account_queries.Instrument_view_model.t;
+  instrument : Account_view_models.Instrument_view_model.t;
   side : string;
   filled_quantity : string;
   fill_price : string;
@@ -20,7 +20,7 @@ let of_domain ~(correlation_id : string) (ev : domain) : t =
   {
     correlation_id;
     reservation_id = ev.reservation_id;
-    instrument = Account_queries.Instrument_view_model.of_domain ev.instrument;
+    instrument = Account_view_models.Instrument_view_model.of_domain ev.instrument;
     side = Side.to_string ev.side;
     filled_quantity = Decimal.to_string ev.filled_quantity;
     fill_price = Decimal.to_string ev.fill_price;

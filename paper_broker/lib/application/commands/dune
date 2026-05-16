@@ -8,7 +8,7 @@
   decimal
   datetime
   paper_broker
-  paper_broker_queries
+  paper_broker_view_models
   paper_broker_integration_events
   paper_broker_domain_event_handlers
   paper_broker_store

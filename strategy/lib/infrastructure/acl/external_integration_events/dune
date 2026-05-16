@@ -1,0 +1,16 @@
+(library
+ (name strategy_external_integration_events)
+ (public_name trading.strategy.acl.external_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  strategy_external_view_models
+  core
+  decimal
+  datetime
+  eio
+  eio_stream
+  stream)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -1,6 +1,6 @@
 type t = {
   strategy_id : string;
-  instrument : Queries.Instrument_view_model.t;
+  instrument : View_models.Instrument_view_model.t;
   direction : string;
   strength : float;
   price : string;
@@ -20,7 +20,7 @@ let direction_of_action : Signal.action -> string = function
 let of_domain ~(strategy_id : string) ~(price : Decimal.t) (s : domain) : t =
   {
     strategy_id;
-    instrument = Queries.Instrument_view_model.of_domain s.instrument;
+    instrument = View_models.Instrument_view_model.of_domain s.instrument;
     direction = direction_of_action s.action;
     strength = s.strength;
     price = Decimal.to_string price;

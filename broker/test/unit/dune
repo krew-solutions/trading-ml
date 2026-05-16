@@ -4,7 +4,7 @@
   core broker_domain decimal
   broker
   broker_integration_events
-  broker_queries
+  broker_view_models
   http_transport
   websocket
   finam

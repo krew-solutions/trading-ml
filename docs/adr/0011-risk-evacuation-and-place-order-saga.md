@@ -303,7 +303,7 @@ identity (`correlation_id`), status transitions
 (`Awaiting_reservation` → `Submitted` → `Done | Compensated`),
 idempotency on duplicate broker IEs, and cancel-in-flight
 invariants are all Process-Manager-state properties.
-`broker/lib/application/queries/order_view_model` remains as
+`broker/lib/application/view_models/order_view_model` remains as
 the broker-side wire-shape mirror of venue order responses, but
 no aggregate is created. The saga is the order-lifecycle owner.
 

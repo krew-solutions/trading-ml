@@ -32,7 +32,7 @@ type t = {
         {!Core.Instrument.of_qualified} round-trips it. *)
   side : string;  (** ["BUY"] | ["SELL"]. *)
   quantity : string;  (** Decimal string accepted by {!Decimal.of_string}. *)
-  kind : Broker_queries.Order_kind_view_model.t;
+  kind : Broker_view_models.Order_kind_view_model.t;
   tif : string;  (** ["GTC"] | ["DAY"] | ["IOC"] | ["FOK"]. *)
 }
 [@@deriving yojson]

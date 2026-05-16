@@ -4,7 +4,7 @@ type t = {
   symbol : string;
   side : string;
   quantity : string;
-  kind : Paper_broker_queries.Order_kind_view_model.t;
+  kind : Paper_broker_view_models.Order_kind_view_model.t;
   tif : string;
 }
 [@@deriving yojson]

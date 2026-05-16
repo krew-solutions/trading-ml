@@ -129,9 +129,9 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.bar-updated" ~group:"paper-broker"
          ~t_of_yojson:
-           Paper_broker_inbound_integration_events.Bar_updated_integration_event
+           Paper_broker_external_integration_events.Bar_updated_integration_event
            .t_of_yojson)
-      (Paper_broker_inbound_integration_events.Bar_updated_integration_event_handler
+      (Paper_broker_external_integration_events.Bar_updated_integration_event_handler
        .handle ~dispatch_apply_bar)
   in
   let http_handler : Inbound_http.Route.handler = fun _request _body -> None in

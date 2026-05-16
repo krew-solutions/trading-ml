@@ -92,7 +92,7 @@ target plus view:
 
 Both are domain models with behavioural invariants. Read-side
 projections of either are view-models living in the BC's
-`application/queries/` layer; the view-models are the
+`application/view_models/` layer; the view-models are the
 CQRS-shaped DTOs, not the actual portfolio model itself.
 `account.Portfolio` and `portfolio_management.{Target,Actual}_portfolio`
 are **distinct concepts** — the BC boundary isolates the
@@ -135,7 +135,7 @@ portfolio_management/
 │   │       ├── values/{pair_mr_config,pair_mr_state}.{ml,mli,mlw}
 │   │       └── events/target_proposed.{ml,mli,mlw}
 │   ├── application/
-│   │   ├── queries/                           # library .queries
+│   │   ├── view_models/                       # library .view_models
 │   │   ├── integration_events/                # library .integration_events
 │   │   ├── domain_event_handlers/             # library .domain_event_handlers
 │   │   └── commands/                          # library .commands
@@ -143,7 +143,7 @@ portfolio_management/
 │   │        each as the wire-format DTO + handler +
 │   │        workflow triplet)
 │   └── infrastructure/
-│       └── acl/inbound_integration_events/    # library .acl.inbound_integration_events
+│       └── acl/external_integration_events/    # library .acl.external_integration_events
 │           (mirror of Account's Reservation_filled IE —
 │            atomic fill fact; cash and position
 │            advance together preserving
@@ -203,7 +203,7 @@ The observed state of the book within PM is built from inbound
 integration events, but it bears its own invariants and is the
 input to `Reconciliation.diff` — a domain operation, not a
 read-side query. Calling it a "view" or "projection" would
-mis-classify it: views are what `application/queries/` holds;
+mis-classify it: views are what `application/view_models/` holds;
 domain models are what enforces invariants and participates in
 business operations. Both `Target_portfolio` and `Actual_portfolio`
 are aggregate roots; the asymmetry that one is fed by external
@@ -337,14 +337,14 @@ public surface later is a noticeable refactor of every caller.
 **Harder**:
 
 - One more BC to maintain — six layer libraries
-  (`portfolio_management`, `.queries`, `.integration_events`,
+  (`portfolio_management`, `.view_models`, `.integration_events`,
   `.domain_event_handlers`, `.commands`,
-  `.acl.inbound_integration_events`) and two test runners (unit,
+  `.acl.external_integration_events`) and two test runners (unit,
   component). Per-layer dune wiring, formatting, and CI coverage
   apply uniformly.
 - The duplicated `Instrument_view_model` (locally in
-  `portfolio_management.queries`, mirroring the equivalent in
-  `account.queries` and `strategy.queries`) is the cost of
+  `portfolio_management.view_models`, mirroring the equivalent in
+  `account.view_models` and `strategy.view_models`) is the cost of
   keeping the BC graph acyclic. Wire-shape parity is structural;
   divergence would surface in JSON contract tests.
 - The ACL adapter mirrors Account's `Reservation_filled`

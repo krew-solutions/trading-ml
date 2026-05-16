@@ -21,7 +21,7 @@ type t = {
           [commit_fill_command]. *)
   id : string;
   exec_id : string;
-  instrument : Paper_broker_queries.Instrument_view_model.t;
+  instrument : Paper_broker_view_models.Instrument_view_model.t;
   side : string;
   fill_quantity : string;
   fill_price : string;

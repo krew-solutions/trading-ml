@@ -1,0 +1,10 @@
+(library
+ (name broker_view_models)
+ (public_name trading.broker.view_models)
+ (libraries yojson ppx_yojson_conv_lib core broker_domain decimal datetime)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Broker_domain)))

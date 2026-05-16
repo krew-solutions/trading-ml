@@ -64,10 +64,10 @@ let build ~bus ~now ~initial_equity : t =
     Bus.subscribe
       (consume ~uri:"in-memory://pm.trade-intents-planned" ~group:"pre-trade-risk-assess"
          ~t_of_yojson:
-           Pre_trade_risk_inbound_integration_events
+           Pre_trade_risk_external_integration_events
            .Trade_intents_planned_integration_event
            .t_of_yojson)
-      (Pre_trade_risk_inbound_integration_events
+      (Pre_trade_risk_external_integration_events
        .Trade_intents_planned_integration_event_handler
        .handle ~risk_view_for ~dispatch_assess)
   in
@@ -76,9 +76,9 @@ let build ~bus ~now ~initial_equity : t =
       (consume ~uri:"in-memory://account.reservation-filled"
          ~group:"pre-trade-risk-fill-commit"
          ~t_of_yojson:
-           Pre_trade_risk_inbound_integration_events.Reservation_filled_integration_event
+           Pre_trade_risk_external_integration_events.Reservation_filled_integration_event
            .t_of_yojson)
-      (Pre_trade_risk_inbound_integration_events
+      (Pre_trade_risk_external_integration_events
        .Reservation_filled_integration_event_handler
        .handle ~now ~dispatch_record_fill)
   in

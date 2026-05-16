@@ -18,24 +18,24 @@ let build ~bus ~sw ~strategy ~strategy_id ~engine_symbol : t =
       in
       let engine = Live_engine.make ~config:cfg ~publish_signal_detected in
       let engine_handler =
-        Strategy_inbound_integration_events.Bar_updated_integration_event_handler.make
+        Strategy_external_integration_events.Bar_updated_integration_event_handler.make
           ~capacity:64
       in
       let consumer =
         Bus.consumer bus ~uri:"in-memory://broker.bar-updated" ~group:"strategy-engine"
           ~deserialize:(fun s ->
-            Strategy_inbound_integration_events.Bar_updated_integration_event.t_of_yojson
+            Strategy_external_integration_events.Bar_updated_integration_event.t_of_yojson
               (Yojson.Safe.from_string s))
       in
       let _ : Bus.subscription =
         Bus.subscribe consumer
-          (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
+          (Strategy_external_integration_events.Bar_updated_integration_event_handler
            .handle engine_handler ~instrument:engine_symbol)
       in
       Eio.Fiber.fork_daemon ~sw (fun () ->
           Live_engine.run engine
             ~source:
-              (Strategy_inbound_integration_events.Bar_updated_integration_event_handler
+              (Strategy_external_integration_events.Bar_updated_integration_event_handler
                .source engine_handler);
           `Stop_daemon);
       { http_handler }

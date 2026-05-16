@@ -7,7 +7,7 @@
 type t = {
   reservation_id : int;
   side : string;
-  instrument : Account_queries.Instrument_view_model.t;
+  instrument : Account_view_models.Instrument_view_model.t;
 }
 [@@deriving yojson]
 

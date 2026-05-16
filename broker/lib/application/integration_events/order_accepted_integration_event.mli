@@ -19,6 +19,6 @@ type t = {
       (** Saga-instance identifier echoed verbatim from the
         originating {!Submit_order_command.t}.correlation_id. *)
   placement_id : int;
-  broker_order : Broker_queries.Order_view_model.t;
+  broker_order : Broker_view_models.Order_view_model.t;
 }
 [@@deriving yojson]

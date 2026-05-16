@@ -1,0 +1,14 @@
+(library
+ (name portfolio_management_external_integration_events)
+ (public_name trading.portfolio_management.acl.external_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  datetime
+  portfolio_management
+  portfolio_management_external_view_models
+  portfolio_management_commands)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

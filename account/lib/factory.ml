@@ -92,25 +92,25 @@ let build ~bus ~initial_cash ~market_price : t =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-rejected" ~group:"account-compensation"
          ~t_of_yojson:
-           Account_inbound_integration_events.Order_rejected_integration_event.t_of_yojson)
-      (Account_inbound_integration_events.Order_rejected_integration_event_handler.handle
+           Account_external_integration_events.Order_rejected_integration_event.t_of_yojson)
+      (Account_external_integration_events.Order_rejected_integration_event_handler.handle
          ~dispatch_release)
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-unreachable" ~group:"account-compensation"
          ~t_of_yojson:
-           Account_inbound_integration_events.Order_unreachable_integration_event
+           Account_external_integration_events.Order_unreachable_integration_event
            .t_of_yojson)
-      (Account_inbound_integration_events.Order_unreachable_integration_event_handler
+      (Account_external_integration_events.Order_unreachable_integration_event_handler
        .handle ~dispatch_release)
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-filled" ~group:"account-commit"
          ~t_of_yojson:
-           Account_inbound_integration_events.Order_filled_integration_event.t_of_yojson)
-      (Account_inbound_integration_events.Order_filled_integration_event_handler.handle
+           Account_external_integration_events.Order_filled_integration_event.t_of_yojson)
+      (Account_external_integration_events.Order_filled_integration_event_handler.handle
          ~dispatch_commit_fill)
   in
   (* Saga-driven Reserve/Release: the place-order PM in the

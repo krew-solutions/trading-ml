@@ -20,8 +20,8 @@
     {!Engine.on_event} on the appropriate event constructor. *)
 
 module Pm = Execution_management_process_managers.Place_order_pm
-module Inbound = Execution_management_inbound_integration_events
-module Iqr = Execution_management_inbound_queries
+module Inbound = Execution_management_external_integration_events
+module Iqr = Execution_management_external_view_models
 
 type ctx = { engine : Pm.Engine.t; dispatched : Pm.command list ref }
 

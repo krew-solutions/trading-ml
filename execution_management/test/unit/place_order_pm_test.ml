@@ -3,14 +3,14 @@
     paths. No bus, no Eio. *)
 
 module Pm = Execution_management_process_managers.Place_order_pm
-module Inbound = Execution_management_inbound_integration_events
+module Inbound = Execution_management_external_integration_events
 
 let cid = "saga-A"
 
 let payload =
   Pm.initial_payload ~book_id:"alpha" ~symbol:"SBER@MISX" ~side:"BUY" ~quantity:"10"
 
-let instrument_vm : Execution_management_inbound_queries.Instrument_view_model.t =
+let instrument_vm : Execution_management_external_view_models.Instrument_view_model.t =
   { ticker = "SBER"; venue = "MISX"; isin = None; board = None }
 
 let amount_reserved : Inbound.Amount_reserved_integration_event.t =
@@ -33,7 +33,7 @@ let reservation_rejected : Inbound.Reservation_rejected_integration_event.t =
     reason = "insufficient cash";
   }
 
-let order_view : Execution_management_inbound_queries.Order_view_model.t =
+let order_view : Execution_management_external_view_models.Order_view_model.t =
   {
     id = "o1";
     exec_id = "e1";

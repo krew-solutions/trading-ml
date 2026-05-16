@@ -6,7 +6,7 @@
   broker_domain
   decimal
   broker
-  broker_queries
+  broker_view_models
   inbound_http
   cohttp
   cohttp-eio

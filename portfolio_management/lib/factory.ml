@@ -186,10 +186,10 @@ let build ~bus ~now : t =
     Bus.subscribe
       (consume ~uri:"in-memory://account.reservation-filled" ~group:"portfolio-management"
          ~t_of_yojson:
-           Portfolio_management_inbound_integration_events
+           Portfolio_management_external_integration_events
            .Reservation_filled_integration_event
            .t_of_yojson)
-      (Portfolio_management_inbound_integration_events
+      (Portfolio_management_external_integration_events
        .Reservation_filled_integration_event_handler
        .handle ~now ~dispatch_commit_actual_fill)
   in
@@ -197,9 +197,9 @@ let build ~bus ~now : t =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.bar-updated" ~group:"portfolio-management-pair-mr"
          ~t_of_yojson:
-           Portfolio_management_inbound_integration_events.Bar_updated_integration_event
+           Portfolio_management_external_integration_events.Bar_updated_integration_event
            .t_of_yojson)
-      (Portfolio_management_inbound_integration_events
+      (Portfolio_management_external_integration_events
        .Bar_updated_integration_event_handler
        .handle ~dispatch_apply_bar)
   in
@@ -208,10 +208,10 @@ let build ~bus ~now : t =
       (consume ~uri:"in-memory://strategy.signal-detected"
          ~group:"portfolio-management-alpha"
          ~t_of_yojson:
-           Portfolio_management_inbound_integration_events
+           Portfolio_management_external_integration_events
            .Signal_detected_integration_event
            .t_of_yojson)
-      (Portfolio_management_inbound_integration_events
+      (Portfolio_management_external_integration_events
        .Signal_detected_integration_event_handler
        .handle ~dispatch_define_alpha_view)
   in

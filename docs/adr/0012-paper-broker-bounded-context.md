@@ -251,7 +251,7 @@ and command-channel inbound carry different translation cost:
 (past-tense IE shape from broker BC); the local target is
 `apply_bar_command` (imperative, different fields and semantics).
 The translation lives in
-`paper_broker/lib/infrastructure/acl/inbound_integration_events/
+`paper_broker/lib/infrastructure/acl/external_integration_events/
 bar_updated_integration_event_handler.ml` and invokes the
 `apply_bar_command_workflow` directly — by project convention an
 inbound IE handler invokes the local workflow in-process without
@@ -374,7 +374,7 @@ Account gains the receiving end of the new channel:
   `account.cash-changed` were promised but never emitted — is
   closed by this single channel; the per-projection IEs are
   superseded by the atomic `reservation-filled`.
-- `account/lib/infrastructure/acl/inbound_integration_events/
+- `account/lib/infrastructure/acl/external_integration_events/
   order_filled_integration_event_handler.ml` subscribes to
   `broker.order-filled` and dispatches `commit_fill_command`.
   The wire mirror keeps the producer's vocabulary

@@ -5,4 +5,4 @@
   core
   decimal
   workflow_engine
-  execution_management_inbound_integration_events))
+  execution_management_external_integration_events))

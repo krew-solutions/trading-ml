@@ -1,8 +1,8 @@
 open Core
 
 let order_json (o : Order.t) : Yojson.Safe.t =
-  Broker_queries.Order_view_model.yojson_of_t
-    (Broker_queries.Order_view_model.of_domain o)
+  Broker_view_models.Order_view_model.yojson_of_t
+    (Broker_view_models.Order_view_model.of_domain o)
 
 let orders_json (os : Order.t list) : Yojson.Safe.t =
   `Assoc [ ("orders", `List (List.map order_json os)) ]

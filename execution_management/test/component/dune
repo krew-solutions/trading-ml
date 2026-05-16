@@ -5,8 +5,8 @@
   decimal
   workflow_engine
   execution_management
-  execution_management_inbound_integration_events
-  execution_management_inbound_queries
+  execution_management_external_integration_events
+  execution_management_external_view_models
   execution_management_process_managers
   gherkin_edsl
   alcotest))

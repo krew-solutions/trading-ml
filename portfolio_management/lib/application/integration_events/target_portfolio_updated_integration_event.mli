@@ -10,7 +10,7 @@
     [@@deriving yojson] auto-generates the on-wire format. *)
 
 type change = {
-  instrument : Portfolio_management_queries.Instrument_view_model.t;
+  instrument : Portfolio_management_view_models.Instrument_view_model.t;
   previous_qty : string;  (** signed Decimal string *)
   new_qty : string;
 }

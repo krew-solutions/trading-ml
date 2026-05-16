@@ -1,0 +1,6 @@
+(library
+ (name portfolio_management_view_models)
+ (public_name trading.portfolio_management.view_models)
+ (libraries yojson ppx_yojson_conv_lib core decimal portfolio_management)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -9,7 +9,7 @@ type t = {
           Domain event. Account releases the remaining reservation
           on this event. *)
   id : string;
-  instrument : Paper_broker_queries.Instrument_view_model.t;
+  instrument : Paper_broker_view_models.Instrument_view_model.t;
   cancelled_ts : string;
 }
 [@@deriving yojson]

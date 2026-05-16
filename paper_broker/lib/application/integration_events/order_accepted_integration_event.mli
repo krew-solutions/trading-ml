@@ -15,7 +15,7 @@ type t = {
       (** Client's identifier of the order (FIX [clOrdID] role),
           sourced from the Domain {!Paper_broker.Order.Events.Order_accepted.placement_id}. *)
   id : string;  (** paper_broker-assigned order id (surrogate). *)
-  instrument : Paper_broker_queries.Instrument_view_model.t;
+  instrument : Paper_broker_view_models.Instrument_view_model.t;
   side : string;  (** ["BUY"] | ["SELL"]. *)
   quantity : string;  (** Decimal string. *)
   created_ts : string;  (** ISO-8601. *)

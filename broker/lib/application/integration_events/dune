@@ -1,7 +1,7 @@
 (library
  (name broker_integration_events)
  (public_name trading.broker.integration_events)
- (libraries yojson ppx_yojson_conv_lib core broker_domain decimal broker_queries)
+ (libraries yojson ppx_yojson_conv_lib core broker_domain decimal broker_view_models)
  (preprocess
   (pps ppx_yojson_conv))
  (flags

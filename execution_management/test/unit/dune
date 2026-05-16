@@ -4,7 +4,7 @@
   core
   decimal
   execution_management
-  execution_management_inbound_integration_events
+  execution_management_external_integration_events
   execution_management_process_managers
   alcotest))
 

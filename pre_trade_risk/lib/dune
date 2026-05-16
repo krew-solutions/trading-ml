@@ -9,7 +9,7 @@
   pre_trade_risk
   pre_trade_risk_commands
   pre_trade_risk_integration_events
-  pre_trade_risk_inbound_integration_events
+  pre_trade_risk_external_integration_events
   pre_trade_risk_inbound_http
   inbound_http
   yojson

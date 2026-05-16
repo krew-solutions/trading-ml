@@ -23,7 +23,7 @@ example):
 │ <bc>/lib/infrastructure/                                             │
 │   inbound/http/             ← HTTP routing, JSON ↔ command DTO       │
 │   acl/                      ← anti-corruption to external venues     │
-│   acl/inbound_integration_events/                                    │
+│   acl/external_integration_events/                                    │
 │                             ← cross-BC inbound translation           │
 │   persistence/              ← state snapshots, event store           │
 └──────────────────────────────────────────────────────────────────────┘
@@ -39,7 +39,7 @@ example):
 │                                          (handler + publishers)      │
 │                                                                      │
 │   domain_event_handlers/    ← reactors for single domain events      │
-│   queries/                  ← read-side view models (DTO)            │
+│   view_models/              ← read-side view models (DTO)            │
 │   integration_events/       ← outbound DTO events for other BCs      │
 │   ports/                    ← outbound module signatures             │
 └──────────────────────────────────────────────────────────────────────┘
@@ -211,7 +211,7 @@ subscribe to the workflow's events without re-implementing
 projection. The workflow itself doesn't depend on
 `integration_events` — the adapter projecting to a channel does.
 
-### `queries/` — read-side view models
+### `view_models/` — read-side view models
 
 For read endpoints (`GET /api/orders`, etc.), domain entities are
 projected into VMs in the same way:
@@ -220,11 +220,11 @@ projected into VMs in the same way:
 Core.Candle.t  →  Candle_view_model.of_domain  →  primitive record + yojson
 ```
 
-Contract: each BC's `application/queries/view_model.ml` declares
+Contract: each BC's `application/view_models/view_model.ml` declares
 the `module type S` that every view model in that BC conforms
-to (`account/lib/application/queries/view_model.ml`,
-`strategy/lib/application/queries/view_model.ml`). Conformance
-is enforced at compile time by the `queries/compile_checks.ml`
+to (`account/lib/application/view_models/view_model.ml`,
+`strategy/lib/application/view_models/view_model.ml`). Conformance
+is enforced at compile time by the `view_models/compile_checks.ml`
 sibling.
 
 ### `rop/` — accumulating Result
@@ -414,7 +414,7 @@ infrastructure → knows → application
 application   → knows → domain
 domain       → knows → (nothing outside itself)
 
-queries / integration_events ← project ← domain entities / events
+view_models / integration_events ← project ← domain entities / events
 ```
 
 Each bounded context is laid out as `<bc>/lib/{domain,application,infrastructure}/`
@@ -422,20 +422,20 @@ with the same internal sub-layering. Within one BC's
 `application/`:
 
 - `commands/` imports the BC's domain library plus `core`,
-  `queries`, `rop`. Exposes `<name>_command.t` (DTO),
+  `view_models`, `rop`. Exposes `<name>_command.t` (DTO),
   `<name>_command_handler.handle`, and `<name>_command_workflow.execute`.
 - `domain_event_handlers/` imports the BC's domain library plus
   `integration_events`. Each handler is a single function
   reacting to one domain event.
 - `integration_events/` imports the BC's domain library plus
-  `queries` (for `*_view_model` projections). Holds the typed
+  `view_models` (for `*_view_model` projections). Holds the typed
   DTOs that other contexts may subscribe to.
-- `queries/` imports only the BC's domain library and `core`.
+- `view_models/` imports only the BC's domain library and `core`.
 
 `infrastructure/inbound/http/` for the BC imports anything in
 the BC's `application/` it needs. That is the hexagonal
 entry-point of the BC. Cross-BC inbound translation lives in
-`infrastructure/acl/inbound_integration_events/`.
+`infrastructure/acl/external_integration_events/`.
 
 The composition root in `bin/main.ml` wires every BC's bus,
 publishers, HTTP adapter, and any cross-BC ACL subscription —
@@ -486,7 +486,7 @@ Stated once; don't re-argue per command.
 6. **Integration events are the only cross-BC currency.**
    They are DTO-shaped, primitive-typed, `[@@deriving yojson]`,
    and live in `application/integration_events/` (outbound) or
-   `infrastructure/acl/inbound_integration_events/` (inbound).
+   `infrastructure/acl/external_integration_events/` (inbound).
    No BC's library imports another BC; everything cross-BC
    travels through the bus, encoded as integration events.
 
@@ -553,7 +553,7 @@ subscribing to integration events.
                                                              │
 ┌── Account BC inbound ACL ──────────────────────────────────│───────┐
 │                                                            ▼       │
-│                       acl/inbound_integration_events/              │
+│                       acl/external_integration_events/              │
 │                       Order_rejected_integration_event_handler     │
 │                              │                                     │
 │                              ▼  (dispatches Release_command)       │
@@ -585,7 +585,7 @@ Notes on the flow:
   forward action on a different track.
 - Cross-BC type isolation is structural: the inbound ACL has
   its own DTO mirrors of Broker's outbound integration events
-  (`account/lib/infrastructure/acl/inbound_integration_events/`),
+  (`account/lib/infrastructure/acl/external_integration_events/`),
   populated by a field-copy bridge wired in the composition
   root. Account never types over `Broker_integration_events`
   directly.

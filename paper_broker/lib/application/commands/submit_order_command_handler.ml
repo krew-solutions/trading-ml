@@ -1,6 +1,6 @@
 module Order = Paper_broker.Order
 module Order_kind = Order.Values.Order_kind
-module Order_kind_view_model = Paper_broker_queries.Order_kind_view_model
+module Order_kind_view_model = Paper_broker_view_models.Order_kind_view_model
 module Placement_id = Order.Values.Placement_id
 module Time_in_force = Order.Values.Time_in_force
 

@@ -5,5 +5,5 @@
   core
   decimal
   portfolio_management
-  portfolio_management_queries
+  portfolio_management_view_models
   portfolio_management_integration_events))

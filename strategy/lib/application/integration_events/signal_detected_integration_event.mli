@@ -25,7 +25,7 @@ type t = {
           route the signal to the matching policy state (multiple
           strategies may run on the same instrument). Not present in
           [Signal.t]; supplied by the publishing layer. *)
-  instrument : Queries.Instrument_view_model.t;
+  instrument : View_models.Instrument_view_model.t;
   direction : string;
       (** Projected from {!Common.Signal.action}:
           - [Enter_long]                  → ["UP"]

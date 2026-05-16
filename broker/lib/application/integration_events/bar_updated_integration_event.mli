@@ -23,9 +23,9 @@
 open Core
 
 type t = {
-  instrument : Broker_queries.Instrument_view_model.t;
+  instrument : Broker_view_models.Instrument_view_model.t;
   timeframe : string;  (** [Timeframe.to_string] form. *)
-  candle : Broker_queries.Candle_view_model.t;
+  candle : Broker_view_models.Candle_view_model.t;
 }
 [@@deriving yojson]
 

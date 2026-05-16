@@ -16,7 +16,7 @@ type leg = {
         echo this id verbatim through their commands and IEs so the
         Process Manager can route the eventual venue acks back to
         the originating leg. UUID v4. *)
-  intent : Portfolio_management_queries.Trade_intent_view_model.t;
+  intent : Portfolio_management_view_models.Trade_intent_view_model.t;
 }
 [@@deriving yojson]
 

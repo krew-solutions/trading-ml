@@ -8,7 +8,7 @@
   decimal
   datetime
   pre_trade_risk
-  pre_trade_risk_queries
+  pre_trade_risk_view_models
   pre_trade_risk_integration_events
   rop)
  (preprocess

@@ -9,6 +9,6 @@
   decimal
   datetime
   portfolio_management
-  portfolio_management_queries)
+  portfolio_management_view_models)
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

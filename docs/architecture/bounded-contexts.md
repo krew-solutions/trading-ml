@@ -358,7 +358,7 @@ data exchange goes through:
 1. **Integration events** on the bus (the canonical channel,
    covered above).
 2. **Wire-format mirrors** in each BC's
-   `infrastructure/acl/inbound_integration_events/` — DTOs that
+   `infrastructure/acl/external_integration_events/` — DTOs that
    look identical to the producer's outbound DTO but live in the
    consumer's library, so the BCs do not share a type.
 

@@ -15,6 +15,6 @@
   paper_broker_commands
   paper_broker_integration_events
   paper_broker_persistence
-  paper_broker_inbound_integration_events)
+  paper_broker_external_integration_events)
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

@@ -1,0 +1,11 @@
+(library
+ (name execution_management_external_integration_events)
+ (public_name trading.execution_management.acl.external_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  core
+  decimal
+  execution_management_external_view_models)
+ (preprocess (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

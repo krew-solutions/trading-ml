@@ -10,7 +10,7 @@
   portfolio_management
   portfolio_management_commands
   portfolio_management_integration_events
-  portfolio_management_inbound_integration_events
+  portfolio_management_external_integration_events
   portfolio_management_inbound_http
   inbound_http
   yojson

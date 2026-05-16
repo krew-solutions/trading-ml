@@ -8,6 +8,6 @@
   account_commands
   account_integration_events
   correlation_id
-  account_queries
+  account_view_models
   gherkin_edsl
   alcotest))

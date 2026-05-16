@@ -1,4 +1,4 @@
-module Inbound = Execution_management_inbound_integration_events
+module Inbound = Execution_management_external_integration_events
 
 type payload = {
   book_id : string;

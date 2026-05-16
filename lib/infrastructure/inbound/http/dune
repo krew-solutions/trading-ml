@@ -2,6 +2,6 @@
  (name server)
  (public_name trading.server)
  (libraries core decimal broker indicators strategies log
-            queries inbound_http
+            view_models inbound_http
             account_integration_events broker_integration_events
             cohttp-eio eio eio.unix yojson uri))

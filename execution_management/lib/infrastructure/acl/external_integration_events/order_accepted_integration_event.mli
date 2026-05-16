@@ -1,8 +1,8 @@
-(** Mirror of {!Broker_integration_events.Order_accepted_integration_event.t}. *)
+(** Mirror of {!Broker_integration_events.Order_accepted_integration_event.t}.
+    Wire shape regenerated from the producer's .atd contract. *)
 
-type t = {
-  correlation_id : string;
-  reservation_id : int;
-  broker_order : Execution_management_external_view_models.Order_view_model.t;
-}
-[@@deriving yojson]
+include module type of Order_accepted_integration_event_t
+include module type of Order_accepted_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

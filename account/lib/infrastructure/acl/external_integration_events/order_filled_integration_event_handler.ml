@@ -6,9 +6,9 @@ let handle
   let cmd : Account_commands.Commit_fill_command.t =
     {
       correlation_id = ev.correlation_id;
-      reservation_id = ev.reservation_id;
-      quantity = ev.quantity;
-      price = ev.price;
+      reservation_id = ev.placement_id;
+      quantity = ev.fill_quantity;
+      price = ev.fill_price;
       fee = ev.fee;
     }
   in

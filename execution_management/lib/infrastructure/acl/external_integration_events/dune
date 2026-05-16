@@ -4,8 +4,85 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
+  atdgen-runtime
   core
   decimal
   execution_management_external_view_models)
  (preprocess (pps ppx_yojson_conv))
- (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Execution_management_external_view_models)))
+
+; Broker-sourced mirrors (placement_id wire field).
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_accepted_integration_event.atd))
+ (targets order_accepted_integration_event_t.ml order_accepted_integration_event_t.mli
+          order_accepted_integration_event_j.ml order_accepted_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_accepted_integration_event %{atd})
+   (run atdgen -j -o order_accepted_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_rejected_integration_event.atd))
+ (targets order_rejected_integration_event_t.ml order_rejected_integration_event_t.mli
+          order_rejected_integration_event_j.ml order_rejected_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_rejected_integration_event %{atd})
+   (run atdgen -j -o order_rejected_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_unreachable_integration_event.atd))
+ (targets order_unreachable_integration_event_t.ml order_unreachable_integration_event_t.mli
+          order_unreachable_integration_event_j.ml order_unreachable_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_unreachable_integration_event %{atd})
+   (run atdgen -j -o order_unreachable_integration_event %{atd}))))
+
+; Account-sourced mirrors (reservation_id wire field).
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/amount_reserved_integration_event.atd))
+ (targets amount_reserved_integration_event_t.ml amount_reserved_integration_event_t.mli
+          amount_reserved_integration_event_j.ml amount_reserved_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o amount_reserved_integration_event %{atd})
+   (run atdgen -j -o amount_reserved_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/reservation_filled_integration_event.atd))
+ (targets reservation_filled_integration_event_t.ml reservation_filled_integration_event_t.mli
+          reservation_filled_integration_event_j.ml reservation_filled_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o reservation_filled_integration_event %{atd})
+   (run atdgen -j -o reservation_filled_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/reservation_rejected_integration_event.atd))
+ (targets reservation_rejected_integration_event_t.ml reservation_rejected_integration_event_t.mli
+          reservation_rejected_integration_event_j.ml reservation_rejected_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o reservation_rejected_integration_event %{atd})
+   (run atdgen -j -o reservation_rejected_integration_event %{atd}))))
+
+; Pre-trade-risk-sourced mirror.
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/pre_trade_risk/integration_events/trade_intent_approved_integration_event.atd))
+ (targets trade_intent_approved_integration_event_t.ml trade_intent_approved_integration_event_t.mli
+          trade_intent_approved_integration_event_j.ml trade_intent_approved_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o trade_intent_approved_integration_event %{atd})
+   (run atdgen -j -o trade_intent_approved_integration_event %{atd}))))

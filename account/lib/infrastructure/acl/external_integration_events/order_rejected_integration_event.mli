@@ -1,16 +1,14 @@
 (** Account-side mirror of the Broker BC's "order rejected by
     upstream" integration event.
 
-    Structurally identical wire shape to
-    {!Broker_integration_events.Order_rejected_integration_event.t},
-    but owned by Account so its compensation subscriber listens
-    autonomously without importing types across the BC boundary.
-    The bridge from Broker's outbound event to Account's mirror is
-    an ACL adapter wired by the composition root.
+    Wire shape regenerated from the producer's .atd contract.
+    [placement_id] is the cross-BC saga key (echoed back by Broker
+    from the originating Submit command); Account's handler maps it
+    to a local {!Release_command.reservation_id} when releasing the
+    matching reservation. *)
 
-    [reservation_id] is the cross-BC saga key (echoed back by Broker
-    from the originating Submit command); Account uses it to release
-    the matching reservation. *)
+include module type of Order_rejected_integration_event_t
+include module type of Order_rejected_integration_event_j with type t := t
 
-type t = { correlation_id : string; reservation_id : int; reason : string }
-[@@deriving yojson]
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

@@ -1,4 +1,8 @@
-(** Mirror of {!Broker_integration_events.Order_unreachable_integration_event.t}. *)
+(** Mirror of {!Broker_integration_events.Order_unreachable_integration_event.t}.
+    Wire shape regenerated from the producer's .atd contract. *)
 
-type t = { correlation_id : string; reservation_id : int; reason : string }
-[@@deriving yojson]
+include module type of Order_unreachable_integration_event_t
+include module type of Order_unreachable_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

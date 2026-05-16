@@ -50,13 +50,13 @@ let order_view : Execution_management_external_view_models.Order_view_model.t =
   }
 
 let order_accepted : Inbound.Order_accepted_integration_event.t =
-  { correlation_id = cid; reservation_id = 42; broker_order = order_view }
+  { correlation_id = cid; placement_id = 42; broker_order = order_view }
 
 let order_rejected : Inbound.Order_rejected_integration_event.t =
-  { correlation_id = cid; reservation_id = 42; reason = "no liquidity" }
+  { correlation_id = cid; placement_id = 42; reason = "no liquidity" }
 
 let order_unreachable : Inbound.Order_unreachable_integration_event.t =
-  { correlation_id = cid; reservation_id = 42; reason = "timeout" }
+  { correlation_id = cid; placement_id = 42; reason = "timeout" }
 
 let is_submit_for_42 = function
   | Pm.Dispatch_submit { reservation_id = 42; _ } -> true

@@ -1,10 +1,8 @@
-(** Mirror of {!Pre_trade_risk_integration_events.Trade_intent_approved_integration_event.t}. *)
+(** Mirror of {!Pre_trade_risk_integration_events.Trade_intent_approved_integration_event.t}.
+    Wire shape regenerated from the producer's .atd contract. *)
 
-type t = {
-  correlation_id : string;
-  book_id : string;
-  symbol : string;
-  side : string;
-  quantity : string;
-}
-[@@deriving yojson]
+include module type of Trade_intent_approved_integration_event_t
+include module type of Trade_intent_approved_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

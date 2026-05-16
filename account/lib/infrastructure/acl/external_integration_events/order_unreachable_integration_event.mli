@@ -1,12 +1,12 @@
 (** Account-side mirror of the Broker BC's "broker unreachable"
     integration event.
 
-    Structurally identical wire shape to
-    {!Broker_integration_events.Order_unreachable_integration_event.t},
-    but owned by Account so its compensation subscriber listens
-    autonomously without importing types across the BC boundary.
-    The bridge from Broker's outbound event to Account's mirror is
-    an ACL adapter wired by the composition root. *)
+    Wire shape regenerated from the producer's .atd contract.
+    [placement_id] is the cross-BC saga key; Account's handler maps
+    it to a local {!Release_command.reservation_id}. *)
 
-type t = { correlation_id : string; reservation_id : int; reason : string }
-[@@deriving yojson]
+include module type of Order_unreachable_integration_event_t
+include module type of Order_unreachable_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

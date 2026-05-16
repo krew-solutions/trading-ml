@@ -1,15 +1,12 @@
 (** Account-side mirror of the Broker BC's "order accepted"
     integration event.
 
-    Structurally identical wire shape to
-    {!Broker_integration_events.Order_accepted_integration_event.t},
-    but owned by Account so subscribers inside Account can listen
-    autonomously without importing types across the BC boundary.
-    The bridge from Broker's outbound event to Account's mirror is
-    an ACL adapter wired by the composition root. *)
+    Wire shape regenerated from the producer's .atd contract;
+    structural drift between Broker's outbound emitter and this
+    Account-side mirror is a compile-time error. *)
 
-type t = {
-  reservation_id : int;
-  broker_order : Account_external_view_models.Order_view_model.t;
-}
-[@@deriving yojson]
+include module type of Order_accepted_integration_event_t
+include module type of Order_accepted_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

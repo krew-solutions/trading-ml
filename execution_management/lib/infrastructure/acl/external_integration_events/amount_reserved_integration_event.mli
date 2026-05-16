@@ -1,12 +1,8 @@
-(** Mirror of {!Account_integration_events.Amount_reserved_integration_event.t}. *)
+(** Mirror of {!Account_integration_events.Amount_reserved_integration_event.t}.
+    Wire shape regenerated from the producer's .atd contract. *)
 
-type t = {
-  correlation_id : string;
-  reservation_id : int;
-  side : string;
-  instrument : Execution_management_external_view_models.Instrument_view_model.t;
-  quantity : string;
-  price : string;
-  reserved_cash : string;
-}
-[@@deriving yojson]
+include module type of Amount_reserved_integration_event_t
+include module type of Amount_reserved_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

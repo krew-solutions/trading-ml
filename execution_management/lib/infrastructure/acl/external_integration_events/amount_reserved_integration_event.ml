@@ -1,10 +1,5 @@
-type t = {
-  correlation_id : string;
-  reservation_id : int;
-  side : string;
-  instrument : Execution_management_external_view_models.Instrument_view_model.t;
-  quantity : string;
-  price : string;
-  reserved_cash : string;
-}
-[@@deriving yojson]
+include Amount_reserved_integration_event_t
+include Amount_reserved_integration_event_j
+
+let yojson_of_t (v : t) : Yojson.Safe.t = Yojson.Safe.from_string (string_of_t v)
+let t_of_yojson (j : Yojson.Safe.t) : t = t_of_string (Yojson.Safe.to_string j)

@@ -100,21 +100,25 @@ let order_view ~symbol ~side ~quantity : Iqr.Order_view_model.t =
 
 let push_order_accepted ctx ~correlation_id ~reservation_id ~symbol ~side ~quantity =
   let ev : Inbound.Order_accepted_integration_event.t =
-    { correlation_id; reservation_id; broker_order = order_view ~symbol ~side ~quantity }
+    {
+      correlation_id;
+      placement_id = reservation_id;
+      broker_order = order_view ~symbol ~side ~quantity;
+    }
   in
   Pm.Engine.on_event ctx.engine (Pm.Order_accepted ev);
   ctx
 
 let push_order_rejected ctx ~correlation_id ~reservation_id ~reason =
   let ev : Inbound.Order_rejected_integration_event.t =
-    { correlation_id; reservation_id; reason }
+    { correlation_id; placement_id = reservation_id; reason }
   in
   Pm.Engine.on_event ctx.engine (Pm.Order_rejected ev);
   ctx
 
 let push_order_unreachable ctx ~correlation_id ~reservation_id ~reason =
   let ev : Inbound.Order_unreachable_integration_event.t =
-    { correlation_id; reservation_id; reason }
+    { correlation_id; placement_id = reservation_id; reason }
   in
   Pm.Engine.on_event ctx.engine (Pm.Order_unreachable ev);
   ctx

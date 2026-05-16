@@ -18,7 +18,7 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/integration_events/order_rejected_integration_event.atd))
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_rejected_integration_event.atd))
  (targets order_rejected_integration_event_t.ml
           order_rejected_integration_event_t.mli
           order_rejected_integration_event_j.ml

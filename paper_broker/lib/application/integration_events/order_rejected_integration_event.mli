@@ -7,9 +7,11 @@
     paper_broker, this fires when the request never enters the
     book in the first place.
 
-    The wire shape is generated from
-    [shared/contracts/paper_broker/integration_events/order_rejected_integration_event.atd]
-    via atdgen. *)
+    The wire shape is the broker BC's canonical contract,
+    generated from
+    [shared/contracts/broker/integration_events/order_rejected_integration_event.atd]
+    via atdgen. paper_broker emits per this contract as one
+    implementation of the broker abstraction (see ADR-0015). *)
 
 include module type of Order_rejected_integration_event_t
 

@@ -1,11 +1,15 @@
-(** Read-model DTO for {!Portfolio_management.Actual_portfolio.t}. *)
+(** Read-model DTO for {!Portfolio_management.Actual_portfolio.t}.
 
-type t = {
-  book_id : string;
-  cash : string;  (** signed Decimal string; can be negative under margin *)
-  positions : Actual_position_view_model.t list;
-}
-[@@deriving yojson]
+    The wire shape is generated from
+    [shared/contracts/portfolio_management/view_models/actual_portfolio_view_model.atd]
+    via atdgen. *)
+
+include module type of Actual_portfolio_view_model_t
+
+include module type of Actual_portfolio_view_model_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t
 
 type domain = Portfolio_management.Actual_portfolio.t
 

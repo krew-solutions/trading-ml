@@ -1,17 +1,9 @@
-(* Wire contract: portfolio_management/lib/application/view_models/actual_portfolio_view_model.ml *)
+(* Wire contract: portfolio_management/lib/application/view_models/actual_portfolio_view_model.ml
 
-type instrument_view_model = {
-  ticker : string;
-  venue : string;
-  ?isin : string option;
-  ?board : string option;
-}
+   Cross-referenced types (resolved at code-generation time):
+   - actual_position_view_model — see view_models/actual_position_view_model.atd *)
 
-type actual_position_view_model = {
-  instrument : instrument_view_model;
-  quantity : string;
-  avg_price : string;
-}
+type actual_position_view_model <ocaml from="Actual_position_view_model" t="t"> = abstract
 
 type t = {
   book_id : string;

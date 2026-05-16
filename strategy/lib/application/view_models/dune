@@ -1,7 +1,7 @@
 (library
  (name view_models)
  (public_name trading.view_models)
- (libraries yojson ppx_yojson_conv_lib core common decimal account_view_models)
+ (libraries yojson ppx_yojson_conv_lib core common decimal)
  (preprocess (pps ppx_yojson_conv))
  (flags
   (:standard

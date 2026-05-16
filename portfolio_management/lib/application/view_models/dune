@@ -1,6 +1,67 @@
 (library
  (name portfolio_management_view_models)
  (public_name trading.portfolio_management.view_models)
- (libraries yojson ppx_yojson_conv_lib core decimal portfolio_management)
+ (libraries yojson ppx_yojson_conv_lib atdgen-runtime
+            core decimal portfolio_management)
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/instrument_view_model.atd))
+ (targets instrument_view_model_t.ml instrument_view_model_t.mli
+          instrument_view_model_j.ml instrument_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o instrument_view_model %{atd})
+   (run atdgen -j -o instrument_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/actual_position_view_model.atd))
+ (targets actual_position_view_model_t.ml actual_position_view_model_t.mli
+          actual_position_view_model_j.ml actual_position_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o actual_position_view_model %{atd})
+   (run atdgen -j -o actual_position_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/target_position_view_model.atd))
+ (targets target_position_view_model_t.ml target_position_view_model_t.mli
+          target_position_view_model_j.ml target_position_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o target_position_view_model %{atd})
+   (run atdgen -j -o target_position_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/actual_portfolio_view_model.atd))
+ (targets actual_portfolio_view_model_t.ml actual_portfolio_view_model_t.mli
+          actual_portfolio_view_model_j.ml actual_portfolio_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o actual_portfolio_view_model %{atd})
+   (run atdgen -j -o actual_portfolio_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/target_portfolio_view_model.atd))
+ (targets target_portfolio_view_model_t.ml target_portfolio_view_model_t.mli
+          target_portfolio_view_model_j.ml target_portfolio_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o target_portfolio_view_model %{atd})
+   (run atdgen -j -o target_portfolio_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/view_models/trade_intent_view_model.atd))
+ (targets trade_intent_view_model_t.ml trade_intent_view_model_t.mli
+          trade_intent_view_model_j.ml trade_intent_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o trade_intent_view_model %{atd})
+   (run atdgen -j -o trade_intent_view_model %{atd}))))

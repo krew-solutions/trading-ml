@@ -1,12 +1,15 @@
-(** Read-model DTO for {!Portfolio_management.Common.Trade_intent.t}. *)
+(** Read-model DTO for {!Portfolio_management.Common.Trade_intent.t}.
 
-type t = {
-  book_id : string;
-  instrument : Instrument_view_model.t;
-  side : string;
-  quantity : string;  (** Decimal string; strictly positive *)
-}
-[@@deriving yojson]
+    The wire shape is generated from
+    [shared/contracts/portfolio_management/view_models/trade_intent_view_model.atd]
+    via atdgen. *)
+
+include module type of Trade_intent_view_model_t
+
+include module type of Trade_intent_view_model_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t
 
 type domain = Portfolio_management.Common.Trade_intent.t
 

@@ -180,8 +180,8 @@ let bcs_order_type_of (k : Order.kind) : string =
   | Market -> "1"
   | Limit _ | Stop _ | Stop_limit _ -> "2"
 
-(** Decode a single BCS [OrderStatus] JSON into [Order.t]. *)
-let bcs_order_of_json cfg (j : Yojson.Safe.t) : Order.t =
+(** Decode a single BCS [OrderStatus] JSON into [External_order.t]. *)
+let bcs_order_of_json cfg (j : Yojson.Safe.t) : External_order.t =
   let open Yojson.Safe.Util in
   let str k =
     match member k j with
@@ -223,13 +223,12 @@ let bcs_order_of_json cfg (j : Yojson.Safe.t) : Order.t =
     | _ -> 0L
   in
   {
-    Order.id = str "clientOrderId";
+    External_order.client_order_id = str "clientOrderId";
     exec_id = str "exchangeId";
     instrument;
     side = bcs_side_to (str "side");
     quantity = int_d "orderQuantity";
     filled = int_d "filledQuantity";
-    remaining = Decimal.sub (int_d "orderQuantity") (int_d "filledQuantity");
     kind;
     tif = Order.DAY;
     status =
@@ -237,8 +236,7 @@ let bcs_order_of_json cfg (j : Yojson.Safe.t) : Order.t =
         (match str "status" with
         | "" -> "NEW"
         | s -> String.uppercase_ascii s);
-    created_ts = ts;
-    client_order_id = str "clientOrderId";
+    placed_ts = ts;
   }
 
 (** POST /trade-api-bff-operations/api/v1/orders — create order. *)
@@ -249,7 +247,7 @@ let create_order
     ~(quantity : int)
     ~(kind : Order.kind)
     ~client_order_id
-    () : Order.t =
+    () : External_order.t =
   let ticker, class_code = route_instrument t.cfg instrument in
   let price_field =
     match kind with
@@ -280,18 +278,16 @@ let create_order
     | _ -> "NEW"
   in
   {
-    Order.id = client_order_id;
+    External_order.client_order_id;
     exec_id = "";
     instrument;
     side;
     quantity = Decimal.of_int quantity;
     filled = Decimal.zero;
-    remaining = Decimal.of_int quantity;
     kind;
     tif = DAY;
     status = bcs_status_of_wire (String.uppercase_ascii status_str);
-    created_ts = Int64.of_float (Unix.gettimeofday ());
-    client_order_id;
+    placed_ts = Int64.of_float (Unix.gettimeofday ());
   }
 
 (** POST /trade-api-bff-order-details/api/v1/orders/search —
@@ -307,7 +303,7 @@ let create_order
     default covers 30 days ending "now" — enough for reconcile
     (which wants live orders) but short enough to keep payloads
     small on accounts with years of history. *)
-let get_orders ?from_ts ?to_ts t : Order.t list =
+let get_orders ?from_ts ?to_ts t : External_order.t list =
   let base = t.cfg.Config.rest_base in
   let path = "/trade-api-bff-order-details/api/v1/orders/search" in
   let url = Uri.with_path base (Uri.path base ^ path) in
@@ -351,7 +347,7 @@ let get_orders ?from_ts ?to_ts t : Order.t list =
   List.map (bcs_order_of_json t.cfg) items
 
 (** GET /trade-api-bff-operations/api/v1/orders/{id} — single order status. *)
-let get_order t ~client_order_id : Order.t =
+let get_order t ~client_order_id : External_order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id in
   bcs_order_of_json t.cfg (get_json t path [])
 
@@ -359,7 +355,7 @@ let get_order t ~client_order_id : Order.t =
     Same pattern as cancel: URL path names the order being modified,
     body carries a fresh [clientOrderId] that BCS uses to dedupe
     retries of this edit operation. *)
-let edit_order t ~client_order_id ?quantity ?price () : Order.t =
+let edit_order t ~client_order_id ?quantity ?price () : External_order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id in
   let edit_cid = Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string in
   let fields =
@@ -380,7 +376,7 @@ let edit_order t ~client_order_id ?quantity ?price () : Order.t =
     | _ -> "NEW"
   in
   {
-    Order.id = client_order_id;
+    External_order.client_order_id;
     exec_id = "";
     instrument =
       Instrument.make ~ticker:(Ticker.of_string "UNKNOWN") ~venue:(Mic.of_string "MISX")
@@ -391,18 +387,13 @@ let edit_order t ~client_order_id ?quantity ?price () : Order.t =
       | Some q -> Decimal.of_int q
       | None -> Decimal.zero);
     filled = Decimal.zero;
-    remaining =
-      (match quantity with
-      | Some q -> Decimal.of_int q
-      | None -> Decimal.zero);
     kind =
       (match price with
       | Some p -> Order.Limit p
       | None -> Market);
     tif = DAY;
     status = bcs_status_of_wire status_str;
-    created_ts = 0L;
-    client_order_id;
+    placed_ts = 0L;
   }
 
 (** Decode one record from the BCS Deals payload into a
@@ -517,7 +508,7 @@ let get_deals ?from_ts ?to_ts t : (string * Order.execution) list =
     per call — it's opaque to callers and not surfaced on [Order.t];
     stable-across-retries idempotency is a higher-layer concern and
     we don't retry POSTs at the HTTP transport level. *)
-let cancel_order t ~client_order_id : Order.t =
+let cancel_order t ~client_order_id : External_order.t =
   let path = ops_path ^ "/orders/" ^ client_order_id ^ "/cancel" in
   let cancel_cid = Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string in
   let payload : Yojson.Safe.t = `Assoc [ ("clientOrderId", `String cancel_cid) ] in
@@ -529,7 +520,7 @@ let cancel_order t ~client_order_id : Order.t =
     | _ -> "CANCELLED"
   in
   {
-    Order.id = client_order_id;
+    External_order.client_order_id;
     exec_id = "";
     instrument =
       Instrument.make ~ticker:(Ticker.of_string "UNKNOWN") ~venue:(Mic.of_string "MISX")
@@ -537,12 +528,10 @@ let cancel_order t ~client_order_id : Order.t =
     side = Buy;
     quantity = Decimal.zero;
     filled = Decimal.zero;
-    remaining = Decimal.zero;
     kind = Market;
     tif = DAY;
     status = bcs_status_of_wire (String.uppercase_ascii status_str);
-    created_ts = 0L;
-    client_order_id;
+    placed_ts = 0L;
   }
 
 (** Accessors for [Ws_bridge] to share auth state and config. *)

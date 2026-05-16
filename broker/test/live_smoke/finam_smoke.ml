@@ -129,8 +129,8 @@ let test_limit_order_lifecycle () =
                   | Ok o -> o
                   | Error m -> failwith m))
         in
-        let server_id = placed.Order.id in
-        Printf.printf "  [info] placed cid=%s server=%s status=%s\n%!" cid server_id
+        let order_id = placed.Finam.External_order.order_id in
+        Printf.printf "  [info] placed cid=%s server=%s status=%s\n%!" cid order_id
           (Order.status_to_string placed.status);
         (* Always cancel, even if a subsequent assert fails. Leaving a
          live limit hanging against the account is worse than a noisy
@@ -139,23 +139,23 @@ let test_limit_order_lifecycle () =
           ~finally:(fun () ->
             try
               let cancelled =
-                Finam.Rest.cancel_order rest ~account_id:account ~order_id:server_id
+                Finam.Rest.cancel_order rest ~account_id:account ~order_id:order_id
               in
               Printf.printf "  [info] cancelled cid=%s status=%s\n%!" cid
                 (Order.status_to_string cancelled.status)
             with e ->
-              Printf.printf "  [warn] cancel failed for %s: %s\n%!" server_id
+              Printf.printf "  [warn] cancel failed for %s: %s\n%!" order_id
                 (Printexc.to_string e))
           (fun () ->
-            Alcotest.(check bool) "server assigned an id" true (server_id <> "");
+            Alcotest.(check bool) "server assigned an id" true (order_id <> "");
             let fetched =
-              Finam.Rest.get_order rest ~account_id:account ~order_id:server_id
+              Finam.Rest.get_order rest ~account_id:account ~order_id:order_id
             in
             Alcotest.(check string) "round-trip cid" cid fetched.client_order_id;
             let trades = Finam.Rest.get_trades rest ~account_id:account in
             let our_trades =
               List.filter
-                (fun (t : Finam.Dto.account_trade) -> t.order_id = server_id)
+                (fun (t : Finam.Dto.account_trade) -> t.order_id = order_id)
                 trades
             in
             Alcotest.(check int)

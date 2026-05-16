@@ -93,7 +93,7 @@ let sample_order_state =
 
 let test_decode_order_state () =
   let o = Finam.Dto.order_of_json (Yojson.Safe.from_string sample_order_state) in
-  Alcotest.(check string) "order_id" "12345678" o.id;
+  Alcotest.(check string) "order_id" "12345678" o.order_id;
   Alcotest.(check string) "exec_id" "exec-001" o.exec_id;
   Alcotest.(check string) "status" "NEW" (Order.status_to_string o.status);
   Alcotest.(check string) "side" "BUY" (Side.to_string o.side);
@@ -102,14 +102,13 @@ let test_decode_order_state () =
     (Ticker.to_string (Instrument.ticker o.instrument));
   Alcotest.(check (float 1e-6)) "quantity" 10.0 (Decimal.to_float o.quantity);
   Alcotest.(check (float 1e-6)) "filled" 0.0 (Decimal.to_float o.filled);
-  Alcotest.(check (float 1e-6)) "remaining" 10.0 (Decimal.to_float o.remaining);
   Alcotest.(check string) "kind" "LIMIT" (Order.kind_to_string o.kind);
   (match o.kind with
   | Limit p -> Alcotest.(check (float 1e-6)) "limit price" 150.50 (Decimal.to_float p)
   | _ -> Alcotest.fail "expected Limit");
   Alcotest.(check string) "tif" "DAY" (Order.tif_to_string o.tif);
   Alcotest.(check string) "client_order_id" "coid-abc" o.client_order_id;
-  Alcotest.(check bool) "ts > 0" true (Int64.compare o.created_ts 0L > 0)
+  Alcotest.(check bool) "ts > 0" true (Int64.compare o.placed_ts 0L > 0)
 
 let test_decode_partially_filled () =
   let j =
@@ -135,8 +134,7 @@ let test_decode_partially_filled () =
   in
   let o = Finam.Dto.order_of_json j in
   Alcotest.(check string) "status" "PARTIALLY_FILLED" (Order.status_to_string o.status);
-  Alcotest.(check (float 1e-6)) "filled" 60.0 (Decimal.to_float o.filled);
-  Alcotest.(check (float 1e-6)) "remaining" 40.0 (Decimal.to_float o.remaining)
+  Alcotest.(check (float 1e-6)) "filled" 60.0 (Decimal.to_float o.filled)
 
 let test_decode_orders_list () =
   let j =
@@ -144,7 +142,7 @@ let test_decode_orders_list () =
   in
   let orders = Finam.Dto.orders_of_json j in
   Alcotest.(check int) "1 order" 1 (List.length orders);
-  Alcotest.(check string) "first order_id" "12345678" (List.hd orders).id
+  Alcotest.(check string) "first order_id" "12345678" (List.hd orders).order_id
 
 let tests =
   [

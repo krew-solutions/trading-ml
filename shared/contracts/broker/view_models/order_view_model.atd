@@ -19,14 +19,13 @@ type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
 type order_kind_view_model <ocaml from="Order_kind_view_model" t="t"> = abstract
 
 type t = {
-  placement_id <doc text="Cross-BC saga key minted by Account at reservation time and echoed through Submit. The only stable identity of an order in our model."> : int;
+  placement_id <doc text="Cross-BC saga key minted by the OrderTicket. The only stable identity of an order in our model."> : int;
   instrument : instrument_view_model;
   side : string;
   quantity : string;
   filled : string;
-  remaining : string;
   kind : order_kind_view_model;
   tif : string;
   status : string;
-  created_ts : int <ocaml repr="int64">;
+  placed_ts <doc text="Int64 epoch — broker's clock at the moment the venue acknowledged the placement. Not the venue's own timestamp."> : int <ocaml repr="int64">;
 }

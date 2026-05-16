@@ -37,11 +37,10 @@ module Fake_broker = struct
       side = "BUY";
       quantity = "10";
       filled = "0";
-      remaining = "10";
       kind = { type_ = "MARKET"; price = None; stop_price = None; limit_price = None };
       tif = "GTC";
       status;
-      created_ts = 0L;
+      placed_ts = 0L;
     }
 
   let next_cid = ref 0

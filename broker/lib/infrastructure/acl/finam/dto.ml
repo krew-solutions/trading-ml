@@ -227,7 +227,7 @@ let place_order_payload
     PlaceOrder, and as array elements in GetOrders). The nested
     [order] object carries the original request parameters;
     top-level fields carry execution state. *)
-let order_of_json (j : Yojson.Safe.t) : Order.t =
+let order_of_json (j : Yojson.Safe.t) : External_order.t =
   let open Yojson.Safe.Util in
   let str k =
     match member k j with
@@ -252,27 +252,26 @@ let order_of_json (j : Yojson.Safe.t) : Order.t =
   let tif = finam_tif_of_wire (inner_str "time_in_force") in
   let side = finam_side_of_wire (inner_str "side") in
   let status = finam_status_of_wire (str "status") in
-  let created_ts =
+  let placed_ts =
     match member "transact_at" j with
     | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
   {
-    Order.id = str "order_id";
+    External_order.client_order_id = inner_str "client_order_id";
+    order_id = str "order_id";
     exec_id = str "exec_id";
     instrument;
     side;
     quantity = dec "initial_quantity" j;
     filled = dec "executed_quantity" j;
-    remaining = dec "remaining_quantity" j;
     kind;
     tif;
     status;
-    created_ts;
-    client_order_id = inner_str "client_order_id";
+    placed_ts;
   }
 
-let orders_of_json (j : Yojson.Safe.t) : Order.t list =
+let orders_of_json (j : Yojson.Safe.t) : External_order.t list =
   let open Yojson.Safe.Util in
   match member "orders" j with
   | `List items -> List.map order_of_json items

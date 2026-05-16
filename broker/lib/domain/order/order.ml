@@ -1,7 +1,3 @@
-(** Order model. Pure domain types — no wire-format knowledge.
-    Broker-specific enum encoding/decoding lives in the
-    corresponding ACL adapters (Finam.Dto, Bcs.Rest). *)
-
 type kind =
   | Market
   | Limit of Decimal.t
@@ -23,18 +19,15 @@ type status =
   | Failed
 
 type t = {
-  id : string;
-  exec_id : string;
+  placement_id : int;
   instrument : Core.Instrument.t;
   side : Core.Side.t;
   quantity : Decimal.t;
   filled : Decimal.t;
-  remaining : Decimal.t;
   kind : kind;
   tif : time_in_force;
   status : status;
-  created_ts : int64;
-  client_order_id : string;
+  placed_ts : int64;
 }
 
 type execution = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
@@ -46,7 +39,6 @@ let is_done (o : t) =
   | Filled | Cancelled | Rejected | Expired | Failed -> true
   | New | Partially_filled | Pending_cancel | Pending_new | Suspended -> false
 
-(** Short display names for logs / UI. *)
 let kind_to_string = function
   | Market -> "MARKET"
   | Limit _ -> "LIMIT"

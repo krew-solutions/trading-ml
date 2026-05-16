@@ -134,12 +134,12 @@ let account t ~account_id = get_json t (Printf.sprintf "/v1/accounts/%s" account
 let exchanges t : Yojson.Safe.t = get_json t "/v1/exchanges" []
 
 (** GET /v1/accounts/{account_id}/orders — list all orders. *)
-let get_orders t ~account_id : Order.t list =
+let get_orders t ~account_id : External_order.t list =
   let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
   Dto.orders_of_json (get_json t path [])
 
 (** GET /v1/accounts/{account_id}/orders/{order_id} — single order. *)
-let get_order t ~account_id ~order_id : Order.t =
+let get_order t ~account_id ~order_id : External_order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
   Dto.order_of_json (get_json t path [])
 
@@ -155,7 +155,7 @@ let place_order
     ~(kind : Order.kind)
     ~(tif : Order.time_in_force)
     ?client_order_id
-    () : Order.t =
+    () : External_order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
   let payload =
     Dto.place_order_payload ~instrument ~side ~quantity ~kind ~tif ?client_order_id ()
@@ -188,7 +188,7 @@ let get_trades ?from_ts ?to_ts t ~account_id : Dto.account_trade list =
   Dto.account_trades_of_json (get_json t path q)
 
 (** DELETE /v1/accounts/{account_id}/orders/{order_id} — cancel. *)
-let cancel_order t ~account_id ~order_id : Order.t =
+let cancel_order t ~account_id ~order_id : External_order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
   let resp = send_with_auth_retry t ~meth:`DELETE ~url:(url t.cfg path []) ~body:None in
   Dto.order_of_json (Yojson.Safe.from_string (ensure_ok resp))

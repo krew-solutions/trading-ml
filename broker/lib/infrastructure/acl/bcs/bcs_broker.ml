@@ -42,6 +42,9 @@ let venues _t : Mic.t list = [ Mic.of_string "MISX" ]
 let mint_client_order_id () =
   Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
+let project ~placement_id (v : External_order.t) : Order_view_model.t =
+  Order_view_model.of_domain (External_order.to_broker_domain ~placement_id v)
+
 let place_order t ~placement_id ~instrument ~side ~quantity ~kind ~tif:_ :
     Order_view_model.t =
   let cid = mint_client_order_id () in
@@ -50,44 +53,45 @@ let place_order t ~placement_id ~instrument ~side ~quantity ~kind ~tif:_ :
    with
   | `Ok | `Already_exists -> ());
   let q_int = int_of_float (Decimal.to_float quantity) in
-  let order =
+  let external_order =
     Rest.create_order t.rest ~instrument ~side ~quantity:q_int ~kind ~client_order_id:cid
       ()
   in
-  Order_view_model.of_domain ~placement_id order
+  project ~placement_id external_order
 
 let cancel_order t ~placement_id : Order_view_model.t option =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> None
   | Some cid ->
-      let order = Rest.cancel_order t.rest ~client_order_id:cid in
-      Some (Order_view_model.of_domain ~placement_id order)
+      let external_order = Rest.cancel_order t.rest ~client_order_id:cid in
+      Some (project ~placement_id external_order)
 
 let get_order t ~placement_id : Order_view_model.t option =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> None
   | Some cid ->
-      let order = Rest.get_order t.rest ~client_order_id:cid in
-      Some (Order_view_model.of_domain ~placement_id order)
+      let external_order = Rest.get_order t.rest ~client_order_id:cid in
+      Some (project ~placement_id external_order)
 
 (** Project account-wide deals into per-execution records for the
     placement identified by [placement_id]. BCS's deal payload
     does not carry [clientOrderId] — only [orderNum]
     (broker-assigned). So we resolve the order first to pick up
-    its [exec_id] (= the [orderNum] kept on [Order.t]), then
-    filter the deals list by string-equality on that id.
+    its [exec_id] (= the [orderNum] BCS kept on [External_order.t]),
+    then filter the deals list by string-equality on that id.
     Returns [] if the placement is unknown, has no [exec_id] yet
     (still pending), or no fills against it. *)
 let get_executions t ~placement_id : Execution_view_model.t list =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> []
   | Some cid ->
-      let order = Rest.get_order t.rest ~client_order_id:cid in
-      if order.exec_id = "" then []
+      let external_order = Rest.get_order t.rest ~client_order_id:cid in
+      if external_order.exec_id = "" then []
       else
         Rest.get_deals t.rest
         |> List.filter_map (fun (order_num, exec) ->
-            if order_num = order.exec_id then Some (Execution_view_model.of_domain exec)
+            if order_num = external_order.exec_id then
+              Some (Execution_view_model.of_domain exec)
             else None)
 
 let as_broker (rest : Rest.t) : Broker.client =

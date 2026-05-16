@@ -56,7 +56,8 @@ let sample_order_status =
 let test_decode_order_status () =
   let cfg = make_cfg () in
   let o = Rest.bcs_order_of_json cfg (Yojson.Safe.from_string sample_order_status) in
-  Alcotest.(check string) "id" "3fa85f64-5717-4562-b3fc-2c963f66afa6" o.id;
+  Alcotest.(check string)
+    "client_order_id" "3fa85f64-5717-4562-b3fc-2c963f66afa6" o.client_order_id;
   Alcotest.(check string) "exchangeId" "EX001" o.exec_id;
   Alcotest.(check string) "status" "NEW" (Order.status_to_string o.status);
   Alcotest.(check string) "side" "BUY" (Side.to_string o.side);
@@ -68,12 +69,11 @@ let test_decode_order_status () =
     (Option.map Board.to_string (Instrument.board o.instrument));
   Alcotest.(check (float 1e-6)) "quantity" 10.0 (Decimal.to_float o.quantity);
   Alcotest.(check (float 1e-6)) "filled" 0.0 (Decimal.to_float o.filled);
-  Alcotest.(check (float 1e-6)) "remaining" 10.0 (Decimal.to_float o.remaining);
   Alcotest.(check string) "kind" "LIMIT" (Order.kind_to_string o.kind);
   (match o.kind with
   | Limit p -> Alcotest.(check (float 1e-6)) "price" 150.50 (Decimal.to_float p)
   | _ -> Alcotest.fail "expected Limit");
-  Alcotest.(check bool) "ts > 0" true (Int64.compare o.created_ts 0L > 0)
+  Alcotest.(check bool) "ts > 0" true (Int64.compare o.placed_ts 0L > 0)
 
 let test_decode_filled_market () =
   let j =
@@ -100,8 +100,7 @@ let test_decode_filled_market () =
   Alcotest.(check string) "status" "FILLED" (Order.status_to_string o.status);
   Alcotest.(check string) "side" "SELL" (Side.to_string o.side);
   Alcotest.(check string) "kind" "MARKET" (Order.kind_to_string o.kind);
-  Alcotest.(check (float 1e-6)) "filled" 5.0 (Decimal.to_float o.filled);
-  Alcotest.(check (float 1e-6)) "remaining" 0.0 (Decimal.to_float o.remaining)
+  Alcotest.(check (float 1e-6)) "filled" 5.0 (Decimal.to_float o.filled)
 
 let test_decode_orders_list () =
   let j =
@@ -117,7 +116,8 @@ let test_decode_orders_list () =
   in
   Alcotest.(check int) "1 order" 1 (List.length orders);
   Alcotest.(check string)
-    "first id" "3fa85f64-5717-4562-b3fc-2c963f66afa6" (List.hd orders).id
+    "first client_order_id" "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    (List.hd orders).client_order_id
 
 let test_status_mapping () =
   let cases =

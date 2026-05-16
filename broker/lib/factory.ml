@@ -98,8 +98,9 @@ let bcs_live_setup ~env ~publish_bar_updated (rest : Bcs.Rest.t) ~sw :
       bind = (fun r -> registry_ref := Some r);
     }
 
-let build ~bus ~env ~source_client ~rest ~paper_mode : t =
+let build ~bus ~env ~now ~source_client ~rest ~paper_mode : t =
   let client = source_client in
+  let now_ts : unit -> int64 = now in
   let market_price ~instrument =
     match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
     | last :: _ -> last.close
@@ -121,6 +122,10 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
     produce ~uri:"in-memory://broker.order-unreachable"
       ~yojson_of:Broker_integration_events.Order_unreachable_integration_event.yojson_of_t
   in
+  let publish_order_cancelled =
+    produce ~uri:"in-memory://broker.order-cancelled"
+      ~yojson_of:Broker_integration_events.Order_cancelled_integration_event.yojson_of_t
+  in
   let publish_bar_updated =
     produce ~uri:"in-memory://broker.bar-updated"
       ~yojson_of:Broker_integration_events.Bar_updated_integration_event.yojson_of_t
@@ -139,13 +144,12 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
       with type t = Broker_persistence.In_memory_order_command_log.t)
   in
   (* In paper_mode the [paper_broker] BC handles the saga's
-     submit_order traffic via its own subscription to
-     [broker.submit-order-command]. Broker's submit-order subscriber
-     would otherwise also accept the same wire format and route it
-     through [Broker.place_order_by_placement_id] on the live source
-     client, which for synthetic/finam/bcs does not really place an
-     order. To avoid double-handling, we skip the subscription here
-     when paper_mode is on. *)
+     submit_order and cancel_pending_order traffic via its own
+     subscriptions. Broker's subscribers would otherwise also
+     accept the same wire formats and route them through the live
+     source client, which for synthetic/finam/bcs does not really
+     place or cancel orders. To avoid double-handling, we skip
+     both subscriptions here when paper_mode is on. *)
   (if not paper_mode then
      let dispatch_submit_order (cmd : Broker_commands.Submit_order_command.t) =
        match
@@ -161,6 +165,23 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
               IE by the workflow; the Rop tail is discarded. *)
            ()
      in
+     let dispatch_cancel_pending_order
+         (cmd : Broker_commands.Cancel_pending_order_command.t) =
+       match
+         Broker_commands.Cancel_pending_order_command_workflow.execute ~broker:client
+           ~command_log:command_log_module ~command_log_handle:command_log ~now_ts
+           ~publish_order_cancelled cmd
+       with
+       | Ok () -> ()
+       | Error errs ->
+           List.iter
+             (function
+               | Broker_commands.Cancel_pending_order_command_handler.Resolution e ->
+                   Log.warn "[broker cancel] %s"
+                     (Broker_commands.Cancel_pending_order_command_handler
+                      .resolution_error_to_string e))
+             errs
+     in
      let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer
          =
        Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
@@ -171,6 +192,13 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
          (consume ~uri:"in-memory://broker.submit-order-command" ~group:"broker-saga"
             ~t_of_yojson:Broker_commands.Submit_order_command.t_of_yojson)
          dispatch_submit_order
+     in
+     let _ : Bus.subscription =
+       Bus.subscribe
+         (consume ~uri:"in-memory://broker.cancel-pending-order-command"
+            ~group:"broker-saga"
+            ~t_of_yojson:Broker_commands.Cancel_pending_order_command.t_of_yojson)
+         dispatch_cancel_pending_order
      in
      ()
    else
@@ -183,7 +211,9 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
        ( publish_order_accepted,
          publish_order_rejected,
          publish_order_unreachable,
-         command_log )
+         publish_order_cancelled,
+         command_log,
+         now_ts )
      in
      ());
   let ws_setup =

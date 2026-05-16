@@ -1,16 +1,19 @@
 (test
  (name broker_unit_runner)
  (libraries
-  core broker_domain decimal
+  core broker_domain decimal datetime
   broker
+  broker_commands
   broker_integration_events
   broker_view_models
+  broker_store
   http_transport
   websocket
   finam
   bcs
   broker_persistence
   acl_common
+  rop
   eio
   eio_main
   str

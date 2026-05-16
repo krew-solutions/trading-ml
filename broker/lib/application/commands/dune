@@ -5,7 +5,7 @@
   yojson
   ppx_yojson_conv_lib
   atdgen-runtime
-  core broker_domain decimal rop
+  core broker_domain decimal datetime rop
   broker_view_models
   broker
   broker_store
@@ -34,3 +34,19 @@
   (progn
    (run atdgen -t -o submit_order_command %{atd})
    (run atdgen -j -o submit_order_command %{atd}))))
+
+; cancel_pending_order_command — wire contract owned by broker BC
+; and shared byte-identically with paper_broker (paper_broker is
+; broker's backtest substitute; the saga's cancel command must
+; round-trip identically through either BC).
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/commands/cancel_pending_order_command.atd))
+ (targets cancel_pending_order_command_t.ml
+          cancel_pending_order_command_t.mli
+          cancel_pending_order_command_j.ml
+          cancel_pending_order_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o cancel_pending_order_command %{atd})
+   (run atdgen -j -o cancel_pending_order_command %{atd}))))

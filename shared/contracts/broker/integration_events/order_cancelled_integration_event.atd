@@ -1,0 +1,15 @@
+(* Wire contract: broker/lib/application/integration_events/order_cancelled_integration_event.ml
+
+   Announces "broker observed the venue acknowledge a cancel".
+   Consumers (Account compensation, audit, SSE) match on
+   [correlation_id] + [placement_id]. No state projection is
+   carried — broker has no aggregate of its own, and the
+   addressable identity in our model is [placement_id]. *)
+
+type t = {
+  correlation_id <doc text="Saga-instance identifier of the cancel command itself, distinct from the originating submit's correlation_id (which the receiving BC retrieves from its Order_command_log if it needs the submit-time saga)."> : string;
+
+  placement_id <doc text="Cross-BC saga key minted by Account at reservation time and echoed through Submit. Account releases the reservation on this event."> : int;
+
+  cancelled_ts <doc text="ISO-8601 timestamp at which broker observed the venue's cancel acknowledgement. Sourced from broker's injected Clock (UnixClock live / VirtualClock backtest); not the venue's own server-side timestamp."> : string;
+}

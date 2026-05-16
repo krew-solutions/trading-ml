@@ -196,7 +196,8 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
   let opened = open_synthetic () in
   let source_client = opened_client opened in
   let broker =
-    Broker_factory.Factory.build ~bus ~env ~source_client ~rest:Synthetic ~paper_mode:true
+    Broker_factory.Factory.build ~bus ~env ~now ~source_client ~rest:Synthetic
+      ~paper_mode:true
   in
   let _paper_broker =
     Paper_broker_factory.Factory.build ~bus ~now
@@ -551,7 +552,9 @@ let cmd_serve args =
     | Opened_bcs { rest; _ } -> Bcs rest
     | Opened_synthetic _ -> Synthetic
   in
-  let broker = Broker_factory.Factory.build ~bus ~env ~source_client ~rest ~paper_mode in
+  let broker =
+    Broker_factory.Factory.build ~bus ~env ~now ~source_client ~rest ~paper_mode
+  in
   let _paper_broker =
     if paper_mode then
       Some

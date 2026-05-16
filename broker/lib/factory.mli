@@ -49,6 +49,7 @@ type t = {
 val build :
   bus:Bus.bus ->
   env:Eio_unix.Stdenv.base ->
+  now:(unit -> int64) ->
   source_client:Broker.client ->
   rest:rest ->
   paper_mode:bool ->
@@ -57,11 +58,16 @@ val build :
 
     [bus] must already have an adapter registered for the
     [in-memory://] scheme used by Broker's outbound URIs
-    ([broker.order-{accepted,rejected,unreachable}],
+    ([broker.order-{accepted,rejected,cancelled,unreachable}],
     [broker.bar-updated]).
 
     [env] is used inside the WS bridges (clock, network, fiber
     spawning).
+
+    [now] is broker's injected clock — UnixClock in live mode,
+    VirtualClock in backtest. Used today to stamp
+    {!Order_cancelled_integration_event}'s [cancelled_ts]; future
+    workflows that need wall-clock time will source it from here.
 
     [source_client] is the raw broker client opened by
     {!Broker_boot} — the data source.
@@ -69,6 +75,7 @@ val build :
     [rest] supplies the live REST handle the WS bridge needs;
     [Synthetic] disables [ws_setup].
 
-    [paper_mode] gates the saga's submit-order subscription: when
-    [true], paper_broker BC owns that channel and broker BC does
-    not subscribe. *)
+    [paper_mode] gates the saga's submit-order and
+    cancel-pending-order subscriptions symmetrically: when [true],
+    paper_broker BC owns those channels and broker BC does not
+    subscribe. *)

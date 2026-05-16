@@ -22,4 +22,6 @@ let () =
       ("ws frame", Websocket_frame_test.tests);
       (* Application: integration events *)
       ("bar_updated DTO", Bar_updated_integration_event_test.tests);
+      (* Application: commands *)
+      ("cancel_pending_order workflow", Cancel_pending_order_command_workflow_test.tests);
     ]

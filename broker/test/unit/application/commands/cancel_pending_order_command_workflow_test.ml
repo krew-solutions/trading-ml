@@ -47,30 +47,23 @@ module Fake_broker = struct
   let next_cid = ref 0
   let reset_id_seq () = next_cid := 0
 
-  let place_order_by_placement_id
-      t
-      ~placement_id
-      ~instrument:_
-      ~side:_
-      ~quantity:_
-      ~kind:_
-      ~tif:_ =
+  let place_order t ~placement_id ~instrument:_ ~side:_ ~quantity:_ ~kind:_ ~tif:_ =
     incr next_cid;
     Hashtbl.replace t.placements placement_id (Printf.sprintf "cid-%d" !next_cid);
     view_model ~placement_id ~status:"NEW"
 
-  let cancel_order_by_placement_id t ~placement_id =
+  let cancel_order t ~placement_id =
     t.cancel_calls <- placement_id :: t.cancel_calls;
     match Hashtbl.find_opt t.placements placement_id with
     | None -> None
     | Some _ -> Some (view_model ~placement_id ~status:t.next_cancel_status)
 
-  let get_order_by_placement_id t ~placement_id =
+  let get_order t ~placement_id =
     match Hashtbl.find_opt t.placements placement_id with
     | None -> None
     | Some _ -> Some (view_model ~placement_id ~status:"NEW")
 
-  let get_executions_by_placement_id _ ~placement_id:_ = []
+  let get_executions _ ~placement_id:_ = []
 end
 
 let fake_client (fb : Fake_broker.t) : Broker.client = Broker.make (module Fake_broker) fb

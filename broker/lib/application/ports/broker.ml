@@ -36,7 +36,7 @@ module type S = sig
       UI maps known MICs to display names; unknown MICs render as the
       raw code. *)
 
-  val place_order_by_placement_id :
+  val place_order :
     t ->
     placement_id:int ->
     instrument:Instrument.t ->
@@ -53,19 +53,18 @@ module type S = sig
       typically [NEW] / [PENDING_NEW], but may already reflect a
       partial or full fill on aggressive orders. *)
 
-  val cancel_order_by_placement_id : t -> placement_id:int -> Order_view_model.t option
+  val cancel_order : t -> placement_id:int -> Order_view_model.t option
   (** Resolve [placement_id] to the adapter's native handle, call
       the venue's cancel, project the response. [None] when no
       placement is recorded under this id (cancel arrived for an
       order this adapter never placed, or its index has been
       lost). *)
 
-  val get_order_by_placement_id : t -> placement_id:int -> Order_view_model.t option
+  val get_order : t -> placement_id:int -> Order_view_model.t option
   (** Snapshot of a single placement's state. [None] when no
       placement is recorded under this id. *)
 
-  val get_executions_by_placement_id :
-    t -> placement_id:int -> Execution_view_model.t list
+  val get_executions : t -> placement_id:int -> Execution_view_model.t list
   (** Per-execution detail for a placement. Empty list when the
       order has no fills yet or no placement is recorded. *)
 end
@@ -81,21 +80,11 @@ let bars (E ((module M), t)) ~n ~instrument ~timeframe =
 
 let venues (E ((module M), t)) = M.venues t
 
-let place_order_by_placement_id
-    (E ((module M), t))
-    ~placement_id
-    ~instrument
-    ~side
-    ~quantity
-    ~kind
-    ~tif =
-  M.place_order_by_placement_id t ~placement_id ~instrument ~side ~quantity ~kind ~tif
+let place_order (E ((module M), t)) ~placement_id ~instrument ~side ~quantity ~kind ~tif =
+  M.place_order t ~placement_id ~instrument ~side ~quantity ~kind ~tif
 
-let cancel_order_by_placement_id (E ((module M), t)) ~placement_id =
-  M.cancel_order_by_placement_id t ~placement_id
+let cancel_order (E ((module M), t)) ~placement_id = M.cancel_order t ~placement_id
 
-let get_order_by_placement_id (E ((module M), t)) ~placement_id =
-  M.get_order_by_placement_id t ~placement_id
+let get_order (E ((module M), t)) ~placement_id = M.get_order t ~placement_id
 
-let get_executions_by_placement_id (E ((module M), t)) ~placement_id =
-  M.get_executions_by_placement_id t ~placement_id
+let get_executions (E ((module M), t)) ~placement_id = M.get_executions t ~placement_id

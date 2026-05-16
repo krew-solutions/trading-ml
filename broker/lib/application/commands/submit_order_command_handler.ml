@@ -121,9 +121,8 @@ let place ~(broker : Broker.client) (v : validated_submit_order_command) : broke
   match
     try
       Ok
-        (Broker.place_order_by_placement_id broker ~placement_id:v.placement_id
-           ~instrument:v.instrument ~side:v.side ~quantity:v.quantity ~kind:v.kind
-           ~tif:v.tif)
+        (Broker.place_order broker ~placement_id:v.placement_id ~instrument:v.instrument
+           ~side:v.side ~quantity:v.quantity ~kind:v.kind ~tif:v.tif)
     with e -> Error (Printexc.to_string e)
   with
   | Error reason -> Unreachable { reason }

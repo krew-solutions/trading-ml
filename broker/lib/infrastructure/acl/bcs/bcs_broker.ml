@@ -42,7 +42,7 @@ let venues _t : Mic.t list = [ Mic.of_string "MISX" ]
 let mint_client_order_id () =
   Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
-let place_order_by_placement_id t ~placement_id ~instrument ~side ~quantity ~kind ~tif:_ :
+let place_order t ~placement_id ~instrument ~side ~quantity ~kind ~tif:_ :
     Order_view_model.t =
   let cid = mint_client_order_id () in
   (match
@@ -56,14 +56,14 @@ let place_order_by_placement_id t ~placement_id ~instrument ~side ~quantity ~kin
   in
   Order_view_model.of_domain ~placement_id order
 
-let cancel_order_by_placement_id t ~placement_id : Order_view_model.t option =
+let cancel_order t ~placement_id : Order_view_model.t option =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> None
   | Some cid ->
       let order = Rest.cancel_order t.rest ~client_order_id:cid in
       Some (Order_view_model.of_domain ~placement_id order)
 
-let get_order_by_placement_id t ~placement_id : Order_view_model.t option =
+let get_order t ~placement_id : Order_view_model.t option =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> None
   | Some cid ->
@@ -78,7 +78,7 @@ let get_order_by_placement_id t ~placement_id : Order_view_model.t option =
     filter the deals list by string-equality on that id.
     Returns [] if the placement is unknown, has no [exec_id] yet
     (still pending), or no fills against it. *)
-let get_executions_by_placement_id t ~placement_id : Execution_view_model.t list =
+let get_executions t ~placement_id : Execution_view_model.t list =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> []
   | Some cid ->
@@ -99,9 +99,9 @@ let as_broker (rest : Rest.t) : Broker.client =
       let name = name
       let bars = bars
       let venues = venues
-      let place_order_by_placement_id = place_order_by_placement_id
-      let cancel_order_by_placement_id = cancel_order_by_placement_id
-      let get_order_by_placement_id = get_order_by_placement_id
-      let get_executions_by_placement_id = get_executions_by_placement_id
+      let place_order = place_order
+      let cancel_order = cancel_order
+      let get_order = get_order
+      let get_executions = get_executions
     end)
     t

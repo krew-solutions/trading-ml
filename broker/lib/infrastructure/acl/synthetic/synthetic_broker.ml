@@ -72,23 +72,14 @@ let unsupported fn =
         on the bus, not through the data source"
        fn)
 
-let place_order_by_placement_id
-    _
-    ~placement_id:_
-    ~instrument:_
-    ~side:_
-    ~quantity:_
-    ~kind:_
-    ~tif:_ =
-  unsupported "place_order_by_placement_id"
+let place_order _ ~placement_id:_ ~instrument:_ ~side:_ ~quantity:_ ~kind:_ ~tif:_ =
+  unsupported "place_order"
 
-let cancel_order_by_placement_id _ ~placement_id:_ =
-  unsupported "cancel_order_by_placement_id"
+let cancel_order _ ~placement_id:_ = unsupported "cancel_order"
 
-let get_order_by_placement_id _ ~placement_id:_ = unsupported "get_order_by_placement_id"
+let get_order _ ~placement_id:_ = unsupported "get_order"
 
-let get_executions_by_placement_id _ ~placement_id:_ =
-  unsupported "get_executions_by_placement_id"
+let get_executions _ ~placement_id:_ = unsupported "get_executions"
 
 let as_broker (t : t) : Broker.client =
   Broker.make
@@ -98,9 +89,9 @@ let as_broker (t : t) : Broker.client =
       let name = name
       let bars = bars
       let venues = venues
-      let place_order_by_placement_id = place_order_by_placement_id
-      let cancel_order_by_placement_id = cancel_order_by_placement_id
-      let get_order_by_placement_id = get_order_by_placement_id
-      let get_executions_by_placement_id = get_executions_by_placement_id
+      let place_order = place_order
+      let cancel_order = cancel_order
+      let get_order = get_order
+      let get_executions = get_executions
     end)
     t

@@ -24,7 +24,7 @@ let handle
     (cmd : Cancel_pending_order_command.t) : (broker_outcome, handle_error) Rop.t =
   let cancelled_ts = now_ts () in
   match
-    try Ok (Broker.cancel_order_by_placement_id broker ~placement_id:cmd.placement_id)
+    try Ok (Broker.cancel_order broker ~placement_id:cmd.placement_id)
     with e -> Error (Printexc.to_string e)
   with
   | Error reason -> Rop.succeed (Unreachable { reason })

@@ -2,7 +2,7 @@
 
     Two phases:
 
-    - {b Resolve}: call {!Broker.cancel_order_by_placement_id} —
+    - {b Resolve}: call {!Broker.cancel_order} —
       the adapter looks the saga's [placement_id] up in its
       private placement-handle store. The [None] return is
       surfaced here as {!Placement_not_found}: cancel arrived
@@ -54,7 +54,7 @@ type broker_outcome =
           rejected, expired, or in some other non-cancellable
           status). [reason] is the venue-reported status string. *)
   | Unreachable of { reason : string }
-      (** {!Broker.cancel_order_by_placement_id} raised —
+      (** {!Broker.cancel_order} raised —
           transport, parse, or any other adapter-internal
           failure. *)
 

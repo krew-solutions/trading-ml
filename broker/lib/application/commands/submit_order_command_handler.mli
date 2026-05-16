@@ -56,7 +56,7 @@ type broker_outcome =
   | Rejected of { reason : string }
   | Unreachable of { reason : string }
       (** Tri-state result of
-          [Broker.place_order_by_placement_id]. [Accepted] when
+          [Broker.place_order]. [Accepted] when
           the projected view model's status is anything other
           than ["REJECTED"]; [Rejected] when the venue explicitly
           refused; [Unreachable] when the adapter raised

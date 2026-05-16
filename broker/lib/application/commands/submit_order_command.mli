@@ -15,7 +15,7 @@
     upstream broker's wire identity (BCS dashed-UUID, Finam
     letters/digits/space, etc.) is minted privately inside the
     selected ACL adapter when it implements
-    [Broker.place_order_by_placement_id] and never crosses the
+    [Broker.place_order] and never crosses the
     port boundary — callers neither see nor supply it. *)
 
 include module type of Submit_order_command_t

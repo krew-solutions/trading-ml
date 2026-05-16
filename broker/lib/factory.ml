@@ -134,10 +134,18 @@ let build ~bus ~env ~source_client ~rest ~paper_mode : t =
      avoid double-handling, we skip the subscription here when
      paper_mode is on. *)
   (if not paper_mode then
-     let dispatch_submit_order =
-       Broker_commands.Submit_order_command_handler.make ~broker:client
-         ~publish_accepted:publish_order_accepted ~publish_rejected:publish_order_rejected
-         ~publish_unreachable:publish_order_unreachable
+     let dispatch_submit_order (cmd : Broker_commands.Submit_order_command.t) =
+       match
+         Broker_commands.Submit_order_command_workflow.execute ~broker:client
+           ~publish_accepted:publish_order_accepted
+           ~publish_rejected:publish_order_rejected
+           ~publish_unreachable:publish_order_unreachable cmd
+       with
+       | Ok () -> ()
+       | Error _ ->
+           (* Validation failures already surfaced as Order_unreachable
+              IE by the workflow; the Rop tail is discarded. *)
+           ()
      in
      let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer
          =

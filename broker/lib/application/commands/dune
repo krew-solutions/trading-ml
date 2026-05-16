@@ -5,7 +5,7 @@
   yojson
   ppx_yojson_conv_lib
   atdgen-runtime
-  core broker_domain decimal
+  core broker_domain decimal rop
   broker_view_models
   broker
   broker_integration_events)

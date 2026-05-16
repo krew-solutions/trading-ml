@@ -61,7 +61,7 @@ let test_cancel_working_order_publishes_ie () =
       ~command_log_handle:log
       ~now_ts:(fun () -> 1_700_000_100L)
       ~publish_order_cancelled:(fun ie -> cancelled := ie :: !cancelled)
-      { correlation_id = "cancel-A"; id = "po-1" }
+      { correlation_id = "cancel-A"; placement_id = 42 }
   in
   Alcotest.(check bool) "workflow Ok" true (Result.is_ok result);
   Alcotest.(check (option string))
@@ -87,7 +87,7 @@ let test_cancel_unknown_order_returns_not_found () =
       ~command_log_handle:log
       ~now_ts:(fun () -> 1_700_000_100L)
       ~publish_order_cancelled:(fun ie -> cancelled := ie :: !cancelled)
-      { correlation_id = "x"; id = "po-DOES-NOT-EXIST" }
+      { correlation_id = "x"; placement_id = 999_999 }
   in
   Alcotest.(check int) "no IE emitted" 0 (List.length !cancelled);
   match result with

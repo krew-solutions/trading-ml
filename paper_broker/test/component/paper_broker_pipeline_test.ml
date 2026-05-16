@@ -91,8 +91,8 @@ let cancellation_announces_release_and_terminalises_the_order =
       Gherkin.given "a working market buy submitted earlier" (fun ctx ->
           ctx
           |> submit_market_buy ~correlation_id:"saga-D" ~placement_id:11 ~quantity:"5" ());
-      Gherkin.when_ "I cancel that order by id" (fun ctx ->
-          ctx |> cancel_order ~correlation_id:"cancel-D" ~id:"po-1" ());
+      Gherkin.when_ "I cancel that order by its placement_id" (fun ctx ->
+          ctx |> cancel_order ~correlation_id:"cancel-D" ~placement_id:11 ());
       Gherkin.then_ "a cancellation announcement carries the original reservation token"
         (fun ctx ->
           match !(ctx.order_cancelled_pub) with

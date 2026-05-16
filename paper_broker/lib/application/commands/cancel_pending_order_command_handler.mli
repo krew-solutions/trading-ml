@@ -9,7 +9,9 @@
 (** {1 Failure surface} *)
 
 type cancel_error =
-  | Order_not_found of string  (** No {!Paper_broker.Order.t} is tracked under this id. *)
+  | Order_not_found of int
+      (** No working {!Paper_broker.Order.t} is tracked under this
+          [placement_id]. *)
   | Order_already_terminal of Paper_broker.Order.Values.Order_status.t
       (** The addressed order is in a terminal status
           (Filled / Cancelled / Rejected / Expired) and cannot

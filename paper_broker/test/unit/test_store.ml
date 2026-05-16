@@ -31,4 +31,26 @@ let update (t : t) ~id ~f =
       | `Delete -> Hashtbl.remove t id);
       `Updated
 
+let update_by_placement_id (t : t) ~placement_id ~f =
+  let found =
+    Hashtbl.fold
+      (fun _ order acc ->
+        match acc with
+        | Some _ -> acc
+        | None ->
+            if
+              Order.Values.Placement_id.to_int order.Order.placement_id
+              = placement_id
+            then Some order
+            else None)
+      t None
+  in
+  match found with
+  | None -> `Not_found
+  | Some current ->
+      (match f current with
+      | `Replace order -> Hashtbl.replace t current.id order
+      | `Delete -> Hashtbl.remove t current.id);
+      `Updated
+
 let length (t : t) : int = Hashtbl.length t

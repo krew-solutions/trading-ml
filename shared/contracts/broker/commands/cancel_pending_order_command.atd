@@ -8,9 +8,18 @@
    favour of an async bus command sharing this contract — at which
    point broker_commands will gain its own atdgen rule pointing
    here and the wire shape becomes substitutable between the two
-   backends. *)
+   backends.
+
+   The cancel addresses an order by [placement_id] — the cross-BC
+   saga key minted by Account when reserving cash/quantity and
+   echoed through Submit. It is the only identifier the saga
+   knows; the receiving BC's local identifiers (paper_broker's
+   surrogate Order.id, broker's client_order_id minted inside
+   broker BC) are not part of the saga's vocabulary. Each BC's
+   handler maps placement_id to its local identifier internally. *)
 
 type t = {
-  correlation_id : string;
-  id : string;
+  correlation_id <doc text="Saga-instance identifier of the cancellation request itself. Distinct from the originating submit's correlation_id, which the receiving BC retrieves from its persisted command log so the outbound Order_cancelled IE echoes the submit-time saga (the cancel itself is a separate saga / one-shot)."> : string;
+
+  placement_id <doc text="Cross-BC saga key, identifying the order to cancel. paper_broker looks up its Order.t by placement_id; broker (once migrated off HTTP DELETE) maps placement_id to its own client_order_id and calls the venue."> : int;
 }

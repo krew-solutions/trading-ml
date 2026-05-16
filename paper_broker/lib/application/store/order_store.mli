@@ -36,6 +36,21 @@ module type S = sig
   (** Atomic read-modify-write under the store's serialisation
       primitive. *)
 
+  val update_by_placement_id :
+    t ->
+    placement_id:int ->
+    f:(Paper_broker.Order.t -> [ `Replace of Paper_broker.Order.t | `Delete ]) ->
+    [ `Updated | `Not_found ]
+  (** Same as {!update} but addressing an order by its cross-BC
+      [placement_id] (the saga key) rather than the paper_broker-
+      assigned surrogate [Order.id]. Required by
+      {!Cancel_pending_order_command_handler}: the saga does not
+      know paper_broker's local id; it only knows the placement
+      it submitted under.
+
+      Atomicity is the same as {!update} — the lookup and the
+      [f] application happen under one serialisation cycle. *)
+
   val length : t -> int
   (** Approximate snapshot count — diagnostics only. *)
 end

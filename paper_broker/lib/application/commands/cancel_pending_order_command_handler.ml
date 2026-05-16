@@ -1,11 +1,12 @@
 module Order = Paper_broker.Order
 
 type cancel_error =
-  | Order_not_found of string
+  | Order_not_found of int
   | Order_already_terminal of Order.Values.Order_status.t
 
 let cancel_error_to_string = function
-  | Order_not_found id -> Printf.sprintf "order %S not found" id
+  | Order_not_found pid ->
+      Printf.sprintf "no working order for placement_id %d" pid
   | Order_already_terminal s ->
       Printf.sprintf "order is already in terminal status %s"
         (Order.Values.Order_status.to_string s)
@@ -25,7 +26,8 @@ let handle
   let module S = (val store : Store with type t = store) in
   let outcome = ref None in
   let result =
-    S.update store_handle ~id:cmd.id ~f:(fun current ->
+    S.update_by_placement_id store_handle ~placement_id:cmd.placement_id
+      ~f:(fun current ->
         match Order.cancel current ~cancelled_ts:(now_ts ()) with
         | Ok (order', event) ->
             outcome := Some (Ok { order = order'; event });
@@ -35,7 +37,7 @@ let handle
             `Replace current)
   in
   match result with
-  | `Not_found -> Rop.fail (Cancel (Order_not_found cmd.id))
+  | `Not_found -> Rop.fail (Cancel (Order_not_found cmd.placement_id))
   | `Updated -> (
       match !outcome with
       | Some (Ok o) -> Rop.succeed o

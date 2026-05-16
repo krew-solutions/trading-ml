@@ -54,6 +54,28 @@ module Test_store = struct
         | `Delete -> Hashtbl.remove t id);
         `Updated
 
+  let update_by_placement_id (t : t) ~placement_id ~f =
+    let found =
+      Hashtbl.fold
+        (fun _ order acc ->
+          match acc with
+          | Some _ -> acc
+          | None ->
+              if
+                Order.Values.Placement_id.to_int order.Order.placement_id
+                = placement_id
+              then Some order
+              else None)
+        t None
+    in
+    match found with
+    | None -> `Not_found
+    | Some current ->
+        (match f current with
+        | `Replace order -> Hashtbl.replace t current.id order
+        | `Delete -> Hashtbl.remove t current.id);
+        `Updated
+
   let length (t : t) : int = Hashtbl.length t
 end
 
@@ -276,9 +298,9 @@ let bar_arrives
   end;
   ctx
 
-let cancel_order ?(correlation_id = "cancel-1") ~id () ctx =
+let cancel_order ?(correlation_id = "cancel-1") ~placement_id () ctx =
   let cmd : Paper_broker_commands.Cancel_pending_order_command.t =
-    { correlation_id; id }
+    { correlation_id; placement_id }
   in
   let publish_cancelled e = ctx.order_cancelled_pub := e :: !(ctx.order_cancelled_pub) in
   let _ =

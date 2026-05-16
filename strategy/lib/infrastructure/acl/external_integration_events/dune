@@ -9,8 +9,7 @@
   decimal
   datetime
   eio
-  eio_stream
-  stream)
+  pipe)
  (preprocess
   (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))

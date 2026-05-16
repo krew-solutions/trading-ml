@@ -1,6 +1,6 @@
 (** Live strategy engine — alpha-only after the M5 evacuation.
 
-    Receives bars from a {!Stream.t} (or {!on_bar} for tests),
+    Receives bars from a {!Pipe.Stream.t} (or {!on_bar} for tests),
     feeds them into a {!Strategies.Strategy.t}, and publishes every
     non-Hold {!Common.Signal.t} as a
     {!Strategy_integration_events.Signal_detected_integration_event.t}
@@ -42,7 +42,7 @@ val on_bar : t -> Candle.t -> unit
     Re-entrant-safe via an internal mutex; idempotent on
     older-or-equal timestamps. *)
 
-val run : t -> source:Candle.t Stream.t -> unit
+val run : t -> source:Candle.t Pipe.Stream.t -> unit
 (** Stream-driver variant: pulls bars from [source] and feeds them
     via {!on_bar}. Blocks (never returns on an effectively-infinite
     source) — invoked inside [Eio.Fiber.fork_daemon]. *)

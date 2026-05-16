@@ -46,4 +46,4 @@ let on_bar t (c : Candle.t) =
             t.publish_signal_detected ie
       end)
 
-let run t ~source = Stream.iter (on_bar t) source
+let run t ~source = Pipe.Stream.iter (on_bar t) source

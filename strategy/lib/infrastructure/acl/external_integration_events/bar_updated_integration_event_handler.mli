@@ -1,7 +1,7 @@
 (** Stateful inbound handler for {!Bar_updated_integration_event.t}.
 
     The handler buffers decoded bars in an internal {!Eio.Stream.t}
-    and exposes them as a pull-driven {!Stream.t} via {!source}.
+    and exposes them as a pull-driven {!Pipe.Stream.t} via {!source}.
     {!handle} is the bus callback — composition root subscribes it
     to whichever consumer is appropriate. The internal Eio.Stream is
     the single push→pull boundary on the path from bus to
@@ -14,7 +14,7 @@ type t
 val make : capacity:int -> t
 (** [capacity] sizes the internal Eio.Stream buffer. *)
 
-val source : t -> Core.Candle.t Stream.t
+val source : t -> Core.Candle.t Pipe.Stream.t
 (** Pull-driven candle stream backed by the internal Eio.Stream.
     Single-consumer semantics — pull from one fiber. *)
 

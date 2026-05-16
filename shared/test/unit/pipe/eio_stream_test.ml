@@ -5,31 +5,31 @@ let test_order_preserved () =
   Eio_main.run @@ fun _env ->
   let s = Eio.Stream.create 16 in
   List.iter (Eio.Stream.add s) [ 1; 2; 3; 4; 5 ];
-  let seq = Eio_stream.of_eio_stream s in
-  let first_five = seq |> Stream.take 5 |> Stream.to_list in
+  let seq = Pipe.Eio_stream.of_eio_stream s in
+  let first_five = seq |> Pipe.Stream.take 5 |> Pipe.Stream.to_list in
   Alcotest.(check (list int)) "order preserved" [ 1; 2; 3; 4; 5 ] first_five
 
 let test_take_bounds_infinite_stream () =
   Eio_main.run @@ fun _env ->
   let s = Eio.Stream.create 64 in
   List.iter (Eio.Stream.add s) [ 10; 20; 30; 40; 50 ];
-  let seq = Eio_stream.of_eio_stream s in
+  let seq = Pipe.Eio_stream.of_eio_stream s in
   (* `take 3` over an unbounded Seq must not block; it returns the
      first three elements and stops. *)
-  let three = seq |> Stream.take 3 |> Stream.to_list in
+  let three = seq |> Pipe.Stream.take 3 |> Pipe.Stream.to_list in
   Alcotest.(check (list int)) "take 3" [ 10; 20; 30 ] three
 
 let test_consumer_blocks_until_producer_pushes () =
   Eio_main.run @@ fun _env ->
   Eio.Switch.run @@ fun sw ->
   let s = Eio.Stream.create 1 in
-  let seq = Eio_stream.of_eio_stream s in
+  let seq = Pipe.Eio_stream.of_eio_stream s in
   let result = ref [] in
   (* Consumer fiber — tries to pull 3 values. Will block until they
      arrive. *)
   let consumer =
     Eio.Fiber.fork_promise ~sw (fun () ->
-        result := seq |> Stream.take 3 |> Stream.to_list;
+        result := seq |> Pipe.Stream.take 3 |> Pipe.Stream.to_list;
         !result)
   in
   (* Producer pushes after a small yield — proves consumer actually
@@ -48,9 +48,9 @@ let test_lazy_scan_map_over_live_source () =
   let s = Eio.Stream.create 16 in
   List.iter (Eio.Stream.add s) [ 1; 2; 3; 4; 5 ];
   let cumsum =
-    Eio_stream.of_eio_stream s
-    |> Stream.scan_map 0 (fun acc x -> (acc + x, acc + x))
-    |> Stream.take 5 |> Stream.to_list
+    Pipe.Eio_stream.of_eio_stream s
+    |> Pipe.Stream.scan_map 0 (fun acc x -> (acc + x, acc + x))
+    |> Pipe.Stream.take 5 |> Pipe.Stream.to_list
   in
   Alcotest.(check (list int)) "cumsum over live-ish source" [ 1; 3; 6; 10; 15 ] cumsum
 

@@ -11,8 +11,8 @@
     Key use case: the same Mealy-style transducer drives both
     historical replay (with [of_list] → transforms → [to_list]) and
     a live trading loop (with an Eio-backed source → [iter]). See
-    [lib/infrastructure/eio_stream/] for the Eio adapter; this
-    module stays pure and Eio-free so it belongs in the domain.
+    {!Pipe.Eio_stream} for the Eio adapter; this module itself
+    stays pure and Eio-free.
 
     Termination: a stream is finite iff its producer eventually
     returns [Nil]. Live sources built over [Eio.Stream.take] are

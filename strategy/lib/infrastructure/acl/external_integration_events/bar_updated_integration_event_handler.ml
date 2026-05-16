@@ -6,7 +6,7 @@ type t = { stream : Candle.t Eio.Stream.t }
 
 let make ~capacity = { stream = Eio.Stream.create capacity }
 
-let source t = Eio_stream.of_eio_stream t.stream
+let source t = Pipe.Eio_stream.of_eio_stream t.stream
 
 let matches_instrument
     (filter : Instrument.t)

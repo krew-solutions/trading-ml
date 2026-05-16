@@ -31,7 +31,7 @@ Why we rolled our own:
 See [ADR 0003](../adr/0003-stream-over-frp.md) for the full
 reasoning.
 
-## What's in `lib/domain/stream/`
+## What's in `shared/lib/pipe/`
 
 A thin module over `Stdlib.Seq` that re-exports what we use and
 adds the one primitive the stdlib is missing:
@@ -91,12 +91,12 @@ always advances, but the step may choose not to emit.
 
 ## The Eio boundary
 
-`lib/infrastructure/eio_stream/eio_stream.ml` is the **one and
+`shared/lib/pipe/eio_stream.ml` is the **one and
 only** place that bridges Eio's push-based concurrency to our
 pull-based streams:
 
 ```ocaml
-let of_eio_stream (s : 'a Eio.Stream.t) : 'a Stream.t =
+let of_eio_stream (s : 'a Eio.Stream.t) : 'a Pipe.Stream.t =
   let rec go () = Seq.Cons (Eio.Stream.take s, go) in
   go
 ```

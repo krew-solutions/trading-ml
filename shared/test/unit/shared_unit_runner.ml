@@ -15,4 +15,7 @@ let () =
       ("isin", Isin_test.tests);
       ("board", Board_test.tests);
       ("instrument", Instrument_test.tests);
+      (* Pipe *)
+      ("pipe.stream", Stream_test.tests);
+      ("pipe.eio_stream", Eio_stream_test.tests);
     ]

@@ -33,13 +33,13 @@ stream abstraction both drivers could consume.
 an `Eio.Stream.t → Seq.t` adapter in a separate module.
 Don't adopt an FRP/dataflow library.
 
-`lib/domain/stream/stream.ml` is ~25 lines of actual code,
+`shared/lib/pipe/stream.ml` is ~25 lines of actual code,
 mostly re-exports of `Seq` functions plus two missing
 primitives: `scan_map` (Mealy transducer — thread state, emit
 one output per input) and `scan_filter_map` (same with optional
 emit).
 
-`lib/infrastructure/eio_stream/eio_stream.ml` is 6 lines: a
+`shared/lib/pipe/eio_stream.ml` is 6 lines: a
 recursive `go ()` that returns `Seq.Cons (Eio.Stream.take s, go)`,
 crossing the push/pull boundary at exactly one function.
 

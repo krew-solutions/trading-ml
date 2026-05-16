@@ -158,7 +158,7 @@ satisfies `S` — no other change is needed upstream.
 
 A single candle arriving from the WS bridge flows through an
 `Eio.Stream`, crosses into the pure domain via
-[`Eio_stream.of_eio_stream`](../../lib/infrastructure/eio_stream/),
+[`Pipe.Eio_stream.of_eio_stream`](../../shared/lib/pipe/),
 drives the shared state machine
 ([`Engine.Pipeline`](state-machine.md)), emits an *intent event*
 that the engine translates to a broker order, and eventually

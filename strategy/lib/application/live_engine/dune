@@ -1,5 +1,5 @@
 (library
  (name live_engine)
  (public_name trading.live_engine)
- (libraries core common decimal strategies stream strategy_integration_events)
+ (libraries core common decimal strategies pipe strategy_integration_events)
  (flags (:standard -open Common)))

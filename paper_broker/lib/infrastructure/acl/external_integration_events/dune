@@ -4,8 +4,25 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
+  atdgen-runtime
   paper_broker_external_view_models
   paper_broker_view_models
   paper_broker_commands)
  (preprocess (pps ppx_yojson_conv))
- (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Paper_broker_external_view_models)))
+
+; Regenerated from the producer's .atd (broker BC) — same source
+; of truth as the outbound emitter, byte-for-byte wire shape match.
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/bar_updated_integration_event.atd))
+ (targets bar_updated_integration_event_t.ml bar_updated_integration_event_t.mli
+          bar_updated_integration_event_j.ml bar_updated_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o bar_updated_integration_event %{atd})
+   (run atdgen -j -o bar_updated_integration_event %{atd}))))

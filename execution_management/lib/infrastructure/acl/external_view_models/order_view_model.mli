@@ -1,18 +1,10 @@
 (** Inbound DTO mirror of an order view model. Used by the saga's
-    [Order_accepted] inbound mirror. *)
+    [Order_accepted] inbound mirror.
 
-type t = {
-  id : string;
-  exec_id : string;
-  client_order_id : string;
-  instrument : Instrument_view_model.t;
-  side : string;
-  quantity : string;
-  filled : string;
-  remaining : string;
-  kind : Order_kind_view_model.t;
-  tif : string;
-  status : string;
-  created_ts : int64;
-}
-[@@deriving yojson]
+    Wire shape regenerated from the producer's .atd contract. *)
+
+include module type of Order_view_model_t
+include module type of Order_view_model_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

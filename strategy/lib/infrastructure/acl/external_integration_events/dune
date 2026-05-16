@@ -4,6 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
+  atdgen-runtime
   strategy_external_view_models
   core
   decimal
@@ -12,4 +13,17 @@
   pipe)
  (preprocess
   (pps ppx_yojson_conv))
- (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Strategy_external_view_models)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/bar_updated_integration_event.atd))
+ (targets bar_updated_integration_event_t.ml bar_updated_integration_event_t.mli
+          bar_updated_integration_event_j.ml bar_updated_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o bar_updated_integration_event %{atd})
+   (run atdgen -j -o bar_updated_integration_event %{atd}))))

@@ -4,6 +4,7 @@
  (libraries
   yojson
   ppx_yojson_conv_lib
+  atdgen-runtime
   core
   decimal
   datetime
@@ -11,4 +12,27 @@
   portfolio_management_external_view_models
   portfolio_management_commands)
  (preprocess (pps ppx_yojson_conv))
- (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Portfolio_management_external_view_models)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/bar_updated_integration_event.atd))
+ (targets bar_updated_integration_event_t.ml bar_updated_integration_event_t.mli
+          bar_updated_integration_event_j.ml bar_updated_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o bar_updated_integration_event %{atd})
+   (run atdgen -j -o bar_updated_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/reservation_filled_integration_event.atd))
+ (targets reservation_filled_integration_event_t.ml reservation_filled_integration_event_t.mli
+          reservation_filled_integration_event_j.ml reservation_filled_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o reservation_filled_integration_event %{atd})
+   (run atdgen -j -o reservation_filled_integration_event %{atd}))))

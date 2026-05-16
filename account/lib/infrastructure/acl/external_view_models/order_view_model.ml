@@ -1,15 +1,5 @@
-type t = {
-  id : string;
-  exec_id : string;
-  client_order_id : string;
-  instrument : Instrument_view_model.t;
-  side : string;
-  quantity : string;
-  filled : string;
-  remaining : string;
-  kind : Order_kind_view_model.t;
-  tif : string;
-  status : string;
-  created_ts : int64;
-}
-[@@deriving yojson]
+include Order_view_model_t
+include Order_view_model_j
+
+let yojson_of_t (v : t) : Yojson.Safe.t = Yojson.Safe.from_string (string_of_t v)
+let t_of_yojson (j : Yojson.Safe.t) : t = t_of_string (Yojson.Safe.to_string j)

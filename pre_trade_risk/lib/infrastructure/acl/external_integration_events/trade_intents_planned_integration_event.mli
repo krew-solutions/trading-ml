@@ -1,12 +1,9 @@
 (** pre_trade_risk-side mirror of PM's "trade intents planned"
-    integration event. Structurally identical wire shape to
-    {!Portfolio_management_integration_events.Trade_intents_planned_integration_event.t},
-    owned locally so the BC stays bus-agnostic. *)
+    integration event. Wire shape regenerated from the producer's
+    .atd contract — same source of truth as PM's outbound emitter. *)
 
-type leg = {
-  correlation_id : string;
-  intent : Pre_trade_risk_external_view_models.Trade_intent_view_model.t;
-}
-[@@deriving yojson]
+include module type of Trade_intents_planned_integration_event_t
+include module type of Trade_intents_planned_integration_event_j with type t := t
 
-type t = { book_id : string; trades : leg list; computed_at : string } [@@deriving yojson]
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

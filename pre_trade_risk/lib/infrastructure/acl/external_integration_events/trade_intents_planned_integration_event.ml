@@ -1,7 +1,5 @@
-type leg = {
-  correlation_id : string;
-  intent : Pre_trade_risk_external_view_models.Trade_intent_view_model.t;
-}
-[@@deriving yojson]
+include Trade_intents_planned_integration_event_t
+include Trade_intents_planned_integration_event_j
 
-type t = { book_id : string; trades : leg list; computed_at : string } [@@deriving yojson]
+let yojson_of_t (v : t) : Yojson.Safe.t = Yojson.Safe.from_string (string_of_t v)
+let t_of_yojson (j : Yojson.Safe.t) : t = t_of_string (Yojson.Safe.to_string j)

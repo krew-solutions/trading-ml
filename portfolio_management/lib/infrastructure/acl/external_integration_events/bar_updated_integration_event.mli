@@ -5,9 +5,9 @@
     owned by PM so its consumer
     ({!Bar_updated_integration_event_handler}, which drives
     pair-mean-reversion policies) listens autonomously without
-    importing types across the BC boundary. The bridge from
-    Broker's outbound topic to this mirror is a deserializer at
-    {!Bus.consumer} time — JSON wire is the only contract.
+    importing types across the BC boundary. Wire shape regenerated
+    from the producer's .atd contract, so structural drift is
+    impossible.
 
     Idempotency: handlers MUST upsert by
     [(instrument, timeframe, candle.ts)]. Repeat publications of the
@@ -17,9 +17,8 @@
     Naming: a {b bar} = ({i instrument}, {i timeframe}, {i candle}).
     The {b candle} field holds the pure OHLCV body without context. *)
 
-type t = {
-  instrument : Portfolio_management_external_view_models.Instrument_view_model.t;
-  timeframe : string;
-  candle : Portfolio_management_external_view_models.Candle_view_model.t;
-}
-[@@deriving yojson]
+include module type of Bar_updated_integration_event_t
+include module type of Bar_updated_integration_event_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

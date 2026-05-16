@@ -1,13 +1,9 @@
-(** Inbound DTO mirror of a trade-intent view model. Mirrors the wire
-    shape published by
-    {!Portfolio_management_integration_events.Trade_intents_planned_integration_event}'s
-    leg, kept independent so PM can evolve its outbound schema without
-    forcing this BC's deserializer to move in lockstep. *)
+(** Inbound DTO mirror of a trade-intent view model. Wire shape
+    regenerated from PM's .atd contract; the consumer side sees the
+    same structure as the producer with no drift possible. *)
 
-type t = {
-  book_id : string;
-  instrument : Instrument_view_model.t;
-  side : string;
-  quantity : string;
-}
-[@@deriving yojson]
+include module type of Trade_intent_view_model_t
+include module type of Trade_intent_view_model_j with type t := t
+
+val yojson_of_t : t -> Yojson.Safe.t
+val t_of_yojson : Yojson.Safe.t -> t

@@ -1,7 +1,31 @@
 (library
  (name paper_broker_external_view_models)
  (public_name trading.paper_broker.acl.external_view_models)
- (libraries yojson ppx_yojson_conv_lib)
+ (libraries yojson ppx_yojson_conv_lib atdgen-runtime)
  (preprocess
   (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+
+; ACL mirrors regenerated from the producer BC's .atd contract —
+; structural compatibility with broker's outbound shape is a
+; compile-time guarantee, not a code-review obligation.
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/view_models/instrument_view_model.atd))
+ (targets instrument_view_model_t.ml instrument_view_model_t.mli
+          instrument_view_model_j.ml instrument_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o instrument_view_model %{atd})
+   (run atdgen -j -o instrument_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/view_models/candle_view_model.atd))
+ (targets candle_view_model_t.ml candle_view_model_t.mli
+          candle_view_model_j.ml candle_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o candle_view_model %{atd})
+   (run atdgen -j -o candle_view_model %{atd}))))

@@ -32,9 +32,17 @@
    (run atdgen -t -o cancel_pending_order_command %{atd})
    (run atdgen -j -o cancel_pending_order_command %{atd}))))
 
+; submit_order_command — wire contract shared with broker BC.
+; paper_broker is broker's backtest substitute; the substitution
+; requires byte-identical wire shape on this command, so both BCs
+; regenerate from the same .atd source of truth (broker's, since
+; broker is the natural owner of order-submission vocabulary).
+; No cross-BC code dependency: generated code is local to this
+; library. Cross-ref to Order_kind_view_model resolves against
+; Paper_broker_view_models (opened in flags above).
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/commands/submit_order_command.atd))
+  (:atd %{project_root}/shared/contracts/broker/commands/submit_order_command.atd))
  (targets submit_order_command_t.ml
           submit_order_command_t.mli
           submit_order_command_j.ml

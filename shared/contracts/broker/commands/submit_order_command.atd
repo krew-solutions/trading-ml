@@ -1,14 +1,21 @@
 (* Wire contract: broker/lib/application/commands/submit_order_command.ml
+   AND paper_broker/lib/application/commands/submit_order_command.ml.
 
-   Mirror of paper_broker/commands/submit_order_command.atd — the
-   saga targets either broker uniformly. Keep both in lock-step;
-   shared/tests/contract/ verifies wire equivalence.
+   Shared by both BCs: paper_broker is broker's backtest substitute
+   and the saga targets either uniformly, so the substitution demands
+   byte-identical wire shape. Generated code is local to each BC's
+   `*_commands` library; only the contract source here is shared.
+   No code-level cross-BC dependency — each library has its own
+   atdgen-emitted submit_order_command_t / _j inside its own
+   compilation unit.
 
    Cross-referenced types resolved via atdgen at code-generation
-   time; the consumer library opens Broker_view_models so the
-   bare `Order_kind_view_model_t` name binds across libraries:
+   time; each consumer opens its sibling `*_view_models` library so
+   the bare `Order_kind_view_model_t` name binds locally:
 
-   - order_kind_view_model — see view_models/order_kind_view_model.atd *)
+   - order_kind_view_model — see broker/view_models/order_kind_view_model.atd
+                               (paper_broker/view_models/order_kind_view_model.atd
+                                is its byte-identical mirror) *)
 
 type order_kind_view_model <ocaml from="Order_kind_view_model" t="t"> = abstract
 

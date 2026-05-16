@@ -1,5 +1,3 @@
-open Core
-
 include Order_accepted_integration_event_t
 include Order_accepted_integration_event_j
 
@@ -12,9 +10,4 @@ let of_domain ~(correlation_id : string) (ev : domain) : t =
   {
     correlation_id;
     placement_id = Paper_broker.Order.Values.Placement_id.to_int ev.placement_id;
-    id = ev.id;
-    instrument = Instrument_view_model.of_domain ev.instrument;
-    side = Side.to_string ev.side;
-    quantity = Decimal.to_string ev.quantity;
-    created_ts = Datetime.Iso8601.format ev.created_ts;
   }

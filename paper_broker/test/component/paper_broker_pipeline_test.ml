@@ -19,9 +19,7 @@ let market_buy_fills_on_next_bar_at_open =
           match !(ctx.order_accepted_pub) with
           | [ ie ] ->
               Alcotest.(check string) "correlation_id" "saga-A" ie.correlation_id;
-              Alcotest.(check int) "placement_id" 7 ie.placement_id;
-              Alcotest.(check string) "quantity" "10" ie.quantity;
-              Alcotest.(check string) "side" "BUY" ie.side
+              Alcotest.(check int) "placement_id" 7 ie.placement_id
           | other ->
               Alcotest.fail
                 (Printf.sprintf "expected one Order_accepted, got %d" (List.length other)));
@@ -174,11 +172,9 @@ let market_sell_opens_a_short_and_fills_at_slipped_open =
                ~symbol:"SBER@MISX" ~quantity:"10" ());
       Gherkin.when_ "the next bar arrives with open 100" (fun ctx ->
           ctx |> bar_arrives ~symbol:"SBER@MISX" ~open_:"100" ());
-      Gherkin.then_ "the order acceptance announces side=SELL" (fun ctx ->
+      Gherkin.then_ "the order acceptance is announced" (fun ctx ->
           match !(ctx.order_accepted_pub) with
-          | [ ie ] ->
-              Alcotest.(check string) "side echoed as SELL" "SELL" ie.side;
-              Alcotest.(check int) "placement_id" 21 ie.placement_id
+          | [ ie ] -> Alcotest.(check int) "placement_id" 21 ie.placement_id
           | other ->
               Alcotest.fail
                 (Printf.sprintf "expected one Order_accepted, got %d" (List.length other)));

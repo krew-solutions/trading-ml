@@ -30,7 +30,7 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/integration_events/order_accepted_integration_event.atd))
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_accepted_integration_event.atd))
  (targets order_accepted_integration_event_t.ml
           order_accepted_integration_event_t.mli
           order_accepted_integration_event_j.ml

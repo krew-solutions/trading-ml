@@ -4,7 +4,19 @@
     [submit_order_command_workflow].
 
     The downstream EMS saga transitions
-    [Awaiting_reservation → Submitted] on this. *)
+    [Awaiting_reservation → Submitted] on this.
+
+    The wire shape is the broker BC's canonical contract,
+    generated from
+    [shared/contracts/broker/integration_events/order_accepted_integration_event.atd]
+    via atdgen. paper_broker emits per this contract as one
+    implementation of the broker abstraction (ADR-0015); rich
+    projection state (id, instrument, side, quantity, created_ts)
+    available on the [Paper_broker.Order.Events.Order_accepted]
+    domain event is intentionally dropped on the wire — the
+    consumer (execution_management) addresses placements by
+    [placement_id] and already holds (instrument, side, quantity)
+    on its own Placement aggregate. *)
 
 include module type of Order_accepted_integration_event_t
 include module type of Order_accepted_integration_event_j with type t := t

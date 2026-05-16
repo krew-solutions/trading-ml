@@ -62,12 +62,7 @@ let test_happy_path_publishes_order_accepted () =
   match !accepted with
   | [ ie ] ->
       Alcotest.(check string) "correlation_id" "saga-1" ie.correlation_id;
-      Alcotest.(check int) "placement_id" 7 ie.placement_id;
-      Alcotest.(check string) "id" "po-1" ie.id;
-      Alcotest.(check string) "side" "BUY" ie.side;
-      Alcotest.(check string) "quantity" "10" ie.quantity;
-      Alcotest.(check string) "instrument ticker" "SBER" ie.instrument.ticker;
-      Alcotest.(check string) "instrument venue" "MISX" ie.instrument.venue
+      Alcotest.(check int) "placement_id" 7 ie.placement_id
   | _ -> Alcotest.fail "expected exactly one Order_accepted IE"
 
 let test_invalid_side_publishes_rejection () =
@@ -129,7 +124,7 @@ let test_limit_order_requires_price () =
   Alcotest.(check int) "no Order_accepted" 0 (List.length !accepted);
   Alcotest.(check int) "one Order_rejected" 1 (List.length !rejected)
 
-let test_sell_happy_path_publishes_order_accepted_with_sell_side () =
+let test_sell_happy_path_publishes_order_accepted () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let accepted = ref [] in
@@ -147,9 +142,7 @@ let test_sell_happy_path_publishes_order_accepted_with_sell_side () =
   Alcotest.(check int) "store size = 1" 1 (Test_store.length store);
   Alcotest.(check int) "no rejection" 0 (List.length !rejected);
   match !accepted with
-  | [ ie ] ->
-      Alcotest.(check string) "side echoed as SELL" "SELL" ie.side;
-      Alcotest.(check int) "placement_id" 7 ie.placement_id
+  | [ ie ] -> Alcotest.(check int) "placement_id" 7 ie.placement_id
   | _ -> Alcotest.fail "expected exactly one Order_accepted IE"
 
 let test_limit_sell_without_price_is_rejected () =
@@ -207,9 +200,9 @@ let tests =
     ( "LIMIT without price publishes Order_rejected",
       `Quick,
       test_limit_order_requires_price );
-    ( "SELL happy path publishes Order_accepted with side=SELL",
+    ( "SELL happy path publishes Order_accepted",
       `Quick,
-      test_sell_happy_path_publishes_order_accepted_with_sell_side );
+      test_sell_happy_path_publishes_order_accepted );
     ( "LIMIT SELL without price is rejected and echoes placement_id",
       `Quick,
       test_limit_sell_without_price_is_rejected );

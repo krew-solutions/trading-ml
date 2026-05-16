@@ -199,6 +199,27 @@ incidents in Context). The detection cost is shifted to
 reviewers, who do not have a mechanical way to compare a `.ml`
 in one BC with its mirror in another.
 
+### Lean into ATD: drop the primitive-DTO defensive layer
+
+The hand-written application-layer DTOs (commands, queries,
+view models, integration events) carry a primitive shape
+(`string`, `int`, `int64`) specifically to keep Value Objects
+off the wire boundary. With ATD generating those primitive
+shapes — and offering JSON-level input validation — the
+hand-written layer is technically redundant: handlers could
+parse JSON straight into the generated `_t` type and promote to
+Value Objects in one step, skipping the intermediate
+application-layer record altogether.
+
+Deferred. Collapsing the layer pushes ATD-generated types deep
+into application-layer signatures, turning the library into a
+transitive dependency of every in-process call site rather than
+a wire-only concern. The current Hexagonal layout — ATD at the
+boundary, hand-written wrappers `include`-ing the generated
+modules — keeps that coupling local. Revisit once the ATD
+dependency has shipped and stabilised in production; the
+simplification is a future option, not part of this ADR.
+
 ## Consequences
 
 ### Easier

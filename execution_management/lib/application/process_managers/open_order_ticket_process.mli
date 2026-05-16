@@ -1,25 +1,27 @@
 (** Open_order_ticket process — the cross-BC saga that opens an
-    order ticket: turns an approved trade intent into a fully-placed
-    broker order. Per the OrderTicket / OrderTicket.Placement model
-    being introduced in execution_management, the saga's correlation
-    id will eventually become the ticket identifier; today it remains
-    a free-form uuid minted by the saga initiator.
+    order ticket: turns an approved trade intent into a reserved
+    cash earmark and hands off to the OrderTicket aggregate, which
+    will then drive execution per the chosen strategy.
 
-    Coordinates the cross-BC choreography:
+    Scope of this process_manager: cash reservation only. Once the
+    reservation lands, the saga reaches its terminal {!Done} state
+    and the OrderTicket takes over orchestration (slicing into
+    Placements, dispatching Submit to broker, tracking fills /
+    rejections, compensating on failure). This file deliberately
+    knows nothing about the broker — broker-side IEs and commands
+    are handled by the OrderTicket aggregate, not by this saga.
+
+    Coordinates the upstream choreography:
 
     {v
       Trade_intent_approved   →  Reserve_command  (Account)
               ↓                          ↓
-              ⤷ Awaiting_reservation     ⤷ Amount_reserved          → Submit_order_command (Broker)
-                                              ↓                                ↓
-                                              ⤷ Submitted                       ⤷ Order_accepted   → Done
-                                                                                ⤷ Order_rejected   → Release_command + Compensated
-                                                                                ⤷ Order_unreachable → Release_command + Compensated
-                                         ⤷ Reservation_rejected     → Compensated
+              ⤷ Awaiting_reservation     ⤷ Amount_reserved        → Done
+                                         ⤷ Reservation_rejected  → Compensated
     v}
 
-    Built on top of {!Workflow_engine}: the {!Definition} module is a
-    pure state machine, the {!Engine} module wraps it with a
+    Built on top of {!Workflow_engine}: the {!Definition} module is
+    a pure state machine, the {!Engine} module wraps it with a
     persistent store and a [dispatch] callback that bridges the
     saga's [command] union onto the workflow_engine's command bus.
 
@@ -39,17 +41,16 @@ type payload = {
   kind_limit_price : string option;
   tif : string;
 }
-(** Trade payload captured at saga start; threaded through the state
-    so the [Submit] hop has all the venue-side parameters it needs
-    once the reservation lands. The defaults for [kind] / [tif] are
-    chosen by the saga at start time — the upstream
-    Trade_intent_approved IE does not carry venue-routing metadata
-    today (rationale: alpha/PM/Pre_trade_risk operate on direction
-    + quantity, not order shape). *)
+(** Trade payload captured at saga start; preserved while
+    [Awaiting_reservation] so the data is available when the
+    OrderTicket is created on transition to {!Done}. The defaults
+    for [kind] / [tif] are chosen by the saga at start time — the
+    upstream Trade_intent_approved IE does not carry venue-routing
+    metadata today (rationale: alpha/PM/Pre_trade_risk operate on
+    direction + quantity, not order shape). *)
 
 type state =
   | Awaiting_reservation of { payload : payload }
-  | Submitted of { payload : payload; reservation_id : int }
   | Done of { reservation_id : int }
   | Compensated of { reason : string }
 
@@ -60,19 +61,10 @@ type event =
       Execution_management_external_integration_events
       .Reservation_rejected_integration_event
       .t
-  | Order_accepted of
-      Execution_management_external_integration_events.Order_accepted_integration_event.t
-  | Order_rejected of
-      Execution_management_external_integration_events.Order_rejected_integration_event.t
-  | Order_unreachable of
-      Execution_management_external_integration_events.Order_unreachable_integration_event
-      .t
 
 (** Saga-local command union. The factory's [dispatch] closure
-    serialises each variant onto the appropriate bus topic — Account
-    for Reserve / Release, Broker for Submit. The DTO field shapes
-    match the Account / Broker command DTOs verbatim; we keep them
-    saga-local to avoid importing those BCs' command libraries. *)
+    serialises each variant onto the appropriate bus topic — today
+    only the Account-bound Reserve survives at this level. *)
 type command =
   | Dispatch_reserve of {
       correlation_id : string;
@@ -81,19 +73,6 @@ type command =
       quantity : string;
       price : string;
     }
-  | Dispatch_submit of {
-      correlation_id : string;
-      reservation_id : int;
-      symbol : string;
-      side : string;
-      quantity : string;
-      kind_type : string;
-      kind_price : string option;
-      kind_stop_price : string option;
-      kind_limit_price : string option;
-      tif : string;
-    }
-  | Dispatch_release of { correlation_id : string; reservation_id : int }
 
 module Definition :
   Workflow_engine.WORKFLOW

@@ -82,23 +82,13 @@ let place_order_by_placement_id
     ~tif:_ =
   unsupported "place_order_by_placement_id"
 
-let cancel_order_by_placement_id _ ~placement_id:_ = unsupported "cancel_order_by_placement_id"
+let cancel_order_by_placement_id _ ~placement_id:_ =
+  unsupported "cancel_order_by_placement_id"
+
 let get_order_by_placement_id _ ~placement_id:_ = unsupported "get_order_by_placement_id"
+
 let get_executions_by_placement_id _ ~placement_id:_ =
   unsupported "get_executions_by_placement_id"
-
-let place_order _ ~instrument:_ ~side:_ ~quantity:_ ~kind:_ ~tif:_ ~client_order_id:_ =
-  unsupported "place_order"
-let get_orders _ = unsupported "get_orders"
-let get_order _ ~client_order_id:_ = unsupported "get_order"
-let cancel_order _ ~client_order_id:_ = unsupported "cancel_order"
-let get_executions _ ~client_order_id:_ = unsupported "get_executions"
-
-(** Synthetic has no wire format so any fresh string works. Use a
-    dashed UUIDv4 for log readability; nothing else depends on the
-    shape. *)
-let generate_client_order_id _ =
-  Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
 let as_broker (t : t) : Broker.client =
   Broker.make
@@ -112,11 +102,5 @@ let as_broker (t : t) : Broker.client =
       let cancel_order_by_placement_id = cancel_order_by_placement_id
       let get_order_by_placement_id = get_order_by_placement_id
       let get_executions_by_placement_id = get_executions_by_placement_id
-      let place_order = place_order
-      let get_orders = get_orders
-      let get_order = get_order
-      let cancel_order = cancel_order
-      let get_executions = get_executions
-      let generate_client_order_id = generate_client_order_id
     end)
     t

@@ -86,15 +86,12 @@ let test_limit_order_lifecycle () =
       | [] -> failwith "no bars to anchor limit price"
     in
     let snap px = Decimal.of_float (Float.round (px *. 100.0) /. 100.0) in
-    (* BCS accepts UUID-style client ids, including dashes. Use a
-         stable "smokeN" prefix so partial runs are easy to spot in
-         the orders list. *)
-    (* Exercise the adapter's own cid generator — BCS's
-         [generate_client_order_id] owns the wire-format rule
-         (UUIDv4 with dashes), and the smoke test is how we
-         verify that contract end-to-end. *)
-    let broker = Bcs.Bcs_broker.as_broker rest in
-    let cid = Broker.generate_client_order_id broker in
+    (* BCS accepts UUIDv4-dashed client_order_ids; mint one
+         directly here. The adapter's internal mint (used by the
+         placement-keyed Submit path) follows the same shape;
+         this smoke exercises raw [Bcs.Rest] against the venue,
+         not the port. *)
+    let cid = Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string in
     let place_at px =
       Bcs.Rest.create_order rest ~instrument:sber ~side:Side.Buy ~quantity:1
         ~kind:(Order.Limit px) ~client_order_id:cid ()

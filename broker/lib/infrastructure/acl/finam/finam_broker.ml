@@ -87,15 +87,8 @@ let mint_client_order_id () =
   let uuid = Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string in
   String.concat "" (String.split_on_char '-' uuid)
 
-let place_order_by_placement_id
-    t
-    ~placement_id
-    ~instrument
-    ~side
-    ~quantity
-    ~kind
-    ~tif
-    : Order_view_model.t =
+let place_order_by_placement_id t ~placement_id ~instrument ~side ~quantity ~kind ~tif :
+    Order_view_model.t =
   let cid = mint_client_order_id () in
   (match
      Placement_handle_store.record t.placements ~placement_id ~client_order_id:cid
@@ -113,9 +106,7 @@ let cancel_order_by_placement_id t ~placement_id : Order_view_model.t option =
   | None -> None
   | Some cid ->
       let server_id = resolve_server_id t ~client_order_id:cid in
-      let order =
-        Rest.cancel_order t.rest ~account_id:t.account_id ~order_id:server_id
-      in
+      let order = Rest.cancel_order t.rest ~account_id:t.account_id ~order_id:server_id in
       Some (Order_view_model.of_domain ~placement_id order)
 
 let get_order_by_placement_id t ~placement_id : Order_view_model.t option =
@@ -133,42 +124,9 @@ let get_executions_by_placement_id t ~placement_id : Execution_view_model.t list
       let server_id = resolve_server_id t ~client_order_id:cid in
       Rest.get_trades t.rest ~account_id:t.account_id
       |> List.filter_map (fun (at : Dto.account_trade) ->
-             if at.order_id = server_id then Some (Execution_view_model.of_domain at.execution)
-             else None)
-
-(* --- Legacy venue-keyed methods, kept for /api/orders HTTP routes. --- *)
-
-let place_order t ~instrument ~side ~quantity ~kind ~tif ~client_order_id =
-  let o =
-    Rest.place_order t.rest ~account_id:t.account_id ~instrument ~side ~quantity ~kind
-      ~tif ~client_order_id ()
-  in
-  remember t ~client_order_id ~server_id:o.id;
-  o
-
-let get_orders t = Rest.get_orders t.rest ~account_id:t.account_id
-
-let get_order t ~client_order_id =
-  let server_id = resolve_server_id t ~client_order_id in
-  Rest.get_order t.rest ~account_id:t.account_id ~order_id:server_id
-
-let cancel_order t ~client_order_id =
-  let server_id = resolve_server_id t ~client_order_id in
-  Rest.cancel_order t.rest ~account_id:t.account_id ~order_id:server_id
-
-(** Project account-wide trades into per-execution records for
-    the order identified by [client_order_id]. Pulls the
-    broker-assigned server id from the cid map (or [GET /orders]
-    fallback), then filters [Rest.get_trades] by that id.
-    Returns [] if the order has no executions yet (broker holds
-    it in the book but hasn't filled). *)
-let get_executions t ~client_order_id =
-  let server_id = resolve_server_id t ~client_order_id in
-  Rest.get_trades t.rest ~account_id:t.account_id
-  |> List.filter_map (fun (at : Dto.account_trade) ->
-         if at.order_id = server_id then Some at.execution else None)
-
-let generate_client_order_id _ = mint_client_order_id ()
+          if at.order_id = server_id then
+            Some (Execution_view_model.of_domain at.execution)
+          else None)
 
 let as_broker (t : t) : Broker.client =
   Broker.make
@@ -182,11 +140,5 @@ let as_broker (t : t) : Broker.client =
       let cancel_order_by_placement_id = cancel_order_by_placement_id
       let get_order_by_placement_id = get_order_by_placement_id
       let get_executions_by_placement_id = get_executions_by_placement_id
-      let place_order = place_order
-      let get_orders = get_orders
-      let get_order = get_order
-      let cancel_order = cancel_order
-      let get_executions = get_executions
-      let generate_client_order_id = generate_client_order_id
     end)
     t

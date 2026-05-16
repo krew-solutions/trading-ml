@@ -78,11 +78,13 @@ this runtime CLI focused on live operations:
   dune exec -- bin/export_training_data.exe -- --help
       offline dataset builder for the GBT training pipeline
 
-  orders <list|get|place|cancel> [--host http://localhost:8080]
-      talk to a running `serve` instance via its /api/orders surface.
-      Use this to smoke-test paper mode or poke live broker orders
-      without touching the UI. Run `orders` with no subcommand for
-      per-action flags.
+  orders <place> [--host http://localhost:8080]
+      start a placement saga against a running `serve` instance
+      (Account's POST /api/orders entry point). The list/get/cancel
+      subcommands have been removed — venue-keyed UI is no longer
+      surfaced by broker BC; order identity in our model is the
+      placement_id, which lives on the bus. Run `orders` with no
+      subcommand for per-action flags.
 |};
   exit 2
 
@@ -733,15 +735,18 @@ let format_order (j : Yojson.Safe.t) : string =
   Printf.sprintf "%-24s %-14s %-4s qty=%-8s filled=%-8s %-6s %s" cid symbol side qty
     filled kind status
 
-let cmd_orders_list ~env ~host () =
-  let j = api_request ~env ~host ~meth:`GET "/api/orders" in
-  let orders = Yojson.Safe.Util.(j |> member "orders" |> to_list) in
-  if orders = [] then print_endline "(no orders)"
-  else List.iter (fun o -> print_endline (format_order o)) orders
+let orders_removed_msg =
+  "orders list/get/cancel: removed. The venue-keyed broker HTTP UI is gone — order \
+   identity in this BC is placement_id, which lives only on the bus. Use `orders place` \
+   (still talks to Account's HTTP saga entry-point)."
 
-let cmd_orders_get ~env ~host cid =
-  let j = api_request ~env ~host ~meth:`GET ("/api/orders/" ^ cid) in
-  print_endline (format_order j)
+let cmd_orders_list ~env:_ ~host:_ () =
+  prerr_endline orders_removed_msg;
+  exit 2
+
+let cmd_orders_get ~env:_ ~host:_ _cid =
+  prerr_endline orders_removed_msg;
+  exit 2
 
 let cmd_orders_place ~env ~host args =
   let get name =
@@ -783,9 +788,9 @@ let cmd_orders_place ~env ~host args =
   let j = api_request ~env ~host ~meth:`POST ~body "/api/orders" in
   print_endline (format_order j)
 
-let cmd_orders_cancel ~env ~host cid =
-  let j = api_request ~env ~host ~meth:`DELETE ("/api/orders/" ^ cid) in
-  print_endline (format_order j)
+let cmd_orders_cancel ~env:_ ~host:_ _cid =
+  prerr_endline orders_removed_msg;
+  exit 2
 
 let cmd_orders args =
   let host = Option.value (arg_value "--host" args) ~default:"http://localhost:8080" in
@@ -800,12 +805,12 @@ let cmd_orders args =
       prerr_endline
         {|orders <list|get|place|cancel> [--host http://localhost:8080]
 
-  list                     list all orders on the running server
-  get <cid>                fetch one order by client_order_id
+  list                     [removed] use the bus or Account HTTP read paths
+  get <cid>                [removed] client_order_id no longer crosses BC boundaries
   place --symbol SBER@MISX --side BUY --qty 10 --cid my-cid
         [--kind MARKET|LIMIT|STOP|STOP_LIMIT]
         [--price PRICE] [--stop PRICE] [--tif DAY|GTC|IOC|FOK]
-  cancel <cid>             cancel by client_order_id|};
+  cancel <cid>             [removed] same reason as get/list|};
       exit 2
 
 let () =

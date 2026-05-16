@@ -12,11 +12,11 @@
     when reserving cash / quantity, propagated by the inbound
     HTTP layer into this command, echoed back by every
     {!Broker_integration_events} variant the handler emits. The
-    upstream broker's wire identity ([client_order_id]) is generated
-    inside Broker BC by {!Submit_order_command_handler} via
-    {!Broker.generate_client_order_id} so the format matches the
-    active broker's wire validator (BCS dashed-UUID, Finam
-    letters/digits/space); callers do not see or supply it. *)
+    upstream broker's wire identity (BCS dashed-UUID, Finam
+    letters/digits/space, etc.) is minted privately inside the
+    selected ACL adapter when it implements
+    [Broker.place_order_by_placement_id] and never crosses the
+    port boundary — callers neither see nor supply it. *)
 
 include module type of Submit_order_command_t
 include module type of Submit_order_command_j with type t := t

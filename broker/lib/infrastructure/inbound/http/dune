@@ -1,15 +1,4 @@
 (library
  (name broker_inbound_http)
  (public_name trading.broker.inbound_http)
- (libraries
-  core
-  broker_domain
-  decimal
-  broker
-  broker_view_models
-  inbound_http
-  cohttp
-  cohttp-eio
-  log
-  yojson)
- (flags (:standard -open Broker_domain)))
+ (libraries core broker decimal inbound_http cohttp cohttp-eio log yojson))

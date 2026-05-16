@@ -42,15 +42,8 @@ let venues _t : Mic.t list = [ Mic.of_string "MISX" ]
 let mint_client_order_id () =
   Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string
 
-let place_order_by_placement_id
-    t
-    ~placement_id
-    ~instrument
-    ~side
-    ~quantity
-    ~kind
-    ~tif:_
-    : Order_view_model.t =
+let place_order_by_placement_id t ~placement_id ~instrument ~side ~quantity ~kind ~tif:_ :
+    Order_view_model.t =
   let cid = mint_client_order_id () in
   (match
      Placement_handle_store.record t.placements ~placement_id ~client_order_id:cid
@@ -88,35 +81,14 @@ let get_order_by_placement_id t ~placement_id : Order_view_model.t option =
 let get_executions_by_placement_id t ~placement_id : Execution_view_model.t list =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> []
-  | Some cid -> (
+  | Some cid ->
       let order = Rest.get_order t.rest ~client_order_id:cid in
       if order.exec_id = "" then []
       else
         Rest.get_deals t.rest
         |> List.filter_map (fun (order_num, exec) ->
-               if order_num = order.exec_id then
-                 Some (Execution_view_model.of_domain exec)
-               else None))
-
-(* --- Legacy venue-keyed methods, kept for /api/orders HTTP routes. --- *)
-
-let place_order t ~instrument ~side ~quantity ~kind ~tif:_ ~client_order_id =
-  let q_int = int_of_float (Decimal.to_float quantity) in
-  Rest.create_order t.rest ~instrument ~side ~quantity:q_int ~kind ~client_order_id ()
-
-let get_orders t = Rest.get_orders t.rest
-let get_order t ~client_order_id = Rest.get_order t.rest ~client_order_id
-let cancel_order t ~client_order_id = Rest.cancel_order t.rest ~client_order_id
-
-let get_executions t ~client_order_id =
-  let order = Rest.get_order t.rest ~client_order_id in
-  if order.exec_id = "" then []
-  else
-    Rest.get_deals t.rest
-    |> List.filter_map (fun (order_num, exec) ->
-           if order_num = order.exec_id then Some exec else None)
-
-let generate_client_order_id _ = mint_client_order_id ()
+            if order_num = order.exec_id then Some (Execution_view_model.of_domain exec)
+            else None)
 
 let as_broker (rest : Rest.t) : Broker.client =
   let t = make rest in
@@ -131,11 +103,5 @@ let as_broker (rest : Rest.t) : Broker.client =
       let cancel_order_by_placement_id = cancel_order_by_placement_id
       let get_order_by_placement_id = get_order_by_placement_id
       let get_executions_by_placement_id = get_executions_by_placement_id
-      let place_order = place_order
-      let get_orders = get_orders
-      let get_order = get_order
-      let cancel_order = cancel_order
-      let get_executions = get_executions
-      let generate_client_order_id = generate_client_order_id
     end)
     t

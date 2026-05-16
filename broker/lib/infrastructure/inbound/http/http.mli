@@ -1,13 +1,13 @@
 (** Broker BC inbound HTTP routes.
 
-    Today exposes:
-      GET    /api/orders                    list all orders on the
-                                             broker.
-      GET    /api/orders/<client_order_id>  fetch one order by
-                                             caller-controlled id.
-      DELETE /api/orders/<client_order_id>  request cancellation by id.
-      GET    /api/exchanges                 list venues (MIC codes)
-                                             this broker can route to.
+    Exposes a single route today:
+      GET /api/exchanges  list venues (MIC codes) this broker can
+                          route to.
+
+    Order operations are no longer surfaced over HTTP. They flow
+    through the bus as placement-keyed commands; venue-native
+    handles are private to each ACL adapter and not addressable
+    from outside the BC.
 
     The handler is built once at the composition root with a
     {!Broker.client} port and registered with the core HTTP server

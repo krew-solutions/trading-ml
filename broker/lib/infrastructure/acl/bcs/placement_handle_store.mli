@@ -16,11 +16,7 @@ type t
 
 val create : unit -> t
 
-val record :
-  t ->
-  placement_id:int ->
-  client_order_id:string ->
-  [ `Ok | `Already_exists ]
+val record : t -> placement_id:int -> client_order_id:string -> [ `Ok | `Already_exists ]
 (** Records the linkage produced by a successful submit. Returns
     [`Already_exists] when [placement_id] is already mapped — a
     saga is expected to mint each placement_id once, so a

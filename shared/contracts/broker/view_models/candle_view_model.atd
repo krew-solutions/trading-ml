@@ -1,4 +1,10 @@
-(* Wire contract: broker/lib/application/view_models/candle_view_model.ml *)
+(* Wire contract: broker/lib/application/view_models/candle_view_model.ml
+   AND paper_broker/lib/application/view_models/candle_view_model.ml.
+
+   Shared by both BCs: paper_broker is broker's backtest substitute
+   and must speak the same wire shape on the bar feed. Generated
+   code is local to each BC's `*_view_models` library; only this
+   contract is shared. No code-level cross-BC dependency. *)
 
 type t = {
   ts : string;

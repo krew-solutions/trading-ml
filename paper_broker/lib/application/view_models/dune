@@ -6,9 +6,16 @@
  (preprocess (pps ppx_yojson_conv))
  (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
 
+; instrument / order_kind / candle view models — wire contracts
+; shared with broker BC. paper_broker is broker's backtest
+; substitute; the saga and the bar feed both demand byte-identical
+; wire shapes on these projections, so both BCs regenerate from
+; broker's .atd source of truth. Generated code stays local to
+; this library — no cross-BC code dependency.
+
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/view_models/instrument_view_model.atd))
+  (:atd %{project_root}/shared/contracts/broker/view_models/instrument_view_model.atd))
  (targets instrument_view_model_t.ml instrument_view_model_t.mli
           instrument_view_model_j.ml instrument_view_model_j.mli)
  (action
@@ -18,7 +25,7 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/view_models/order_kind_view_model.atd))
+  (:atd %{project_root}/shared/contracts/broker/view_models/order_kind_view_model.atd))
  (targets order_kind_view_model_t.ml order_kind_view_model_t.mli
           order_kind_view_model_j.ml order_kind_view_model_j.mli)
  (action
@@ -28,7 +35,7 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/paper_broker/view_models/candle_view_model.atd))
+  (:atd %{project_root}/shared/contracts/broker/view_models/candle_view_model.atd))
  (targets candle_view_model_t.ml candle_view_model_t.mli
           candle_view_model_j.ml candle_view_model_j.mli)
  (action

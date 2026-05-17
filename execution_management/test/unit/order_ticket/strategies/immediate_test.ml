@@ -15,7 +15,7 @@ let price s = Decimal.of_string s
 let intent_buy_100 () =
   let instrument =
     Core.Instrument.make ~ticker:(Core.Ticker.of_string "SBER")
-      ~venue:(Core.Mic.of_string "MISX") ~board:None ~isin:None
+      ~venue:(Core.Mic.of_string "MISX") ()
   in
   Values.Trade_intent.make ~book_id:"alpha" ~instrument ~side:Core.Side.Buy
     ~total_quantity:(qty "100")

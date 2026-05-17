@@ -1,23 +1,13 @@
 (** In-process test harness for the Execution_management BC's
-    Open_order_ticket process.
+    Open_order_ticket saga.
 
-    Boots the saga {!Engine} on top of an {!In_memory_store} and a
-    recording [dispatch] callback: every saga-emitted command is
-    appended to a list the Then-steps inspect. The harness mirrors
-    the production factory's setup with two simplifications: the
-    bus is replaced by direct {!Engine.on_event} calls (the
-    factory's role is to translate inbound bus messages into the
-    saga's [event] union, not to add behaviour), and the
-    kill-switch / rate-limit gate that lives between
-    [Trade_intent_approved] arrival and [Engine.start] is bypassed
-    — saga-internal transitions are the test subject here, not the
-    factory's gating policy.
-
-    The harness exposes one [start_saga] helper that mirrors the
-    factory's start sequence: [Engine.start] for the saga state,
-    plus a synchronous [Reserve] dispatch via {!reserve_for_start}.
-    Every later transition is driven by [push_*] helpers that wrap
-    {!Engine.on_event} on the appropriate event constructor. *)
+    Boots the saga {!Engine} on top of an {!In_memory_store} and
+    a recording [dispatch] callback: every saga-emitted command
+    is appended to a list the Then-steps inspect. Tests for the
+    broker-leg lifecycle live in [order_ticket_test.ml] and the
+    BDD scenarios — the harness here covers only the saga's
+    own responsibility (Reserve hand-off, Amount_reserved → Done,
+    Reservation_rejected → Compensated). *)
 
 module Pm = Execution_management_process_managers.Open_order_ticket_process
 module Inbound = Execution_management_external_integration_events
@@ -32,14 +22,6 @@ let fresh_ctx () =
   let engine = Pm.Engine.create ~store ~dispatch in
   { engine; dispatched }
 
-(** Mirror the factory's saga-start sequence: register the saga
-    instance and synchronously dispatch its first [Reserve] command.
-    Defaults match the inbound-IE shape — symbol, side and quantity
-    are the only fields the upstream Trade_intent_approved IE
-    carries. The price is a stand-in supplied by the harness; in
-    production the factory passes [ev.quantity] today (see the
-    in-line comment in [factory.ml]) — that placeholder is
-    orthogonal to saga semantics. *)
 let start_saga ctx ~correlation_id ~book_id ~symbol ~side ~quantity ~price =
   let payload = Pm.initial_payload ~book_id ~symbol ~side ~quantity in
   Pm.Engine.start ctx.engine ~correlation_id (Pm.Awaiting_reservation { payload });
@@ -82,32 +64,6 @@ let push_reservation_rejected ctx ~correlation_id ~symbol ~side ~quantity ~reaso
   Pm.Engine.on_event ctx.engine (Pm.Reservation_rejected ev);
   ctx
 
-let push_order_accepted ctx ~correlation_id ~reservation_id ~symbol:_ ~side:_ ~quantity:_
-    =
-  let ev : Inbound.Order_accepted_integration_event.t =
-    { correlation_id; placement_id = reservation_id }
-  in
-  Pm.Engine.on_event ctx.engine (Pm.Order_accepted ev);
-  ctx
-
-let push_order_rejected ctx ~correlation_id ~reservation_id ~reason =
-  let ev : Inbound.Order_rejected_integration_event.t =
-    { correlation_id; placement_id = reservation_id; reason }
-  in
-  Pm.Engine.on_event ctx.engine (Pm.Order_rejected ev);
-  ctx
-
-let push_order_unreachable ctx ~correlation_id ~reservation_id ~reason =
-  let ev : Inbound.Order_unreachable_integration_event.t =
-    { correlation_id; placement_id = reservation_id; reason }
-  in
-  Pm.Engine.on_event ctx.engine (Pm.Order_unreachable ev);
-  ctx
-
-(** Saga snapshot helpers — the Then-steps assert against these
-    rather than against private state. *)
 let saga_state ctx ~correlation_id = Pm.Engine.get ctx.engine ~correlation_id
-
 let active_count ctx = Pm.Engine.active_count ctx.engine
-
 let dispatched_commands ctx = List.rev !(ctx.dispatched)

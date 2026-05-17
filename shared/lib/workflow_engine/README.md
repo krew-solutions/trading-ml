@@ -41,7 +41,7 @@ Five paths through the state machine: one happy, four compensation.
 ### 1. Workflow definition (pure state machine)
 
 ```ocaml
-(* process_managers/open_order_ticket_process.ml *)
+(* process_managers/order_process_manager.ml *)
 
 open Core
 
@@ -91,7 +91,7 @@ module Definition = struct
     | Release of Account_commands.Release_command.t
     | Publish_status of { correlation_id : string; status : status_event }
 
-  let name = "open_order_ticket"
+  let name = "order_process_manager"
 
   let correlation_of_event = function
     | Amount_reserved e -> e.correlation_id
@@ -175,16 +175,16 @@ fall-through cover the entire state machine.
 (* bin/main.ml *)
 
 module Engine =
-  Workflow_engine.Make (Open_order_ticket_process.Definition) (Workflow_engine.In_memory_store)
+  Workflow_engine.Make (Order_process_manager.Definition) (Workflow_engine.In_memory_store)
 
-let setup_open_order_ticket_saga
+let setup_order_process_manager
     ~submit_bus ~release_bus
     ~events_amount_reserved ~events_reservation_rejected
     ~events_order_accepted ~events_order_rejected ~events_order_unreachable
     ~publish_status_sse =
   let store = Workflow_engine.In_memory_store.create () in
   let dispatch = function
-    | Open_order_ticket_process.Definition.Submit cmd ->
+    | Order_process_manager.Definition.Submit cmd ->
         Bus.Command_bus.send submit_bus cmd
     | Release cmd ->
         Bus.Command_bus.send release_bus cmd
@@ -221,7 +221,7 @@ let make_handler ~reserve_bus ~saga_engine ~gen_correlation_id ~market_price =
       let correlation_id = gen_correlation_id () in   (* UUID v4 *)
       (* 1. Open the saga instance with the original payload *)
       Engine.start saga_engine ~correlation_id
-        (Open_order_ticket_process.Definition.Awaiting_reservation { payload = {
+        (Order_process_manager.Definition.Awaiting_reservation { payload = {
           instrument = req.instrument; side = req.side;
           quantity = req.quantity; kind = req.kind; tif = req.tif } });
       (* 2. Dispatch Reserve_command, threading correlation_id *)
@@ -241,14 +241,14 @@ let make_handler ~reserve_bus ~saga_engine ~gen_correlation_id ~market_price =
 ### 4. Tests against the pure transition
 
 ```ocaml
-(* test/unit/open_order_ticket_process_test.ml *)
+(* test/unit/order_process_manager_test.ml *)
 
 let cid = "01HX-TEST"
 let payload = { instrument = ...; side = Buy; quantity = d 10; ... }
 
 let test_amount_reserved_submits_and_publishes () =
   let s = Awaiting_reservation { payload } in
-  let s', cmds = Open_order_ticket_process.Definition.transition s
+  let s', cmds = Order_process_manager.Definition.transition s
     (Amount_reserved { reservation_id = 42; correlation_id = cid; ... })
   in
   Alcotest.(check ...) "state moved to submitted"
@@ -258,7 +258,7 @@ let test_amount_reserved_submits_and_publishes () =
 
 let test_order_rejected_releases_reservation () =
   let s = Submitted { payload; reservation_id = 42 } in
-  let s', cmds = Open_order_ticket_process.Definition.transition s
+  let s', cmds = Order_process_manager.Definition.transition s
     (Order_rejected { reservation_id = 42; correlation_id = cid;
                       reason = "no liquidity" })
   in
@@ -270,7 +270,7 @@ let test_order_rejected_releases_reservation () =
 (* Idempotency: a late duplicate event is a no-op *)
 let test_late_amount_reserved_in_submitted_is_noop () =
   let s = Submitted { payload; reservation_id = 42 } in
-  let s', cmds = Open_order_ticket_process.Definition.transition s
+  let s', cmds = Order_process_manager.Definition.transition s
     (Amount_reserved { reservation_id = 42; correlation_id = cid; ... })
   in
   Alcotest.(check ...) "state unchanged" s s';
@@ -290,7 +290,7 @@ let test_late_amount_reserved_in_submitted_is_noop () =
 3. **Idempotency is a pattern-match concern.** Late or duplicate
    events for already-advanced state return `(state, [])`; the
    engine additionally drops events for unknown correlation_ids.
-4. **Bus wiring is one place** — `setup_open_order_ticket_saga` in the
+4. **Bus wiring is one place** — `setup_order_process_manager` in the
    composition root, five subscription lines. Everything else is
    pure code.
 5. **HTTP entry shrinks to mechanical.** `Engine.start` +

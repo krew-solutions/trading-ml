@@ -1,6 +1,6 @@
 (** Execution_management BC composition root.
 
-    Wires up the {!Open_order_ticket_process} Process Manager against the bus,
+    Wires up the {!Order_process_manager} Process Manager against the bus,
     holds the kill-switch and rate-limit aggregates, subscribes to
     the upstream gate / saga-feeding integration events, and exposes
     an HTTP handler for the trading host to mount. *)

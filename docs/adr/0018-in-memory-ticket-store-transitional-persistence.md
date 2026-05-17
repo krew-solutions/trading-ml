@@ -25,7 +25,7 @@ that is on the critical path for the current milestone (six
 strategies running end-to-end on a single host).
 
 A precedent exists. `Workflow_engine.In_memory_store` has
-served the saga layer since `Open_order_ticket_process` landed
+served the saga layer since `Order_process_manager` landed
 and is the canonical shape for transitional persistence in this
 codebase.
 

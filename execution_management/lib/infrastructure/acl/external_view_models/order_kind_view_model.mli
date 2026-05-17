@@ -1,5 +1,5 @@
 (** Inbound DTO mirror of broker's [Order_kind_view_model]. Used by
-    {!Open_order_ticket_process}'s state — the saga needs the kind to forward
+    {!Order_process_manager}'s state — the saga needs the kind to forward
     into the {!Submit_order_command} once the reservation lands.
 
     Wire shape regenerated from the producer's .atd contract. *)

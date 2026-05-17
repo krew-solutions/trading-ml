@@ -1,5 +1,5 @@
 (** Open-OrderTicket command. Invoked in-process by the
-    {!Open_order_ticket_process} saga on its terminal [Done]
+    {!Order_process_manager} saga on its terminal [Done]
     transition (the OMS→EMS hand-off per ADR-0017).
 
     Carries the saga's payload verbatim plus the

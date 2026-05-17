@@ -9,7 +9,7 @@
     own responsibility (Reserve hand-off, Amount_reserved → Done,
     Reservation_rejected → Compensated). *)
 
-module Pm = Execution_management_process_managers.Open_order_ticket_process
+module Pm = Execution_management_process_managers.Order_process_manager
 module Inbound = Execution_management_external_integration_events
 module Iqr = Execution_management_external_view_models
 

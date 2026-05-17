@@ -5,7 +5,7 @@
 
     A validation failure of the command itself produces no outbound
     IE — invalid wire input is a programming error in the upstream BC,
-    not a saga step. The {!Open_order_ticket_process} Process Manager will time
+    not a saga step. The {!Order_process_manager} Process Manager will time
     out such instances rather than receiving an explicit ack. *)
 
 module Trade_intent_approved =

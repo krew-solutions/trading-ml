@@ -2,7 +2,7 @@
     execution intent through its slicing lifecycle.
 
     One ticket ⇔ one cash reservation (the OMS-layer saga
-    [Open_order_ticket_process] hands off on [Amount_reserved]).
+    [Order_process_manager] hands off on [Amount_reserved]).
     The embedded {!Strategies.Strategy.t} decides HOW to slice the
     intent into broker-bound placements; the aggregate enforces
     the global invariants:

@@ -79,7 +79,7 @@ module Definition = struct
   type nonrec event = event
   type nonrec command = command
 
-  let name = "open_order_ticket"
+  let name = "order_process_manager"
 
   let correlation_of_event = function
     | Amount_reserved e -> e.correlation_id

@@ -9,7 +9,7 @@
 type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
 
 type t = {
-  correlation_id <doc text="Saga-instance identifier echoed verbatim from Reserve_command.t.correlation_id. Allows the Open_order_ticket_process Process Manager in execution_management to route this ack back to the originating instance."> : string;
+  correlation_id <doc text="Saga-instance identifier echoed verbatim from Reserve_command.t.correlation_id. Allows the Order_process_manager Process Manager in execution_management to route this ack back to the originating instance."> : string;
 
   reservation_id : int;
 

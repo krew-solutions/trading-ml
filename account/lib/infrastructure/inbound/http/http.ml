@@ -115,7 +115,7 @@ let make_handler ~dispatch_reserve ~market_price : Inbound_http.Route.handler =
       let correlation_id = Correlation_id.to_string (Correlation_id.generate ()) in
       dispatch_reserve (to_reserve_command ~correlation_id market_price req);
       (* The cid is the saga-instance key minted here — the future
-         Open_order_ticket_process Process Manager will key its instance store
+         Order_process_manager Process Manager will key its instance store
          off this id, and an SSE channel filtered by cid will surface
          the eventual outcome to the client. *)
       Some

@@ -7,7 +7,7 @@
     created by {!Reserve_command.t} on the same id.
 
     [correlation_id] propagates the saga-instance identifier from
-    the {!Open_order_ticket_process} Process Manager so audit / SSE can
+    the {!Order_process_manager} Process Manager so audit / SSE can
     attribute the compensating release back to the originating
     saga; it is not consumed by the Account aggregate itself.
 

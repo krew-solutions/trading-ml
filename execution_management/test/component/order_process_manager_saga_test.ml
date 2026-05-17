@@ -1,4 +1,4 @@
-(** BDD specification for the Open_order_ticket saga.
+(** BDD specification for the Order_process_manager saga.
 
     The saga's narrowed responsibility (per ADR-0017): take an
     approved trade intent, dispatch a Reserve to Account, and on
@@ -9,7 +9,7 @@
     is OrderTicket's concern — see order_ticket_e2e_test.ml. *)
 
 module Gherkin = Gherkin_edsl
-module Pm = Execution_management_process_managers.Open_order_ticket_process
+module Pm = Execution_management_process_managers.Order_process_manager
 open Test_harness
 
 let cid = "saga-component-A"
@@ -131,7 +131,7 @@ let unrelated_correlation_id_does_not_advance_other_sagas =
     ]
 
 let feature =
-  Gherkin.feature "Open_order_ticket saga"
+  Gherkin.feature "Order_process_manager saga"
     [
       happy_path;
       reservation_rejected_compensates;

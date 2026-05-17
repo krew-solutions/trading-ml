@@ -20,7 +20,7 @@
 type order_kind_view_model <ocaml from="Order_kind_view_model" t="t"> = abstract
 
 type t = {
-  correlation_id <doc text="Saga-instance identifier propagated by Open_order_ticket_process from Account_commands.Reserve_command.t. Echoed verbatim by every outbound IE (Order_accepted_integration_event.t, Order_rejected_integration_event.t, Order_unreachable_integration_event.t) so the saga can route the venue's response back to the originating instance."> : string;
+  correlation_id <doc text="Saga-instance identifier propagated by Order_process_manager from Account_commands.Reserve_command.t. Echoed verbatim by every outbound IE (Order_accepted_integration_event.t, Order_rejected_integration_event.t, Order_unreachable_integration_event.t) so the saga can route the venue's response back to the originating instance."> : string;
 
   placement_id : int;
 

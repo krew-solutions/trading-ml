@@ -11,7 +11,7 @@
     - kill-switch / rate-limit → {!Execution_management.Kill_switch}
       / {!Execution_management.Rate_limit};
     - reservation lifecycle →
-      {!Execution_management_process_managers.Open_order_ticket_process};
+      {!Execution_management_process_managers.Order_process_manager};
     - position sizing → {!Portfolio_management.Sizing} (via PM's
       alpha-driven domain-event handler);
     - hard pre-trade gate → {!Pre_trade_risk.Assessment}.

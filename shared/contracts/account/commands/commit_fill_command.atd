@@ -1,7 +1,7 @@
 (* Wire contract: account/lib/application/commands/commit_fill_command.ml *)
 
 type t = {
-  correlation_id <doc text="Saga-instance identifier echoed verbatim from the upstream Reserve_command. The Open_order_ticket_process in execution_management uses the value as the saga routing key; Account echoes it onto every outbound IE produced from this command so downstream consumers can correlate the position / cash change with the originating intent."> : string;
+  correlation_id <doc text="Saga-instance identifier echoed verbatim from the upstream Reserve_command. The Order_process_manager in execution_management uses the value as the saga routing key; Account echoes it onto every outbound IE produced from this command so downstream consumers can correlate the position / cash change with the originating intent."> : string;
 
   reservation_id <doc text="The reservation id Account minted in response to the original Reserve_command, echoed through the saga and sent back on the fill. Resolves the lookup performed by Account.Portfolio.commit_fill; on absence the aggregate returns Error (Reservation_not_found _) and the application layer (factory) decides what to do (today: silent drop, consistent with the same policy applied to account.release-command)."> : int;
 

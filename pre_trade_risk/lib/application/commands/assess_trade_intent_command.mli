@@ -12,7 +12,7 @@
 
     Outcome flows back through {!Trade_intent_approved_integration_event}
     or {!Trade_intent_rejected_integration_event} on the BC's outbound
-    bus; the {!Open_order_ticket_process} Process Manager in [execution_management]
+    bus; the {!Order_process_manager} Process Manager in [execution_management]
     keys both by [correlation_id].
 
     The wire shape is generated from

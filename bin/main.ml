@@ -574,7 +574,7 @@ let cmd_serve args =
   in
   (* After M5: Strategy is alpha-only. Paper's fill events no longer
      have a destination on the Strategy side — order placement runs
-     through the Open_order_ticket_process saga in execution_management.
+     through the Order_process_manager saga in execution_management.
      Account/Broker bus consumers for Reserve/Submit aren't wired
      yet, so end-to-end traffic is still inert; the wiring is
      structurally complete and waits for those final hops. *)

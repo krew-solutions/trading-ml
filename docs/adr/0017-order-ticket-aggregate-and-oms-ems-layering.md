@@ -7,7 +7,7 @@
 ## Context
 
 `execution_management` was originally a single layer: the
-`Open_order_ticket_process` saga reserved cash with Account,
+`Order_process_manager` saga reserved cash with Account,
 then drove the broker leg through fills and rejections directly.
 This conflated two concerns at very different levels of detail:
 
@@ -44,7 +44,7 @@ Inside the same Bounded Context:
 ```
 execution_management
 ├─ OMS layer
-│  └─ Open_order_ticket_process (saga)
+│  └─ Order_process_manager (saga)
 │       Trade_intent_approved → Reserve → {Done | Compensated}
 │
 └─ EMS layer

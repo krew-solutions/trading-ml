@@ -65,7 +65,7 @@ let init ~(intent : Values.Trade_intent.t)
   (state, Decision.empty)
 
 let market_submit qty : Decision.submit_request =
-  { quantity = qty; kind = Values.Order_kind.Market; tif = Values.Tif.Day }
+  { quantity = qty; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
 
 let on_event (state : state) (input : Input.t) ~now:_ : state * Decision.t =
   if state.failed then (state, Decision.empty)

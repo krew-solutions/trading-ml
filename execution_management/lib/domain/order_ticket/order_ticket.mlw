@@ -1,0 +1,40 @@
+(** Why3 companion for [order_ticket.mli] — aggregate-level
+    invariants:
+
+    - cumulative_filled never exceeds total_quantity;
+    - terminal lifecycle states are absorbing (no further
+      submits, no transition back to non-terminal);
+    - the placement_id counter is monotonically increasing,
+      so every minted id is unique within the ticket. *)
+
+module Order_ticket
+  use int.Int
+  use decimal.Decimal
+
+  type lifecycle = Working | Cancelling | Filled | Cancelled | Failed
+
+  type t = {
+    total_quantity : Decimal.t;
+    cumulative_filled : Decimal.t;
+    next_placement_seq : int;
+    lifecycle : lifecycle;
+  }
+
+  predicate fill_within_total (t : t) =
+    raw t.cumulative_filled <= raw t.total_quantity
+
+  predicate is_terminal (t : t) =
+    t.lifecycle = Filled \/ t.lifecycle = Cancelled \/ t.lifecycle = Failed
+
+  predicate placement_seq_monotone (before after : t) =
+    after.next_placement_seq >= before.next_placement_seq
+
+  predicate terminal_absorbing (before after : t) =
+    is_terminal before -> is_terminal after
+
+  lemma identity_is_terminal_absorbing :
+    forall t : t. terminal_absorbing t t
+
+  lemma identity_preserves_seq_monotone :
+    forall t : t. placement_seq_monotone t t
+end

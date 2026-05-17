@@ -18,7 +18,7 @@ let chunk_size ~visible_qty ~remaining =
   if Decimal.compare remaining visible_qty <= 0 then remaining else visible_qty
 
 let market_submit qty : Decision.submit_request =
-  { quantity = qty; kind = Values.Order_kind.Market; tif = Values.Tif.Day }
+  { quantity = qty; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
 
 let init ~(intent : Values.Trade_intent.t) ~(params : Values.Iceberg_params.t)
     ~now:_ =

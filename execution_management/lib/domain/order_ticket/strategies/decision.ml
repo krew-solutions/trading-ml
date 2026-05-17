@@ -1,7 +1,7 @@
 type submit_request = {
   quantity : Decimal.t;
-  kind : Values.Order_kind.t;
-  tif : Values.Tif.t;
+  kind : Placement.Values.Order_kind.t;
+  tif : Placement.Values.Tif.t;
 }
 
 type terminal = Continue | Completed | Failed of string

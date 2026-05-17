@@ -14,7 +14,7 @@ type state = {
 let init ~(intent : Values.Trade_intent.t) ~now:_ =
   let state = { total_quantity = intent.total_quantity; lifecycle = Pending } in
   let submit : Decision.submit_request =
-    { quantity = intent.total_quantity; kind = Values.Order_kind.Market; tif = Values.Tif.Day }
+    { quantity = intent.total_quantity; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
   in
   let decision : Decision.t =
     { submit = [ submit ]; cancel = []; terminal = Decision.Continue }

@@ -28,7 +28,7 @@ let init ~(intent : Values.Trade_intent.t) ~(params : Values.Pov_params.t)
   (state, Decision.empty)
 
 let market_submit qty : Decision.submit_request =
-  { quantity = qty; kind = Values.Order_kind.Market; tif = Values.Tif.Day }
+  { quantity = qty; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
 
 let remaining state = Decimal.sub state.total_quantity state.emitted_so_far
 

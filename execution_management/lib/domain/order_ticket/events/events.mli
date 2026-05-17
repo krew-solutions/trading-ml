@@ -1,0 +1,13 @@
+(** Re-export module for the OrderTicket aggregate's Domain Events. *)
+
+module Ticket_opened = Ticket_opened
+module Placement_dispatched = Placement_dispatched
+module Placement_acknowledged = Placement_acknowledged
+module Placement_filled = Placement_filled
+module Placement_rejected = Placement_rejected
+module Placement_unreachable = Placement_unreachable
+module Placement_cancelled = Placement_cancelled
+module Ticket_cancelling_started = Ticket_cancelling_started
+module Ticket_completed = Ticket_completed
+module Ticket_cancelled = Ticket_cancelled
+module Ticket_failed = Ticket_failed

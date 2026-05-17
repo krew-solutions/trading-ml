@@ -28,6 +28,10 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0013](0013-clock-injection.md) | Time injection: Domain takes timestamps, Application reads from injected Clock | Accepted | 2026-05-14 |
 | [0014](0014-atd-wire-contracts.md) | ATD-generated wire contracts for cross-BC DTOs | Accepted | 2026-05-16 |
 | [0015](0015-broker-domain-model.md) | Broker domain model | Accepted | 2026-05-16 |
+| [0016](0016-execution-strategy-abstraction.md) | Execution-strategy abstraction (closed variant) | Accepted | 2026-05-17 |
+| [0017](0017-order-ticket-aggregate-and-oms-ems-layering.md) | OrderTicket aggregate + OMS/EMS layering inside execution_management | Accepted | 2026-05-17 |
+| [0018](0018-in-memory-ticket-store-transitional-persistence.md) | In-memory ticket store as transitional persistence | Accepted | 2026-05-17 |
+| [0019](0019-execution-directive-provenance.md) | execution_directive provenance: PM authors, PTR passes through, EMS consumes | Accepted | 2026-05-17 |
 
 ## Template
 

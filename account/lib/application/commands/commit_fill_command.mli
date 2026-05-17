@@ -2,11 +2,9 @@
     that was earmarked under [reservation_id] using the broker's
     actual fill numbers."
 
-    Triggered by an inbound
-    {!Account_external_integration_events.Order_filled_integration_event.t}
-    arriving on the [in-memory://broker.order-filled] topic, which
-    the saga-driven paper / real broker emits when a venue (or the
-    matching simulator) reports a fill. The handler updates
+    Dispatched by the [order_management] saga on every
+    [Order_ticket_fill_recorded] integration event from
+    [execution_management] (ADR 0022). The handler updates
     {!Account.Portfolio.t} via {!Account.Portfolio.commit_fill}
     and the workflow publishes
     {!Account_integration_events.Position_changed_integration_event}

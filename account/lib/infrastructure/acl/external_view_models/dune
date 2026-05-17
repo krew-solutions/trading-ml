@@ -8,16 +8,6 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/broker/view_models/instrument_view_model.atd))
- (targets instrument_view_model_t.ml instrument_view_model_t.mli
-          instrument_view_model_j.ml instrument_view_model_j.mli)
- (action
-  (progn
-   (run atdgen -t -o instrument_view_model %{atd})
-   (run atdgen -j -o instrument_view_model %{atd}))))
-
-(rule
- (deps
   (:atd %{project_root}/shared/contracts/broker/view_models/order_kind_view_model.atd))
  (targets order_kind_view_model_t.ml order_kind_view_model_t.mli
           order_kind_view_model_j.ml order_kind_view_model_j.mli)
@@ -25,13 +15,3 @@
   (progn
    (run atdgen -t -o order_kind_view_model %{atd})
    (run atdgen -j -o order_kind_view_model %{atd}))))
-
-(rule
- (deps
-  (:atd %{project_root}/shared/contracts/broker/view_models/order_view_model.atd))
- (targets order_view_model_t.ml order_view_model_t.mli
-          order_view_model_j.ml order_view_model_j.mli)
- (action
-  (progn
-   (run atdgen -t -o order_view_model %{atd})
-   (run atdgen -j -o order_view_model %{atd}))))

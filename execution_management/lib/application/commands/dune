@@ -1,0 +1,9 @@
+(library
+ (name execution_management_commands)
+ (public_name trading.execution_management.commands)
+ (libraries
+  core
+  decimal
+  rop
+  execution_management
+  execution_management_ports))

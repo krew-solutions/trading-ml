@@ -29,6 +29,14 @@ type command =
       quantity : string;
       price : string;
     }
+  | Dispatch_open_ticket of {
+      reservation_id : int;
+      correlation_id : string;
+      book_id : string;
+      symbol : string;
+      side : string;
+      quantity : string;
+    }
 
 let initial_payload ~book_id ~symbol ~side ~quantity =
   {
@@ -66,8 +74,19 @@ module Definition = struct
 
   let transition (s : state) (e : event) : state * command list =
     match (s, e) with
-    | Awaiting_reservation _, Amount_reserved ev ->
-        (Done { reservation_id = ev.reservation_id }, [])
+    | Awaiting_reservation { payload }, Amount_reserved ev ->
+        let open_cmd =
+          Dispatch_open_ticket
+            {
+              reservation_id = ev.reservation_id;
+              correlation_id = ev.correlation_id;
+              book_id = payload.book_id;
+              symbol = payload.symbol;
+              side = payload.side;
+              quantity = payload.quantity;
+            }
+        in
+        (Done { reservation_id = ev.reservation_id }, [ open_cmd ])
     | Awaiting_reservation _, Reservation_rejected ev ->
         (Compensated { reason = "rejected_by_account: " ^ ev.reason }, [])
     (* Late / duplicate events for already-terminated states: silently

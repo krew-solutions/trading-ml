@@ -63,8 +63,12 @@ type event =
       .t
 
 (** Saga-local command union. The factory's [dispatch] closure
-    serialises each variant onto the appropriate bus topic — today
-    only the Account-bound Reserve survives at this level. *)
+    routes each variant — [Dispatch_reserve] goes out over the
+    bus to Account; [Dispatch_open_ticket] is invoked
+    in-process against
+    {!Open_order_ticket_command_workflow.execute} (per ADR-0017's
+    OMS→EMS hand-off rule — a model inside a BC cannot send a
+    Command to itself over its own bus). *)
 type command =
   | Dispatch_reserve of {
       correlation_id : string;
@@ -73,6 +77,18 @@ type command =
       quantity : string;
       price : string;
     }
+  | Dispatch_open_ticket of {
+      reservation_id : int;
+      correlation_id : string;
+      book_id : string;
+      symbol : string;
+      side : string;
+      quantity : string;
+    }
+      (** Emitted on transition from [Awaiting_reservation] to
+          [Done] when the reservation lands. The factory routes
+          this in-process to the OrderTicket-opening command
+          workflow; the saga itself does not invoke domain code. *)
 
 module Definition :
   Workflow_engine.WORKFLOW

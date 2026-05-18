@@ -67,6 +67,13 @@ let parse_decimal_string_field json key =
       with Invalid_argument m -> Error (Command_error.Invalid_payload (key ^ ": " ^ m)))
   | _ -> Error (Command_error.Invalid_payload (key ^ ": missing or wrong type"))
 
+let parse_string_field json key =
+  let open Yojson.Safe.Util in
+  match member key json with
+  | `String s when s <> "" -> Ok s
+  | `String _ -> Error (Command_error.Invalid_payload (key ^ ": empty string"))
+  | _ -> Error (Command_error.Invalid_payload (key ^ ": missing or wrong type"))
+
 let parse_float_list_field json key =
   let open Yojson.Safe.Util in
   match member key json with
@@ -128,7 +135,8 @@ let parse_directive (d : Open_order_ticket_command.directive) :
   | "POV" ->
       let* json = require_params "POV requires params" in
       let* participation_rate = parse_float_field json "participation_rate" in
-      (try Ok (Values.Execution_directive.Pov (Values.Pov_params.make ~participation_rate))
+      let* timeframe = parse_string_field json "timeframe" in
+      (try Ok (Values.Execution_directive.Pov (Values.Pov_params.make ~participation_rate ~timeframe))
        with Invalid_argument m -> Error (make_invalid ("POV params: " ^ m)))
   | "ICEBERG" ->
       let* json = require_params "ICEBERG requires params" in

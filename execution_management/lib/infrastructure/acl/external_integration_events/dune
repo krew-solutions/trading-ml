@@ -111,3 +111,15 @@
   (progn
    (run atdgen -t -o trade_intent_approved_integration_event %{atd})
    (run atdgen -j -o trade_intent_approved_integration_event %{atd}))))
+
+; Broker bar feed (OHLCV) — fanned by Bar_updated_integration_event_handler
+; into the Volume_feed and Market_data adapters.
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/bar_updated_integration_event.atd))
+ (targets bar_updated_integration_event_t.ml bar_updated_integration_event_t.mli
+          bar_updated_integration_event_j.ml bar_updated_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o bar_updated_integration_event %{atd})
+   (run atdgen -j -o bar_updated_integration_event %{atd}))))

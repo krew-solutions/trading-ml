@@ -49,13 +49,24 @@ let parses_kind_vwap () =
 
 let parses_kind_pov () =
   let d : Cmd.directive =
-    { kind = "POV"; params = Some {|{"participation_rate": 0.2}|} }
+    { kind = "POV";
+      params = Some {|{"participation_rate": 0.2, "timeframe": "1m"}|} }
   in
   match Handler.resolve_directive (Some d) with
   | Ok (Values.Execution_directive.Pov p) ->
-      Alcotest.(check (float 0.0001)) "rate" 0.2 p.participation_rate
+      Alcotest.(check (float 0.0001)) "rate" 0.2 p.participation_rate;
+      Alcotest.(check string) "timeframe" "1m" p.timeframe
   | Ok _ -> Alcotest.fail "expected Pov"
   | Error e -> Alcotest.failf "unexpected error: %s" (Cmd_err.to_string e)
+
+let rejects_pov_missing_timeframe () =
+  let d : Cmd.directive =
+    { kind = "POV"; params = Some {|{"participation_rate": 0.2}|} }
+  in
+  match Handler.resolve_directive (Some d) with
+  | Ok _ -> Alcotest.fail "expected Invalid_payload"
+  | Error (Cmd_err.Invalid_payload _) -> ()
+  | Error e -> Alcotest.failf "wrong error: %s" (Cmd_err.to_string e)
 
 let parses_kind_iceberg () =
   let d : Cmd.directive =
@@ -103,7 +114,8 @@ let rejects_twap_malformed_json () =
 
 let rejects_pov_out_of_range () =
   let d : Cmd.directive =
-    { kind = "POV"; params = Some {|{"participation_rate": 5.0}|} }
+    { kind = "POV";
+      params = Some {|{"participation_rate": 5.0, "timeframe": "1m"}|} }
   in
   match Handler.resolve_directive (Some d) with
   | Ok _ -> Alcotest.fail "expected Invalid_payload"
@@ -132,4 +144,6 @@ let tests =
       rejects_twap_malformed_json;
     Alcotest.test_case "POV rate > 1.0 is rejected" `Quick
       rejects_pov_out_of_range;
+    Alcotest.test_case "POV without timeframe is rejected" `Quick
+      rejects_pov_missing_timeframe;
   ]

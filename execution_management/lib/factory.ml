@@ -3,6 +3,7 @@ module Outbound_ie = Execution_management_integration_events
 module Cmds = Execution_management_commands
 module Ports = Execution_management_ports
 module Persistence = Execution_management_persistence
+module Feeds = Execution_management_feeds
 module View_models = Execution_management_view_models
 module Queries = Execution_management_queries
 module Ot = Execution_management.Order_ticket
@@ -129,12 +130,41 @@ let build ~bus ~now : t =
     Option.value (Hashtbl.find_opt correlation_by_ticket tid) ~default:""
   in
 
-  let publish_aggregate_event (ev : Ot.event) : unit =
+  (* Volume-feed and market-data adapters. The single subscriber
+     on [broker.bar-updated] fans every bar into both ports — POV
+     attaches to the volume feed at Ticket_opened; the market-data
+     adapter is live but currently has no domain consumer (kept
+     ready for mark-to-market / adaptive-strategy follow-ups). *)
+  let volume_feed = Feeds.Broker_volume_feed.create () in
+  let market_data = Feeds.Broker_market_data.create () in
+  let volume_subscription_by_ticket
+      : (int, Feeds.Broker_volume_feed.subscription) Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let detach_volume_subscription tid =
+    match Hashtbl.find_opt volume_subscription_by_ticket tid with
+    | None -> ()
+    | Some sub ->
+        Feeds.Broker_volume_feed.unsubscribe volume_feed sub;
+        Hashtbl.remove volume_subscription_by_ticket tid
+  in
+
+  let rec publish_aggregate_event (ev : Ot.event) : unit =
     match ev with
     | Ev_ticket_opened e ->
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         Hashtbl.replace ticket_intent tid e.intent;
         Hashtbl.replace reservation_by_ticket tid e.reservation_id;
+        (match e.directive with
+        | Ot.Values.Execution_directive.Pov params ->
+            let sub =
+              Feeds.Broker_volume_feed.subscribe volume_feed
+                ~instrument:e.intent.instrument
+                ~timeframe:params.timeframe
+                ~on_bar:(fun bar -> dispatch_volume_bar ~ticket_id:tid bar)
+            in
+            Hashtbl.replace volume_subscription_by_ticket tid sub
+        | _ -> ());
         publish_ticket_opened
           (Outbound_ie.Order_ticket_opened_integration_event.of_domain
              ~correlation_id:(correlation_for tid) e)
@@ -184,6 +214,7 @@ let build ~bus ~now : t =
         publish_ticket_failed
           (Outbound_ie.Order_ticket_failed_integration_event.of_domain
              ~correlation_id e);
+        detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
         Hashtbl.remove reservation_by_ticket tid
@@ -193,6 +224,7 @@ let build ~bus ~now : t =
         publish_ticket_cancelled
           (Outbound_ie.Order_ticket_cancelled_integration_event.of_domain
              ~correlation_id e);
+        detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
         Hashtbl.remove reservation_by_ticket tid
@@ -202,6 +234,7 @@ let build ~bus ~now : t =
         publish_ticket_completed
           (Outbound_ie.Order_ticket_completed_integration_event.of_domain
              ~correlation_id e);
+        detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
         Hashtbl.remove reservation_by_ticket tid
@@ -220,6 +253,21 @@ let build ~bus ~now : t =
     | Ev_placement_acknowledged _ | Ev_placement_rejected _
     | Ev_placement_unreachable _ | Ev_placement_cancelled _ ->
         ()
+  and dispatch_volume_bar ~ticket_id (bar : Ot.Values.Volume_bar.t) =
+    with_lock (fun () ->
+        let cmd : Cmds.Ingest_volume_bar_command.t =
+          {
+            ticket_id;
+            bar_ts = bar.ts;
+            bar_volume = Decimal.to_string bar.volume;
+          }
+        in
+        let _ =
+          Cmds.Ingest_volume_bar_command_workflow.execute
+            ~store:ticket_store_module ~store_handle:ticket_store
+            ~publish:publish_aggregate_event ~now cmd
+        in
+        ())
   in
 
   let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
@@ -298,6 +346,22 @@ let build ~bus ~now : t =
         Inbound.Order_cancelled_integration_event_handler.handle
           ~store:ticket_store_module ~store_handle:ticket_store
           ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
+  in
+  (* Broker bar feed → fan-out to volume_feed and market_data
+     adapters (ADR 0023). One bus subscription, two ports. *)
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume ~uri:"in-memory://broker.bar-updated"
+         ~group:"execution-management-bar-feed"
+         ~t_of_yojson:Inbound.Bar_updated_integration_event.t_of_yojson)
+      (fun ev ->
+        Inbound.Bar_updated_integration_event_handler.handle
+          ~deliver_volume_bar:(fun ~instrument ~timeframe ~bar ->
+            Feeds.Broker_volume_feed.deliver volume_feed ~instrument
+              ~timeframe ~bar)
+          ~deliver_market_data:(fun ~instrument ~quote ->
+            Feeds.Broker_market_data.deliver market_data ~instrument ~quote)
+          ev)
   in
   let get_order_ticket ticket_id : Yojson.Safe.t option =
     let q : Queries.Get_order_ticket_query.t = { ticket_id } in

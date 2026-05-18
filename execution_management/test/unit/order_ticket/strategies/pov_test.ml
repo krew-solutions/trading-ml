@@ -21,7 +21,7 @@ let volume_bar ~ts ~vol =
 
 let test_first_volume_bar_emits_proportional_slice () =
   let intent = intent_total "1000" in
-  let params = Values.Pov_params.make ~participation_rate:0.20 in
+  let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let _state', decision =
     Pov.on_event state
@@ -34,7 +34,7 @@ let test_first_volume_bar_emits_proportional_slice () =
 
 let test_no_volume_no_emission () =
   let intent = intent_total "1000" in
-  let params = Values.Pov_params.make ~participation_rate:0.20 in
+  let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let _state, decision = Pov.init ~intent ~params ~now:0L in
   Alcotest.(check int) "no submit at init (no volume yet)" 0
     (List.length decision.submit)
@@ -43,7 +43,7 @@ let test_cumulative_pov_respects_rate () =
   (* observed = 1000 → emit 200; observed = 1500 → cumulative target 300;
      already emitted 200, so emit 100 more. *)
   let intent = intent_total "1000" in
-  let params = Values.Pov_params.make ~participation_rate:0.20 in
+  let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let state, _ =
     Pov.on_event state
@@ -62,7 +62,7 @@ let test_emission_capped_by_remaining () =
   (* Total intent 100, rate 50%, volume 1000 → would emit 500 but
      capped at remaining 100. *)
   let intent = intent_total "100" in
-  let params = Values.Pov_params.make ~participation_rate:0.50 in
+  let params = Values.Pov_params.make ~participation_rate:0.50 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let _state', decision =
     Pov.on_event state
@@ -74,7 +74,7 @@ let test_emission_capped_by_remaining () =
 
 let test_tick_is_ignored () =
   let intent = intent_total "1000" in
-  let params = Values.Pov_params.make ~participation_rate:0.20 in
+  let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let _state', decision =
     Pov.on_event state (Input.Tick { now = 1L }) ~now:1L
@@ -84,7 +84,7 @@ let test_tick_is_ignored () =
 
 let test_completes_when_intent_filled () =
   let intent = intent_total "100" in
-  let params = Values.Pov_params.make ~participation_rate:1.00 in
+  let params = Values.Pov_params.make ~participation_rate:1.00 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let state, _ =
     Pov.on_event state

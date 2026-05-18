@@ -33,7 +33,11 @@ let vwap_params_json (p : Vwap.t) : string =
 
 let pov_params_json (p : Pov.t) : string =
   Yojson.Safe.to_string
-    (`Assoc [ ("participation_rate", `Float p.participation_rate) ])
+    (`Assoc
+       [
+         ("participation_rate", `Float p.participation_rate);
+         ("timeframe", `String p.timeframe);
+       ])
 
 let iceberg_params_json (p : Iceberg.t) : string =
   Yojson.Safe.to_string

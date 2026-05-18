@@ -14,6 +14,7 @@
   execution_management_commands
   execution_management_ports
   execution_management_persistence
+  execution_management_feeds
   execution_management_view_models
   execution_management_queries
   execution_management_inbound_http

@@ -34,3 +34,13 @@
   (progn
    (run atdgen -t -o execution_directive_view_model %{atd})
    (run atdgen -j -o execution_directive_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/view_models/candle_view_model.atd))
+ (targets candle_view_model_t.ml candle_view_model_t.mli
+          candle_view_model_j.ml candle_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o candle_view_model %{atd})
+   (run atdgen -j -o candle_view_model %{atd}))))

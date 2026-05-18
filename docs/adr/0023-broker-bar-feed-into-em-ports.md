@@ -155,9 +155,150 @@ it is rejected at the ACL.
   multiple subscriptions per ticket or a richer per-callback
   filter.
 
+## Alternative considered — pull-by-Specification
+
+A reviewer (20+ years of architectural practice) raised a
+competing shape that this ADR did not initially compare
+against, and which deserves to be on the record. Transcribed
+here as a separate block; the chosen design above stands, but
+the alternative is preserved so a future revisit can pick it
+up without re-deriving the analysis.
+
+### The reviewer's proposed flow
+
+```
+broker.bar-updated (IE)
+  → ACL handler
+  → Apply_bar_command { instrument, timeframe, candle }
+  → Apply_bar_command_workflow:
+        spec = Has_directive_consuming_bars
+                 ∧ Matches_instrument(instrument)
+                 ∧ Matches_timeframe_for_strategy(timeframe)
+                 ∧ Status_is_working
+        for ticket in Ticket_store.find_by_specification(spec):
+            Order_ticket.on_volume_bar ticket ~bar ~now
+            put ticket; publish events
+```
+
+This is *pull from store by Specification*. The chosen design
+above is *push to subscribed callbacks*. These are two
+legitimate branches of the same decision tree, paying in
+different currencies.
+
+### Where pull-by-Specification is genuinely better
+
+1. **No lifecycle bookkeeping.** The chosen design keeps a
+   registry `(instrument, timeframe) → callbacks` that must
+   stay synchronised with the ticket lifecycle. On
+   `Ev_ticket_opened` — subscribe; on terminal events —
+   unsubscribe. Every missed call produces either a leak
+   (subscription on a dead ticket) or a silent loss (ticket
+   open, but not subscribed). Pull-by-spec always queries the
+   current store state — no parallel source of truth.
+
+2. **Specification as a first-class re-usable domain object.**
+   The same spec works in an HTTP query "list all open POV
+   tickets on SBER 1m", in a test, in an admin tool. A
+   subscription registry is infrastructure, not domain — it
+   does not generalise.
+
+3. **Symmetry with other driver-commands.**
+   `Advance_strategy_clock_command` naturally asks for the
+   same pull-by-spec: "find all non-terminal tickets whose
+   strategy consumes `Tick` — TWAP, VWAP, IS". Pull-by-spec
+   unifies all driver-commands (bar, clock, future feeds).
+
+4. **Cleaner transactional semantics.** ACL → one
+   `Apply_bar_command`. The chosen design produces N commands
+   (one per matching ticket). N independent transactions are
+   safer for failure isolation (one failure does not topple
+   others); a single transaction is more coherent for "one
+   bar — one atomic unit of work over a set of tickets" and
+   makes aggregate-level "Bar_applied" DEs simpler.
+
+5. **Replay-friendly.** On bar replay (bus replay, crash
+   recovery) pull-by-spec just re-applies to the current
+   store state. The chosen design needs the registry to
+   survive a crash or be rebuilt from tickets — additional
+   recovery work.
+
+### Where the chosen design is genuinely better
+
+1. **O(1) vs O(N) per bar.** Bars are a high-selectivity
+   stimulus: of 6 strategies only POV consumes volume, then a
+   further instrument+timeframe filter narrows further. On
+   1000 open tickets ~10 are POV-shaped, of which ~2 match by
+   key. Push-registry gives O(1) Hashtbl lookup; pull-by-spec
+   scans all 1000. Not a theoretical difference — bars arrive
+   often.
+
+2. **Cold store.** With push, the store is read only when a
+   workflow really mutates a ticket. With pull, the store is
+   read on *every* bar, even one nobody needs. Under
+   persistent storage (Postgres) this overhead becomes
+   material; indices help but are not free.
+
+3. **Native fit for push-streams.** When (if) a real
+   streaming feed lands (Finam WS / Kafka), it is already a
+   push shape: "subscribe by topic". The chosen port maps
+   onto this naturally. Pull-by-spec wraps push into a queue,
+   then ACL unwraps it back into a pull cycle — extra layer.
+
+### Decisive factor — stimulus selectivity
+
+- **Highly selective stimulus** (bars: ~1 of 6 strategies,
+  then instrument+timeframe): push with an indexed routing
+  key wins.
+- **Low selectivity stimulus** (clock ticks: 4 of 6
+  strategies, no further filter): pull-by-spec wins, since
+  almost every ticket matches and indexing buys nothing.
+
+### Possible hybrid (not implemented)
+
+A combined form may be the right end state:
+
+- `Apply_bar_command` driven by a Specification (for cheap
+  predicate composition over the open ticket set).
+- `Volume_feed_port` retained only as transport from external
+  push-streams (live broker feed), with its output funnelled
+  into the *same* `Apply_bar_command`. The port becomes
+  transport; routing-to-tickets goes through the spec.
+
+In that form O(1) indexing need not be lost: a cache
+`(instrument, timeframe) → ticket_ids` lives next to the
+store, invalidated on `Ev_ticket_opened` / terminal events,
+and answers the spec in O(1). The *entry into the domain*
+stays a single command + a single spec; lifecycle
+bookkeeping reduces to "help the store answer its own spec
+quickly" rather than "maintain a parallel registry with its
+own contract".
+
+### Why the current design ships first
+
+- The push-registry form is already wired, tested, and
+  reachable end-to-end for POV — the bar-feed integration
+  task delivers on the immediate scope.
+- Pull-by-spec is a genuine alternative, not a correction;
+  picking it requires introducing a Specification facility
+  and a `Ticket_store.find_by_specification` method, both of
+  which are real additions that should be motivated by more
+  than this single driver-command.
+- The decisive factor (stimulus selectivity) cuts the *other*
+  way for bars (highly selective) but cuts toward pull-by-
+  spec for clock ticks (low selectivity). When
+  `Advance_strategy_clock_command` is wired live, the choice
+  there should be informed by this analysis.
+
+The chosen design is preserved; the alternative is recorded
+for the next revisit.
+
 ## References
 
 - ADR 0016 — Execution strategy abstraction (`Volume_bar` /
   `Price_quote` inputs and the deferred-adapter design pattern).
 - ADR 0017 — OrderTicket aggregate + OMS/EMS layering.
 - ADR 0015 — Broker bounded context (owner of the bar feed).
+- Evans, *Domain-Driven Design*, Ch. 9 — Specification pattern.
+- Hohpe & Woolf, *Enterprise Integration Patterns* —
+  Publish-Subscribe Channel, Content-Based Router, Message
+  Filter (the EIP siblings of Specification).

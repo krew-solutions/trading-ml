@@ -6,11 +6,20 @@
     {!Reconcile_command_workflow},
     {!Define_alpha_view_command_workflow},
     {!Apply_bar_command_workflow}) — not the handlers — so the
-    component boundary covered by these tests includes the outbound
-    integration-event publication. The Hexagonal outbound ports
-    [publish_*] are substituted with in-memory recorders. *)
+    component boundary covered by these tests includes the
+    outbound integration-event publication. The Hexagonal
+    outbound ports [publish_*] are substituted with in-memory
+    recorders.
+
+    The construction → sizing → clipping pipeline ports
+    ([risk_config_for], [total_equity_for], [mark_for],
+    [volatility_for], [sizing_for]) are wired against in-memory
+    registries; tests configure per-book risk configs, per-book
+    equity, and per-book marks via [set_*] helpers before
+    exercising the workflows. *)
 
 module Pm = Portfolio_management
+module DEH = Portfolio_management_domain_event_handlers
 module Set_target_wf = Portfolio_management_commands.Set_target_command_workflow
 module Set_target_h = Portfolio_management_commands.Set_target_command_handler
 
@@ -45,7 +54,9 @@ type ctx = {
   actual_portfolio : Pm.Actual_portfolio.t ref;
   alpha_views : (string * string, Pm.Alpha_view.t ref) Hashtbl.t;
   subscriptions : (string * string, Pm.Common.Book_id.t list) Hashtbl.t;
-  notional_caps : (string, Decimal.t) Hashtbl.t;
+  risk_configs : (string, Pm.Risk_config.t) Hashtbl.t;
+  total_equities : (string, Decimal.t) Hashtbl.t;
+  marks : (string * string, Decimal.t) Hashtbl.t;
   target_portfolio_updated_pub : Target_portfolio_updated_ie.t list ref;
   trade_intents_planned_pub : Trade_intents_planned_ie.t list ref;
   last_set_target_result : (unit, Set_target_h.handle_error) Rop.t option;
@@ -61,7 +72,9 @@ let fresh_ctx () =
     actual_portfolio = ref (Pm.Actual_portfolio.empty book_alpha);
     alpha_views = Hashtbl.create 4;
     subscriptions = Hashtbl.create 4;
-    notional_caps = Hashtbl.create 4;
+    risk_configs = Hashtbl.create 4;
+    total_equities = Hashtbl.create 4;
+    marks = Hashtbl.create 16;
     target_portfolio_updated_pub = ref [];
     trade_intents_planned_pub = ref [];
     last_set_target_result = None;
@@ -121,9 +134,50 @@ let subscribe ctx ~alpha_source_id ~instrument ~book_id =
   Hashtbl.replace ctx.subscriptions key (book_id :: existing);
   ctx
 
-let set_notional_cap ctx ~book_id ~cap =
-  Hashtbl.replace ctx.notional_caps (Pm.Common.Book_id.to_string book_id) cap;
+let default_limits () =
+  Pm.Risk.Values.Risk_limits.make
+    ~max_per_instrument_notional:(Decimal.of_int 1_000_000_000)
+    ~max_gross_exposure:(Decimal.of_int 1_000_000_000)
+
+let set_risk_config ctx ~book_id ~risk_budget_fraction ~construction_source =
+  let cfg =
+    Pm.Risk_config.make ~book_id ~risk_budget_fraction
+      ~limits:(default_limits ()) ~construction_source
+  in
+  Hashtbl.replace ctx.risk_configs (Pm.Common.Book_id.to_string book_id) cfg;
   ctx
+
+let set_total_equity ctx ~book_id ~equity =
+  Hashtbl.replace ctx.total_equities (Pm.Common.Book_id.to_string book_id) equity;
+  ctx
+
+let set_mark ctx ~book_id ~instrument ~price =
+  Hashtbl.replace ctx.marks
+    (Pm.Common.Book_id.to_string book_id, Core.Instrument.to_qualified instrument)
+    price;
+  ctx
+
+let risk_config_for ctx book =
+  Hashtbl.find_opt ctx.risk_configs (Pm.Common.Book_id.to_string book)
+
+let total_equity_for ctx book =
+  match Hashtbl.find_opt ctx.total_equities (Pm.Common.Book_id.to_string book) with
+  | Some d -> d
+  | None -> Decimal.zero
+
+let mark_for ctx book instrument =
+  match
+    Hashtbl.find_opt ctx.marks
+      (Pm.Common.Book_id.to_string book, Core.Instrument.to_qualified instrument)
+  with
+  | Some p -> p
+  | None -> Decimal.zero
+
+let volatility_for _instrument = None
+
+let sizing_for _book_id : DEH.Build_target_on_construction_intent.sizing_fn =
+  fun ~book_equity ~mark ~volatility intent ->
+    Pm.Sizing_policy.Equity_proportional.size () ~book_equity ~mark ~volatility intent
 
 let define_alpha_view
     ctx
@@ -150,11 +204,6 @@ let define_alpha_view
     in
     try Hashtbl.find ctx.subscriptions key with Not_found -> []
   in
-  let notional_cap_for book =
-    match Hashtbl.find_opt ctx.notional_caps (Pm.Common.Book_id.to_string book) with
-    | Some d -> d
-    | None -> Decimal.zero
-  in
   let target_portfolio_for book =
     if Pm.Common.Book_id.equal book book_alpha then ctx.target_portfolio
     else
@@ -168,17 +217,21 @@ let define_alpha_view
     { alpha_source_id; instrument; direction; strength; price; occurred_at }
   in
   let result =
-    Define_alpha_view_wf.execute ~alpha_view_for ~subscribers_for ~notional_cap_for
+    Define_alpha_view_wf.execute ~alpha_view_for ~subscribers_for
+      ~risk_config_for:(risk_config_for ctx)
+      ~total_equity_for:(total_equity_for ctx)
+      ~mark_for:(mark_for ctx) ~volatility_for ~sizing_for
       ~target_portfolio_for ~publish_target_portfolio_updated cmd
   in
   { ctx with last_define_alpha_view_result = Some result }
 
-(** Drive an {!Apply_bar_command_workflow} call against the supplied
-    pair_mr [state_ref]. The state ref is mutated in place by the
-    workflow's handler; on success any emitted proposal is applied to
-    [ctx.target_portfolio] and a [target_portfolio_updated] event is
-    recorded. The bar is built with [open=high=low=close] for
-    convenience — sufficient for component-level driver tests. *)
+(** Drive an {!Apply_bar_command_workflow} call against the
+    supplied pair_mr [state_ref]. The state ref is mutated in
+    place; on success any emitted construction_intent is fed
+    into the unified pipeline against [ctx]'s registries and
+    publishes a [target_portfolio_updated] event. The bar is
+    built with [open=high=low=close] for convenience —
+    sufficient for component-level driver tests. *)
 let apply_bar ctx ~state_ref ~instrument ~ts ~close =
   let pair_mr_states_for inst =
     let cfg = Pm.Pair_mean_reversion.Values.Pair_mr_state.config !state_ref in
@@ -206,8 +259,11 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
     { instrument = Core.Instrument.to_qualified instrument; timeframe = "h1"; candle }
   in
   let result =
-    Apply_bar_wf.execute ~pair_mr_states_for ~target_portfolio_for
-      ~publish_target_portfolio_updated cmd
+    Apply_bar_wf.execute ~pair_mr_states_for
+      ~risk_config_for:(risk_config_for ctx)
+      ~total_equity_for:(total_equity_for ctx)
+      ~mark_for:(mark_for ctx) ~volatility_for ~sizing_for
+      ~target_portfolio_for ~publish_target_portfolio_updated cmd
   in
   { ctx with last_apply_bar_result = Some result }
 

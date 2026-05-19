@@ -36,6 +36,7 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0021](0021-intake-gates-belong-to-pre-trade-risk.md) | Intake gates (kill_switch, rate_limit) belong to pre_trade_risk | Accepted | 2026-05-17 |
 | [0022](0022-saga-owns-account-commit-and-release.md) | Order_process_manager owns Account commit and release | Accepted | 2026-05-17 |
 | [0023](0023-broker-bar-feed-into-em-ports.md) | Broker bar feed into execution_management — one subscriber, two ports | Accepted | 2026-05-19 |
+| [0024](0024-equity-anchored-sizing-with-explicit-risk-config.md) | Equity-anchored sizing with explicit Risk_config | Accepted | 2026-05-19 |
 
 ## Template
 

@@ -1,9 +1,11 @@
 (** Why3 companion for [pair_mr_config.mli] — invariants:
-    [window > 0], [|z_entry| > |z_exit|], [notional > 0]. *)
+    [window > 0] and [|z_entry| > |z_exit|]. Sizing parameters
+    are not part of the config any more (capital allocation
+    moved to [Risk_config.risk_budget_fraction]; per-leg qty
+    derivation moved to [Sizing_policy]). *)
 
 module Pair_mr_config
   use int.Int
-  use decimal.Decimal
 
   type book_id
   type pair
@@ -17,11 +19,10 @@ module Pair_mr_config
     window      : int;
     z_entry     : z_score;
     z_exit      : z_score;
-    notional    : Decimal.t;
   }
 
-  (** Structural-only model. Invariants ([window > 0],
-      [|z_entry| > |z_exit|], [notional > 0]) are enforced by the
-      OCaml smart constructor [Pair_mr_config.make]; downstream
-      lemmas can axiomatise them per their needs. *)
+  (** Structural-only model. Invariants ([window > 0] and
+      [|z_entry| > |z_exit|]) are enforced by the OCaml smart
+      constructor [Pair_mr_config.make]; downstream lemmas can
+      axiomatise them per their needs. *)
 end

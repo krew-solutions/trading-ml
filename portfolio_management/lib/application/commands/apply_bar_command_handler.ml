@@ -49,7 +49,8 @@ let parse_candle (candle : Apply_bar_command.candle_dto) :
 
 let handle
     ~(pair_mr_states_for : Core.Instrument.t -> Pair_mean_reversion.state ref list)
-    (cmd : Apply_bar_command.t) : (Common.Target_proposal.t list, handle_error) Rop.t =
+    (cmd : Apply_bar_command.t) :
+    (Common.Construction_intent.t list, handle_error) Rop.t =
   let parsed =
     let open Rop in
     let+ instrument = parse_instrument cmd.instrument
@@ -59,17 +60,17 @@ let handle
   match parsed with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)
   | Ok (instrument, candle) ->
-      let proposals =
+      let intents =
         List.fold_left
           (fun acc state_ref ->
-            let state', proposal_opt =
+            let state', intent_opt =
               Pair_mean_reversion.on_bar !state_ref ~instrument ~candle
             in
             state_ref := state';
-            match proposal_opt with
-            | Some p -> p :: acc
+            match intent_opt with
+            | Some i -> i :: acc
             | None -> acc)
           []
           (pair_mr_states_for instrument)
       in
-      Rop.succeed (List.rev proposals)
+      Rop.succeed (List.rev intents)

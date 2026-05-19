@@ -6,7 +6,11 @@ module Target_portfolio_updated =
 let execute
     ~alpha_view_for
     ~subscribers_for
-    ~notional_cap_for
+    ~risk_config_for
+    ~total_equity_for
+    ~mark_for
+    ~volatility_for
+    ~sizing_for
     ~target_portfolio_for
     ~publish_target_portfolio_updated
     (cmd : Define_alpha_view_command.t) :
@@ -15,8 +19,9 @@ let execute
   | Ok None -> Rop.succeed ()
   | Ok (Some direction_changed) ->
       Portfolio_management_domain_event_handlers
-      .Apply_proposed_targets_on_alpha_direction_changed
-      .handle ~subscribers_for ~notional_cap_for ~target_portfolio_for
+      .Dispatch_construction_intent_on_alpha_direction_changed
+      .handle ~subscribers_for ~risk_config_for ~total_equity_for ~mark_for
+        ~volatility_for ~sizing_for ~target_portfolio_for
         ~publish_target_portfolio_updated direction_changed;
       Rop.succeed ()
   | Error errs -> Error errs

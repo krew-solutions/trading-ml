@@ -1,6 +1,11 @@
 (test
  (name portfolio_management_unit_runner)
- (libraries core decimal portfolio_management alcotest))
+ (libraries
+  core
+  decimal
+  portfolio_management
+  portfolio_management_domain_event_handlers
+  alcotest))
 
 ; Filenames globally unique within this test runner so the flat
 ; namespace doesn't collide.

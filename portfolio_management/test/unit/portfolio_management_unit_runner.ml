@@ -9,8 +9,9 @@ let () =
       ("risk_policy", Risk_policy_test.tests);
       ("pair_mean_reversion", Pair_mean_reversion_test.tests);
       ("alpha_view", Alpha_view_test.tests);
-      ("sizing", Sizing_test.tests);
       ("construction_intent", Construction_intent_test.tests);
       ("equity_proportional", Equity_proportional_test.tests);
       ("risk_config", Risk_config_test.tests);
+      ( "build_target_on_construction_intent",
+        Build_target_on_construction_intent_test.tests );
     ]

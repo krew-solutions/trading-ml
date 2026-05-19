@@ -15,7 +15,19 @@ let instrument = "SBER@MISX"
 
 let prepare_subscription ctx =
   let ctx = subscribe ctx ~alpha_source_id ~instrument ~book_id:book_alpha in
-  set_notional_cap ctx ~book_id:book_alpha ~cap:(Decimal.of_int 10_000)
+  let inst = Core.Instrument.of_qualified instrument in
+  let construction_source =
+    Pm.Common.Source.Alpha_view (Pm.Common.Alpha_source_id.of_string alpha_source_id)
+  in
+  let ctx =
+    set_risk_config ctx ~book_id:book_alpha
+      ~risk_budget_fraction:(Decimal.of_string "0.1")
+      ~construction_source
+  in
+  let ctx =
+    set_total_equity ctx ~book_id:book_alpha ~equity:(Decimal.of_int 100_000)
+  in
+  set_mark ctx ~book_id:book_alpha ~instrument:inst ~price:(Decimal.of_int 100)
 
 let bullish_view_triggers_long_target =
   Gherkin.scenario
@@ -23,8 +35,9 @@ let bullish_view_triggers_long_target =
     fresh_ctx
     [
       Gherkin.given
-        "book \"alpha\" is subscribed to \"strategy:bollinger_revert/v1\" on SBER@MISX \
-         with a notional cap of 10000"
+        "book \"alpha\" is subscribed to \"strategy:bollinger_revert/v1\" on SBER@MISX, \
+         the book is configured with a 10% risk budget against 100000 equity, and \
+         SBER is marked at 100"
         prepare_subscription;
       Gherkin.when_ "the alpha source reports an UP view at strength 0.5 and price 100"
         (fun ctx ->

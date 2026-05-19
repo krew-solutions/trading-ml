@@ -27,44 +27,54 @@ let next_direction ~(config : Config.t) ~(current : Direction.t) ~(z : float) :
   | Direction.Long_spread | Direction.Short_spread ->
       if Float.abs z <= z_exit then Some Direction.Flat else None
 
-(* Build the proposal that realises [direction] at the supplied close
-   prices. Sizing: [notional / close_a] units of A,
-   [β · notional / close_b] units of B; signs per direction. *)
-let proposal_for_direction
+(* Build the dimensionless {!Construction_intent.Coupled} that
+   realises [direction] for the configured pair under [β].
+   Weights:
+     - magnitude: A-leg gets [1 / (1 + β)], B-leg gets [β / (1 + β)]
+       so that Σ |w| = 1 (full book exposure when not flat);
+     - sign: Long_spread = (+A, -B); Short_spread = (-A, +B);
+       Flat collapses to zero-weight legs.
+   The shared {!Coupling.t} ties both legs together so
+   {!Risk_policy.clip}'s per-instrument pass preserves the
+   β-ratio under any per-instrument cap. *)
+let intent_for_direction
     ~(config : Config.t)
     ~(direction : Direction.t)
-    ~(close_a : Decimal.t)
-    ~(close_b : Decimal.t)
-    ~(proposed_at : int64) : Common.Target_proposal.t =
+    ~(observed_at : int64) : Common.Construction_intent.t =
   let beta = Common.Hedge_ratio.to_decimal config.hedge_ratio in
-  let qty_a =
-    if Decimal.is_zero close_a then Decimal.zero else Decimal.div config.notional close_a
+  let denom = Decimal.add Decimal.one beta in
+  let w_mag_a =
+    if Decimal.is_zero denom then Decimal.zero
+    else Decimal.div Decimal.one denom
   in
-  let qty_b =
-    if Decimal.is_zero close_b then Decimal.zero
-    else Decimal.div (Decimal.mul beta config.notional) close_b
+  let w_mag_b =
+    if Decimal.is_zero denom then Decimal.zero
+    else Decimal.div beta denom
   in
-  let signed_a, signed_b =
+  let w_a, w_b =
     match direction with
     | Direction.Flat -> (Decimal.zero, Decimal.zero)
-    | Direction.Long_spread -> (qty_a, Decimal.neg qty_b)
-    | Direction.Short_spread -> (Decimal.neg qty_a, qty_b)
+    | Direction.Long_spread -> (w_mag_a, Decimal.neg w_mag_b)
+    | Direction.Short_spread -> (Decimal.neg w_mag_a, w_mag_b)
   in
   let a = Common.Pair.a config.pair in
   let b = Common.Pair.b config.pair in
-  let coupling =
-    Some (Common.Coupling.make ~source:"pair_mean_reversion" proposed_at)
-  in
-  let positions : Common.Target_position.t list =
+  let legs : Common.Construction_intent.leg list =
     [
-      { book_id = config.book_id; instrument = a; target_qty = signed_a; coupling };
-      { book_id = config.book_id; instrument = b; target_qty = signed_b; coupling };
+      { instrument = a; weight = w_a };
+      { instrument = b; weight = w_b };
     ]
   in
-  { book_id = config.book_id; positions; source = name; proposed_at }
+  let coupling =
+    Common.Coupling.make ~source:name observed_at
+  in
+  Common.Construction_intent.coupled ~book_id:config.book_id ~legs
+    ~coupling
+    ~source:(Common.Source.Pair_mean_reversion config.pair)
+    ~observed_at
 
 let on_bar (state : State.t) ~instrument ~candle :
-    State.t * Common.Target_proposal.t option =
+    State.t * Common.Construction_intent.t option =
   let cfg = State.config state in
   let pair = cfg.pair in
   let leg =
@@ -85,23 +95,9 @@ let on_bar (state : State.t) ~instrument ~candle :
           match next_direction ~config:cfg ~current ~z with
           | None -> (state', None)
           | Some new_dir ->
-              let recover_close = function
-                | Some lx -> Decimal.of_float (Float.exp lx)
-                | None -> Decimal.zero
-              in
-              let close_a =
-                match which with
-                | `A -> candle.close
-                | `B -> recover_close (State.last_log_close state' ~leg:`A)
-              in
-              let close_b =
-                match which with
-                | `B -> candle.close
-                | `A -> recover_close (State.last_log_close state' ~leg:`B)
-              in
               let state'' = State.with_direction state' new_dir in
-              let proposal =
-                proposal_for_direction ~config:cfg ~direction:new_dir ~close_a ~close_b
-                  ~proposed_at:candle.ts
+              let intent =
+                intent_for_direction ~config:cfg ~direction:new_dir
+                  ~observed_at:candle.ts
               in
-              (state'', Some proposal)))
+              (state'', Some intent)))

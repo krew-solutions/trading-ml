@@ -9,5 +9,5 @@ module type S = sig
     state ->
     instrument:Core.Instrument.t ->
     candle:Core.Candle.t ->
-    state * Common.Target_proposal.t option
+    state * Common.Construction_intent.t option
 end

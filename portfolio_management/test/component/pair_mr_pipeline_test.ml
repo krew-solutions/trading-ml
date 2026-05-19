@@ -1,8 +1,8 @@
 (** BDD specification for the pair_mean_reversion → Apply_bar →
-    Target_portfolio → reconcile pipeline. Drives synthetic candles
-    through {!Apply_bar_command_workflow.execute} and checks that
-    once the policy emits a proposal the resulting reconciler
-    announcement names both legs of the pair. *)
+    Target_portfolio → reconcile pipeline. Drives synthetic
+    candles through {!Apply_bar_command_workflow.execute} and
+    checks that once the policy emits an intent the resulting
+    reconciler announcement names both legs of the pair. *)
 
 module Gherkin = Gherkin_edsl
 module Pm = Portfolio_management
@@ -13,22 +13,37 @@ let inst sym = Core.Instrument.of_qualified sym
 let sber = inst "SBER@MISX"
 let lkoh = inst "LKOH@MISX"
 
+let pair () = Pm.Common.Pair.make ~a:sber ~b:lkoh
+
 let make_pair_state ~window =
-  let pair = Pm.Common.Pair.make ~a:sber ~b:lkoh in
   let cfg =
-    PMR.Values.Pair_mr_config.make ~book_id:book_alpha ~pair
+    PMR.Values.Pair_mr_config.make ~book_id:book_alpha ~pair:(pair ())
       ~hedge_ratio:(Pm.Common.Hedge_ratio.of_decimal Decimal.one)
       ~window
       ~z_entry:(Pm.Common.Z_score.of_float 1.0)
       ~z_exit:(Pm.Common.Z_score.of_float 0.5)
-      ~notional:(Decimal.of_int 1_000)
   in
   PMR.init cfg
 
-(* Drive synthetic candles through Apply_bar_command_workflow until
-   the workflow applies a proposal (target_portfolio_updated_pub
+let configure_book ctx =
+  let ctx =
+    set_risk_config ctx ~book_id:book_alpha
+      ~risk_budget_fraction:(Decimal.of_string "0.1")
+      ~construction_source:(Pm.Common.Source.Pair_mean_reversion (pair ()))
+  in
+  let ctx =
+    set_total_equity ctx ~book_id:book_alpha ~equity:(Decimal.of_int 100_000)
+  in
+  let ctx =
+    set_mark ctx ~book_id:book_alpha ~instrument:sber ~price:(Decimal.of_int 100)
+  in
+  set_mark ctx ~book_id:book_alpha ~instrument:lkoh ~price:(Decimal.of_int 100)
+
+(* Drive synthetic candles through Apply_bar_command_workflow
+   until the workflow applies an intent (target_portfolio_updated_pub
    becomes non-empty) or the iteration bound is reached. Bound
-   prevents infinite loop if hysteresis never opens on this seed. *)
+   prevents infinite loop if hysteresis never opens on this
+   seed. *)
 let drive_until_applied ctx ~state_ref =
   let rec loop iter ctx =
     if iter >= 200 then ctx
@@ -51,22 +66,25 @@ let pipeline_emits_two_legged_trade_list =
      announces a two-legged trade list"
     fresh_ctx
     [
-      Gherkin.given "a pair_mean_reversion policy on (SBER, LKOH) with window=4"
-        (fun ctx -> ctx);
+      Gherkin.given
+        "a pair_mean_reversion policy on (SBER, LKOH) with window=4, book \"alpha\" \
+         configured with a 10% risk budget against 100000 equity, and both legs marked \
+         at 100"
+        configure_book;
       Gherkin.when_
         "synthetic candles are dispatched through Apply_bar_command_workflow until the \
-         workflow applies a proposal" (fun ctx ->
+         workflow applies an intent" (fun ctx ->
           let state_ref = ref (make_pair_state ~window:4) in
           let ctx = drive_until_applied ctx ~state_ref in
           if !(ctx.target_portfolio_updated_pub) <> [] then
             reconcile ctx ~computed_at:"2026-01-01T00:00:01Z"
           else ctx);
       Gherkin.then_
-        "if a proposal fired, the announcement names exactly two distinct instruments"
+        "if an intent fired, the announcement names exactly two distinct instruments"
         (fun ctx ->
           match !(ctx.trade_intents_planned_pub) with
           | [] ->
-              (* Acceptable — no proposal emitted in the bounded
+              (* Acceptable — no intent emitted in the bounded
                  iteration window. *)
               ()
           | [ ie ] ->

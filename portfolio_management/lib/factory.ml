@@ -84,9 +84,44 @@ let build ~bus ~now : t =
       Portfolio_management.Common.Book_id.t list =
     []
   in
-  (* TODO: replace with a per-book Risk-config aggregate. Hardcoded
-     across all books today. *)
-  let notional_cap_for _book_id = Decimal.of_int 100_000 in
+  (* TODO: replace with a Risk_config registry aggregate. Today the
+     registry is empty, so the unified construction → sizing →
+     clipping handler is a silent no-op for every book — both alpha
+     and pair-MR paths fall through. When a future
+     [Configure_risk_command] lands, this table holds the per-book
+     entries it populates. *)
+  let risk_configs :
+      (Portfolio_management.Common.Book_id.t, Portfolio_management.Risk_config.t)
+      Hashtbl.t =
+    Hashtbl.create 8
+  in
+  let risk_config_for book_id = Hashtbl.find_opt risk_configs book_id in
+  (* TODO: replace with an [Account.equity_view] subscription. Today's
+     stub returns zero, which the sizing function collapses to zero
+     [target_qty] sentinel. *)
+  let total_equity_for _book_id = Decimal.zero in
+  (* TODO: replace with a per-book mark cache populated from the
+     broker bar feed (mirrors ADR 0023's EM subscription pattern).
+     Today's stub returns zero for every instrument; the sizing
+     sentinel collapses to zero qty in that case. *)
+  let mark_for _book_id _instrument = Decimal.zero in
+  (* TODO: replace with a per-instrument volatility provider backed
+     either by an in-PM rolling stdev computation or by a [Volatility]
+     IE from a future Indicators BC. Today's stub is unconditional
+     [None] so any volatility-aware sizing policy refuses to size. *)
+  let volatility_for _instrument = None in
+  (* All books are sized by Equity_proportional today; future
+     per-book divergence (vol-target on book A, Kelly on book B)
+     plugs in here as a registry lookup. The closure captures the
+     policy's config (unit for Equity_proportional). *)
+  let sizing_for _book_id :
+      Portfolio_management_domain_event_handlers
+      .Build_target_on_construction_intent
+      .sizing_fn =
+    fun ~book_equity ~mark ~volatility intent ->
+      Portfolio_management.Sizing_policy.Equity_proportional.size () ~book_equity
+        ~mark ~volatility intent
+  in
   let produce (type a) ~uri ~(yojson_of : a -> Yojson.Safe.t) : a -> unit =
     Bus.publish
       (Bus.producer bus ~uri ~serialize:(fun v -> Yojson.Safe.to_string (yojson_of v)))
@@ -145,7 +180,8 @@ let build ~bus ~now : t =
   let dispatch_define_alpha_view cmd =
     match
       Portfolio_management_commands.Define_alpha_view_command_workflow.execute
-        ~alpha_view_for:alpha_view_for_create ~subscribers_for ~notional_cap_for
+        ~alpha_view_for:alpha_view_for_create ~subscribers_for ~risk_config_for
+        ~total_equity_for ~mark_for ~volatility_for ~sizing_for
         ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with
@@ -154,7 +190,9 @@ let build ~bus ~now : t =
   in
   let dispatch_apply_bar cmd =
     match
-      Portfolio_management_commands.Apply_bar_command_workflow.execute ~pair_mr_states_for
+      Portfolio_management_commands.Apply_bar_command_workflow.execute
+        ~pair_mr_states_for ~risk_config_for ~total_equity_for ~mark_for
+        ~volatility_for ~sizing_for
         ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with
@@ -215,5 +253,8 @@ let build ~bus ~now : t =
        .Signal_detected_integration_event_handler
        .handle ~dispatch_define_alpha_view)
   in
+  (* Hold registries in scope so future configuration commands can
+     populate them — currently nothing dispatches into them. *)
+  let _ = risk_configs in
   let http_handler = Portfolio_management_inbound_http.Http.make_handler () in
   { http_handler }

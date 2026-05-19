@@ -16,4 +16,6 @@ let () =
         Build_target_on_construction_intent_test.tests );
       ( "configure_risk_command_handler",
         Configure_risk_command_handler_test.tests );
+      ( "subscribe_book_to_alpha_command_handler",
+        Subscribe_book_to_alpha_command_handler_test.tests );
     ]

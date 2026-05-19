@@ -1,0 +1,17 @@
+(* Wire contract: portfolio_management/lib/application/commands/subscribe_book_to_alpha_command.ml
+
+   Registers a subscription [(alpha_source_id, instrument) →
+   book_id] in PM. Future [Direction_changed] events on that
+   pair fan out to the book's construction → sizing → clipping
+   pipeline.
+
+   Idempotent: re-issuing the same triplet does not create a
+   duplicate entry. *)
+
+type t = {
+  alpha_source_id <doc text="Stable identifier of the alpha source whose direction flips this book wants to follow."> : string;
+
+  instrument <doc text="Qualified instrument symbol the subscription scopes to (e.g. \"SBER@MISX\"). A book subscribes to alpha source × instrument, not just to the source — different instruments are independent subscriptions."> : string;
+
+  book_id <doc text="Identifier of the subscribing book."> : string;
+}

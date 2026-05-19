@@ -1,16 +1,33 @@
-(** PM inbound HTTP routes.
+(** PM inbound HTTP routes — admin-side configuration surface.
 
-    Today a stub: {!make_handler} returns a route handler that
-    answers [None] for every request, meaning PM contributes
-    nothing to the HTTP surface. The stub is wired up so that
-    {!Factory.t} can carry an [http_handler] field uniformly with
-    the other BC factories.
+    Routes:
+      POST /api/portfolio_management/risk_configs
+        — apply a {!Configure_risk_command.t} to the per-book
+          {!Risk_config} registry.
+      POST /api/portfolio_management/alpha_subscriptions
+        — register a {!Common.Alpha_subscription.t} for an
+          [(alpha_source_id, instrument, book_id)] triplet.
 
-    When PM gains real routes (Set_target / Reconcile /
-    Define_alpha_view via REST), {!make_handler} will gain
-    [~dispatch_*] port parameters, parse wire-payloads into
-    command DTOs, and pattern-match against [(meth, path)] to
-    return [Some response] for handled routes — without any
-    change required in {!Factory}. *)
+    Synchronous: 200 OK on success, 400 Bad Request with a
+    structured error list on Rop validation failure.
 
-val make_handler : unit -> Inbound_http.Route.handler
+    Trading-side workflows reach this BC over the in-memory bus
+    (signal_detected, bar_updated, reservation_filled);
+    configuration commands are admin-only, low-frequency, need
+    immediate validation feedback, and have no downstream
+    side-effects beyond registry mutation — so direct REST is
+    the right transport, not a bus-front-door. *)
+
+val make_handler :
+  configure_risk:
+    (Portfolio_management_commands.Configure_risk_command.t ->
+    ( unit,
+      Portfolio_management_commands.Configure_risk_command_handler.handle_error )
+    Rop.t) ->
+  subscribe_book_to_alpha:
+    (Portfolio_management_commands.Subscribe_book_to_alpha_command.t ->
+    ( unit,
+      Portfolio_management_commands.Subscribe_book_to_alpha_command_handler
+      .handle_error )
+    Rop.t) ->
+  Inbound_http.Route.handler

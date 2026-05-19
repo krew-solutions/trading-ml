@@ -1,4 +1,13 @@
 (library
  (name portfolio_management_inbound_http)
  (public_name trading.portfolio_management.inbound_http)
- (libraries inbound_http cohttp cohttp-eio))
+ (libraries
+  inbound_http
+  cohttp
+  cohttp-eio
+  eio
+  yojson
+  uri
+  rop
+  atdgen-runtime
+  portfolio_management_commands))

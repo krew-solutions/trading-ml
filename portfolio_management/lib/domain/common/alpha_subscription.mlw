@@ -1,0 +1,23 @@
+(** Why3 companion for [alpha_subscription.mli] — triplet VO.
+    Structural-only model: the .mlw simply names the three
+    component types; equality is field-wise. *)
+
+module Alpha_subscription
+  use common.alpha_source_id.Alpha_source_id as ASI
+  use common.book_id.Book_id as BI
+
+  type instrument
+
+  type t = {
+    alpha_source_id : ASI.t;
+    instrument      : instrument;
+    book_id         : BI.t;
+  }
+
+  predicate eq (a b: t) =
+    a.alpha_source_id = b.alpha_source_id /\
+    a.instrument = b.instrument /\
+    a.book_id = b.book_id
+
+  lemma eq_refl : forall a: t. eq a a
+end

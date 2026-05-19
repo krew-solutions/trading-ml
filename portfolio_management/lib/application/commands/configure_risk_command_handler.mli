@@ -17,6 +17,10 @@ val validation_error_to_string : validation_error -> string
 
 type handle_error = Validation of validation_error
 
+val handle_error_to_string : handle_error -> string
+(** Human-readable rendering for HTTP / log surfaces. Tag-less:
+    just the underlying validation message. *)
+
 val handle :
   persist_risk_config:
     (Portfolio_management.Common.Book_id.t ->

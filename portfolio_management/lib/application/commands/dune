@@ -87,3 +87,15 @@
   (progn
    (run atdgen -t -o configure_risk_command %{atd})
    (run atdgen -j -o configure_risk_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/commands/subscribe_book_to_alpha_command.atd))
+ (targets subscribe_book_to_alpha_command_t.ml
+          subscribe_book_to_alpha_command_t.mli
+          subscribe_book_to_alpha_command_j.ml
+          subscribe_book_to_alpha_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o subscribe_book_to_alpha_command %{atd})
+   (run atdgen -j -o subscribe_book_to_alpha_command %{atd}))))

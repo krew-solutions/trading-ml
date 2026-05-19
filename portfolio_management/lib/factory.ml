@@ -77,12 +77,45 @@ let build ~bus ~now : t =
         Hashtbl.replace alpha_views (alpha_source_id, instrument) r;
         r
   in
-  (* TODO: replace with an Alpha_subscription registry aggregate.
-     Today every alpha-direction flip fans out to the empty list, so
-     no targets get rebalanced via the alpha pipeline. *)
-  let subscribers_for ~alpha_source_id:_ ~instrument:_ :
+  (* In-memory registry of [Alpha_subscription.t] entries keyed by
+     the pair [(alpha_source_id, instrument)]. Populated by the
+     [Subscribe_book_to_alpha_command] workflow; consulted by the
+     alpha-direction-changed handler to fan a flip out to every
+     subscribing book.
+
+     Idempotent insert: [persist_subscription] de-duplicates on
+     the triplet via [Alpha_subscription.equal] before appending,
+     so re-issuing the same command does not create a second
+     entry. *)
+  let alpha_subscriptions :
+      ( Portfolio_management.Common.Alpha_source_id.t * Instrument.t,
+        Portfolio_management.Common.Alpha_subscription.t list )
+      Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let subscribers_for ~alpha_source_id ~instrument :
       Portfolio_management.Common.Book_id.t list =
-    []
+    match Hashtbl.find_opt alpha_subscriptions (alpha_source_id, instrument) with
+    | None -> []
+    | Some subs ->
+        List.map
+          (fun (s : Portfolio_management.Common.Alpha_subscription.t) -> s.book_id)
+          subs
+  in
+  let persist_subscription
+      (sub : Portfolio_management.Common.Alpha_subscription.t) : unit =
+    let key = (sub.alpha_source_id, sub.instrument) in
+    let existing =
+      match Hashtbl.find_opt alpha_subscriptions key with
+      | Some xs -> xs
+      | None -> []
+    in
+    if
+      List.exists
+        (Portfolio_management.Common.Alpha_subscription.equal sub)
+        existing
+    then ()
+    else Hashtbl.replace alpha_subscriptions key (sub :: existing)
   in
   (* Per-book [Risk_config] registry. Populated by
      [Configure_risk_command_workflow]; consulted by the unified
@@ -217,15 +250,25 @@ let build ~bus ~now : t =
     | Ok () -> ()
     | Error _ -> ()
   in
-  let dispatch_configure_risk cmd =
-    match
-      Portfolio_management_commands.Configure_risk_command_workflow.execute
-        ~persist_risk_config cmd
-    with
-    | Ok () -> ()
-    | Error _ -> ()
+  (* Dispatch closures return the Rop result so the HTTP route can
+     surface validation errors back to the operator. Other inbound
+     paths (bus subscription, CLI) that fire-and-forget will
+     match-discard the Error tail at the callsite. *)
+  let dispatch_configure_risk cmd :
+      ( unit,
+        Portfolio_management_commands.Configure_risk_command_handler.handle_error )
+      Rop.t =
+    Portfolio_management_commands.Configure_risk_command_workflow.execute
+      ~persist_risk_config cmd
   in
-  let _ = dispatch_configure_risk in
+  let dispatch_subscribe_book_to_alpha cmd :
+      ( unit,
+        Portfolio_management_commands.Subscribe_book_to_alpha_command_handler
+        .handle_error )
+      Rop.t =
+    Portfolio_management_commands.Subscribe_book_to_alpha_command_workflow.execute
+      ~persist_subscription cmd
+  in
   (* [dispatch_set_target] is reserved scaffolding for future external
      entries (PM HTTP route / CLI override / cross-BC import). No
      internal pipeline routes through it today — pair-mr applies
@@ -283,5 +326,9 @@ let build ~bus ~now : t =
   (* [risk_configs] is populated by [dispatch_configure_risk]; held
      in scope to keep the persist closure alive. *)
   let _ = risk_configs in
-  let http_handler = Portfolio_management_inbound_http.Http.make_handler () in
+  let http_handler =
+    Portfolio_management_inbound_http.Http.make_handler
+      ~configure_risk:dispatch_configure_risk
+      ~subscribe_book_to_alpha:dispatch_subscribe_book_to_alpha
+  in
   { http_handler }

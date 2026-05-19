@@ -25,6 +25,9 @@ let validation_error_to_string = function
 
 type handle_error = Validation of validation_error
 
+let handle_error_to_string = function
+  | Validation v -> validation_error_to_string v
+
 let parse_book_id raw : (Pm.Common.Book_id.t, validation_error) Rop.t =
   try Rop.succeed (Pm.Common.Book_id.of_string raw)
   with Invalid_argument _ -> Rop.fail (Invalid_book_id raw)

@@ -14,4 +14,6 @@ let () =
       ("risk_config", Risk_config_test.tests);
       ( "build_target_on_construction_intent",
         Build_target_on_construction_intent_test.tests );
+      ( "configure_risk_command_handler",
+        Configure_risk_command_handler_test.tests );
     ]

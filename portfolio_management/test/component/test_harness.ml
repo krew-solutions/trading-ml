@@ -56,7 +56,10 @@ type ctx = {
   subscriptions : (string * string, Pm.Common.Book_id.t list) Hashtbl.t;
   risk_configs : (string, Pm.Risk_config.t) Hashtbl.t;
   total_equities : (string, Decimal.t) Hashtbl.t;
-  marks : (string * string, Decimal.t) Hashtbl.t;
+  marks : (string, Decimal.t) Hashtbl.t;
+      (** Keyed by [Instrument.to_qualified]; per-instrument, not
+          per-book (matches production: a market price is a property
+          of the instrument, not of the holder). *)
   target_portfolio_updated_pub : Target_portfolio_updated_ie.t list ref;
   trade_intents_planned_pub : Trade_intents_planned_ie.t list ref;
   last_set_target_result : (unit, Set_target_h.handle_error) Rop.t option;
@@ -151,10 +154,8 @@ let set_total_equity ctx ~book_id ~equity =
   Hashtbl.replace ctx.total_equities (Pm.Common.Book_id.to_string book_id) equity;
   ctx
 
-let set_mark ctx ~book_id ~instrument ~price =
-  Hashtbl.replace ctx.marks
-    (Pm.Common.Book_id.to_string book_id, Core.Instrument.to_qualified instrument)
-    price;
+let set_mark ctx ~book_id:_ ~instrument ~price =
+  Hashtbl.replace ctx.marks (Core.Instrument.to_qualified instrument) price;
   ctx
 
 let risk_config_for ctx book =
@@ -165,10 +166,9 @@ let total_equity_for ctx book =
   | Some d -> d
   | None -> Decimal.zero
 
-let mark_for ctx book instrument =
+let mark_for ctx _book instrument =
   match
-    Hashtbl.find_opt ctx.marks
-      (Pm.Common.Book_id.to_string book, Core.Instrument.to_qualified instrument)
+    Hashtbl.find_opt ctx.marks (Core.Instrument.to_qualified instrument)
   with
   | Some p -> p
   | None -> Decimal.zero
@@ -258,8 +258,11 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
   let cmd : Portfolio_management_commands.Apply_bar_command.t =
     { instrument = Core.Instrument.to_qualified instrument; timeframe = "h1"; candle }
   in
+  let update_mark inst ~close =
+    Hashtbl.replace ctx.marks (Core.Instrument.to_qualified inst) close
+  in
   let result =
-    Apply_bar_wf.execute ~pair_mr_states_for
+    Apply_bar_wf.execute ~pair_mr_states_for ~update_mark
       ~risk_config_for:(risk_config_for ctx)
       ~total_equity_for:(total_equity_for ctx)
       ~mark_for:(mark_for ctx) ~volatility_for ~sizing_for

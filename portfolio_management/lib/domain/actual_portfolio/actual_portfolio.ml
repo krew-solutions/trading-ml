@@ -35,6 +35,12 @@ let position p instrument =
 
 let positions p = p.positions
 
+let equity p ~mark =
+  List.fold_left
+    (fun acc (pos : Actual_position.t) ->
+      Decimal.add acc (Decimal.mul pos.quantity (mark pos.instrument)))
+    p.cash p.positions
+
 (* Insert / overwrite [pos] into [positions] keeping sort order and
    the no-zero-quantity invariant. *)
 let upsert positions (pos : Actual_position.t) =

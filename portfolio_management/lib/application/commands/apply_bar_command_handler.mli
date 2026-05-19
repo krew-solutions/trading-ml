@@ -27,14 +27,22 @@ val validation_error_to_string : validation_error -> string
 
 type handle_error = Validation of validation_error
 
+type ok = {
+  intents : Portfolio_management.Common.Construction_intent.t list;
+  mark : Core.Instrument.t * Decimal.t;
+      (** The parsed [(instrument, close)] of the dispatched bar — the
+          workflow uses it to refresh the per-book mark cache before
+          handing emitted intents to the unified pipeline. *)
+}
+
 val handle :
   pair_mr_states_for:
     (Core.Instrument.t ->
     Portfolio_management.Pair_mean_reversion.state ref list) ->
   Apply_bar_command.t ->
-  ( Portfolio_management.Common.Construction_intent.t list,
-    handle_error )
-  Rop.t
+  (ok, handle_error) Rop.t
 (** Parse, advance every matching pair-mr state, collect emitted
-    intents. Returns the (possibly empty) list of intents on Ok,
-    a validation error list on Error. *)
+    intents, and return the freshly-parsed mark for the bar's
+    instrument. A validation error short-circuits the entire
+    output, including the mark — a bar that fails to parse does
+    not refresh the cache. *)

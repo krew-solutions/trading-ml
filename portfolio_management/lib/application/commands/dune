@@ -75,3 +75,15 @@
   (progn
    (run atdgen -t -o set_target_command %{atd})
    (run atdgen -j -o set_target_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/commands/configure_risk_command.atd))
+ (targets configure_risk_command_t.ml
+          configure_risk_command_t.mli
+          configure_risk_command_j.ml
+          configure_risk_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o configure_risk_command %{atd})
+   (run atdgen -j -o configure_risk_command %{atd}))))

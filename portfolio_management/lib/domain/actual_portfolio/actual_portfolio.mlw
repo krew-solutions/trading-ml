@@ -29,4 +29,20 @@ module Actual_portfolio
   lemma empty_unique :
     forall b: book_id, cash: Decimal.t.
       unique_per_instrument Nil
+
+  (** Abstract logical model of [equity ~mark]: total book
+      equity as cash plus the sum of mark-to-market valuations
+      across all legs. [mark] is uninterpreted at this layer; the
+      lemma below pins the empty-book base case. *)
+  function mark_at (i: AP.instrument) : Decimal.t
+
+  function equity (p: t) : Decimal.t
+
+  axiom equity_empty :
+    forall b: book_id.
+      equity { book_id = b; cash = zero; positions = Nil } = zero
+
+  axiom equity_cash_only :
+    forall b: book_id, cash: Decimal.t.
+      equity { book_id = b; cash = cash; positions = Nil } = cash
 end

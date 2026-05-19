@@ -42,6 +42,17 @@ val position : t -> Core.Instrument.t -> Decimal.t
 val positions : t -> Values.Actual_position.t list
 (** Snapshot view, in deterministic instrument-compare order. *)
 
+val equity : t -> mark:(Core.Instrument.t -> Decimal.t) -> Decimal.t
+(** Total book equity: [cash + Σ quantity × mark(instrument)]
+    across all held positions. [mark] is the per-instrument
+    pricing function the caller supplies — typically the
+    cross-book mark cache populated from the broker bar feed.
+    Signed quantities contribute signed marks (a short of [-N]
+    at mark [m] contributes [-N × m]), so equity tracks the
+    value of short obligations as well. A non-positive [mark]
+    contributes zero, so equity in a partially-stale-mark state
+    is a conservative lower bound rather than NaN. *)
+
 val commit_fill :
   t ->
   instrument:Core.Instrument.t ->

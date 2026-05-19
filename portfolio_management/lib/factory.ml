@@ -84,27 +84,45 @@ let build ~bus ~now : t =
       Portfolio_management.Common.Book_id.t list =
     []
   in
-  (* TODO: replace with a Risk_config registry aggregate. Today the
-     registry is empty, so the unified construction → sizing →
-     clipping handler is a silent no-op for every book — both alpha
-     and pair-MR paths fall through. When a future
-     [Configure_risk_command] lands, this table holds the per-book
-     entries it populates. *)
+  (* Per-book [Risk_config] registry. Populated by
+     [Configure_risk_command_workflow]; consulted by the unified
+     construction → sizing → clipping handler. When the registry
+     contains no entry for a book, the unified handler is a silent
+     no-op for that book — intents fall through harmlessly. *)
   let risk_configs :
       (Portfolio_management.Common.Book_id.t, Portfolio_management.Risk_config.t)
       Hashtbl.t =
     Hashtbl.create 8
   in
   let risk_config_for book_id = Hashtbl.find_opt risk_configs book_id in
-  (* TODO: replace with an [Account.equity_view] subscription. Today's
-     stub returns zero, which the sizing function collapses to zero
-     [target_qty] sentinel. *)
-  let total_equity_for _book_id = Decimal.zero in
-  (* TODO: replace with a per-book mark cache populated from the
-     broker bar feed (mirrors ADR 0023's EM subscription pattern).
-     Today's stub returns zero for every instrument; the sizing
-     sentinel collapses to zero qty in that case. *)
-  let mark_for _book_id _instrument = Decimal.zero in
+  let persist_risk_config book_id cfg = Hashtbl.replace risk_configs book_id cfg in
+  (* Cross-book mark cache populated from [broker.bar-updated]
+     (ADR 0023 pattern). Per-instrument, not per-book: every book
+     uses the same last-close as its mark for the instrument. A
+     missing entry returns zero — the sizing sentinel collapses to
+     zero qty in that case. *)
+  let marks : (Instrument.t, Decimal.t) Hashtbl.t = Hashtbl.create 64 in
+  let update_mark (instrument : Instrument.t) ~(close : Decimal.t) : unit =
+    if Decimal.is_positive close then Hashtbl.replace marks instrument close
+  in
+  let mark_lookup (instrument : Instrument.t) : Decimal.t =
+    match Hashtbl.find_opt marks instrument with
+    | Some p -> p
+    | None -> Decimal.zero
+  in
+  let mark_for _book_id (instrument : Instrument.t) : Decimal.t =
+    mark_lookup instrument
+  in
+  (* Total equity per book: [Actual_portfolio.equity] over the
+     observed positions valued at the mark cache. Books without
+     an Actual_portfolio entry yield zero — sizing collapses to
+     zero qty downstream. *)
+  let total_equity_for book_id =
+    match Hashtbl.find_opt actual_portfolios book_id with
+    | None -> Decimal.zero
+    | Some ap_ref ->
+        Portfolio_management.Actual_portfolio.equity !ap_ref ~mark:mark_lookup
+  in
   (* TODO: replace with a per-instrument volatility provider backed
      either by an in-PM rolling stdev computation or by a [Volatility]
      IE from a future Indicators BC. Today's stub is unconditional
@@ -191,14 +209,23 @@ let build ~bus ~now : t =
   let dispatch_apply_bar cmd =
     match
       Portfolio_management_commands.Apply_bar_command_workflow.execute
-        ~pair_mr_states_for ~risk_config_for ~total_equity_for ~mark_for
-        ~volatility_for ~sizing_for
+        ~pair_mr_states_for ~update_mark ~risk_config_for ~total_equity_for
+        ~mark_for ~volatility_for ~sizing_for
         ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with
     | Ok () -> ()
     | Error _ -> ()
   in
+  let dispatch_configure_risk cmd =
+    match
+      Portfolio_management_commands.Configure_risk_command_workflow.execute
+        ~persist_risk_config cmd
+    with
+    | Ok () -> ()
+    | Error _ -> ()
+  in
+  let _ = dispatch_configure_risk in
   (* [dispatch_set_target] is reserved scaffolding for future external
      entries (PM HTTP route / CLI override / cross-BC import). No
      internal pipeline routes through it today — pair-mr applies
@@ -253,8 +280,8 @@ let build ~bus ~now : t =
        .Signal_detected_integration_event_handler
        .handle ~dispatch_define_alpha_view)
   in
-  (* Hold registries in scope so future configuration commands can
-     populate them — currently nothing dispatches into them. *)
+  (* [risk_configs] is populated by [dispatch_configure_risk]; held
+     in scope to keep the persist closure alive. *)
   let _ = risk_configs in
   let http_handler = Portfolio_management_inbound_http.Http.make_handler () in
   { http_handler }

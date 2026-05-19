@@ -47,10 +47,14 @@ let parse_candle (candle : Apply_bar_command.candle_dto) :
       try Rop.succeed (Core.Candle.make ~ts ~open_ ~high ~low ~close ~volume)
       with Invalid_argument msg -> Rop.fail (Invalid_candle msg))
 
+type ok = {
+  intents : Common.Construction_intent.t list;
+  mark : Core.Instrument.t * Decimal.t;
+}
+
 let handle
     ~(pair_mr_states_for : Core.Instrument.t -> Pair_mean_reversion.state ref list)
-    (cmd : Apply_bar_command.t) :
-    (Common.Construction_intent.t list, handle_error) Rop.t =
+    (cmd : Apply_bar_command.t) : (ok, handle_error) Rop.t =
   let parsed =
     let open Rop in
     let+ instrument = parse_instrument cmd.instrument
@@ -73,4 +77,4 @@ let handle
           []
           (pair_mr_states_for instrument)
       in
-      Rop.succeed (List.rev intents)
+      Rop.succeed { intents = List.rev intents; mark = (instrument, candle.close) }

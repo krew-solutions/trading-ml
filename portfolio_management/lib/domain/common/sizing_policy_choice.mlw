@@ -1,0 +1,25 @@
+(** Why3 companion for [sizing_policy_choice.mli] — tagged
+    discriminator over per-book sizing strategies. The
+    [target_annual_vol] payload for the vol-target variant is
+    constrained to be non-negative by the OCaml smart
+    constructor in {!Configure_risk_command_handler}; the
+    predicate below states the invariant downstream code may
+    assume. *)
+
+module Sizing_policy_choice
+  use int.Int
+  use decimal.Decimal
+
+  type t =
+    | Equity_proportional
+    | Volatility_target Decimal.t
+
+  predicate well_formed (c: t) =
+    match c with
+    | Equity_proportional -> true
+    | Volatility_target tav -> raw tav >= 0
+    end
+
+  lemma equity_proportional_well_formed :
+    well_formed Equity_proportional
+end

@@ -8,6 +8,7 @@ let execute
     ~(pair_mr_states_for :
        Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list)
     ~(update_mark : Core.Instrument.t -> close:Decimal.t -> unit)
+    ~(update_vol : Core.Instrument.t -> close:Decimal.t -> unit)
     ~risk_config_for
     ~total_equity_for
     ~mark_for
@@ -19,6 +20,7 @@ let execute
   match Apply_bar_command_handler.handle ~pair_mr_states_for cmd with
   | Ok { intents; mark = instrument, close } ->
       update_mark instrument ~close;
+      update_vol instrument ~close;
       List.iter
         (fun intent ->
           Portfolio_management_domain_event_handlers

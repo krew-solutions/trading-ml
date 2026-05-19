@@ -12,6 +12,7 @@ type validation_error =
   | Invalid_alpha_source_id of string
   | Invalid_instrument of { field : string; value : string }
   | Invalid_pair of string
+  | Invalid_target_vol of string
 
 val validation_error_to_string : validation_error -> string
 

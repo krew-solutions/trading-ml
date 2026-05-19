@@ -13,3 +13,4 @@ module type S = sig
 end
 
 module Equity_proportional = Equity_proportional
+module Volatility_target = Volatility_target

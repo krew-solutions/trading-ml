@@ -1,0 +1,15 @@
+(** Why3 companion for [volatility.mli] — annualised fractional
+    volatility on [0, +∞). The [non_negative] invariant is the
+    load-bearing predicate vol-aware sizing relies on; the
+    OCaml smart constructor discharges it operationally. *)
+
+module Volatility
+  use int.Int
+  use decimal.Decimal
+
+  type t = Decimal.t
+
+  predicate non_negative (v: t) = raw v >= 0
+
+  lemma zero_non_negative : non_negative zero
+end

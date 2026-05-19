@@ -1,7 +1,7 @@
 (* Wire contract: portfolio_management/lib/application/commands/configure_risk_command.ml
 
    Configures (creates or replaces) the [Risk_config] for one book.
-   The aggregate carries three concepts that the construction →
+   The aggregate carries four concepts that the construction →
    sizing → clipping pipeline depends on per book:
    - [risk_budget_fraction] in [0.0; 1.0] — sizing primitive,
      the share of [total_equity] the book may use;
@@ -9,7 +9,10 @@
      clipping primitives (Risk_limits.t);
    - [construction_source] — exactly one origin authorised to
      publish targets to this book, encoding the
-     one-source-per-book invariant in wire form. *)
+     one-source-per-book invariant in wire form;
+   - [sizing_policy] — which Sizing_policy.S implementation
+     this book uses (Equity_proportional or Volatility_target
+     with its own [target_annual_vol]). *)
 
 type construction_source = [
   | Alpha_view of alpha_view_source <doc text="Single-asset alpha source identified by [alpha_source_id].">
@@ -25,6 +28,15 @@ type pair_source = {
   b <doc text="Second leg's qualified instrument symbol; must be distinct from a."> : string;
 }
 
+type sizing_policy = [
+  | Equity_proportional <doc text="Default sizing: qty = book_equity × weight / mark. No per-policy configuration.">
+  | Volatility_target of vol_target_config <doc text="Vol-target overlay: scale per-leg notional so the book's annualised volatility approximates the configured target.">
+]
+
+type vol_target_config = {
+  target_annual_vol <doc text="Per-book annualised volatility budget, as a non-negative Decimal string (e.g. \"0.10\" for 10%)."> : string;
+}
+
 type t = {
   book_id <doc text="Identifier of the book whose Risk_config is being created or replaced."> : string;
 
@@ -35,4 +47,6 @@ type t = {
   max_gross_exposure <doc text="Σ |target_qty × mark| across all legs of the book, as a Decimal string. When exceeded, every leg is scaled by the same factor — ratios survive."> : string;
 
   construction_source <doc text="The single source authorised to publish construction intents to this book. Intents whose source does not match are silently dropped by the unified handler."> : construction_source;
+
+  sizing_policy <doc text="The Sizing_policy.S implementation that converts construction intents into target quantities for this book."> : sizing_policy;
 }

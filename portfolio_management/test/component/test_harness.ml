@@ -142,10 +142,11 @@ let default_limits () =
     ~max_per_instrument_notional:(Decimal.of_int 1_000_000_000)
     ~max_gross_exposure:(Decimal.of_int 1_000_000_000)
 
-let set_risk_config ctx ~book_id ~risk_budget_fraction ~construction_source =
+let set_risk_config ?(sizing_policy = Pm.Common.Sizing_policy_choice.Equity_proportional)
+    ctx ~book_id ~risk_budget_fraction ~construction_source =
   let cfg =
     Pm.Risk_config.make ~book_id ~risk_budget_fraction
-      ~limits:(default_limits ()) ~construction_source
+      ~limits:(default_limits ()) ~construction_source ~sizing_policy
   in
   Hashtbl.replace ctx.risk_configs (Pm.Common.Book_id.to_string book_id) cfg;
   ctx
@@ -261,8 +262,9 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
   let update_mark inst ~close =
     Hashtbl.replace ctx.marks (Core.Instrument.to_qualified inst) close
   in
+  let update_vol _inst ~close:_ = () in
   let result =
-    Apply_bar_wf.execute ~pair_mr_states_for ~update_mark
+    Apply_bar_wf.execute ~pair_mr_states_for ~update_mark ~update_vol
       ~risk_config_for:(risk_config_for ctx)
       ~total_equity_for:(total_equity_for ctx)
       ~mark_for:(mark_for ctx) ~volatility_for ~sizing_for

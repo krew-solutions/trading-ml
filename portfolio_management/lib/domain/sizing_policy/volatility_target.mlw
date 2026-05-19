@@ -1,0 +1,49 @@
+(** Why3 companion for [volatility_target.mli] — refusal-to-size
+    laws.
+
+    The non-degenerate formula
+    [qty = book_equity × weight × (target_vol / σ) / mark]
+    is left abstract via [decimal.Decimal.mul_d / div_d]; we
+    state explicitly the sentinel collapses the OCaml side
+    discharges operationally. *)
+
+module Volatility_target
+  use int.Int
+  use decimal.Decimal
+
+  type instrument
+
+  type config = {
+    target_annual_vol : Decimal.t;
+  }
+
+  (** Logical model of [qty_of] capturing the refusal sentinels:
+      a non-positive mark, zero book_equity, missing or
+      non-positive instrument volatility all collapse to zero
+      target_qty. *)
+  function qty_of
+    (target_annual_vol book_equity weight mark : Decimal.t)
+    (instrument_vol : option Decimal.t) : Decimal.t
+
+  axiom qty_zero_when_mark_nonpositive :
+    forall tv be w m: Decimal.t, ov: option Decimal.t.
+      raw m <= 0 -> qty_of tv be w m ov = zero
+
+  axiom qty_zero_when_vol_missing :
+    forall tv be w m: Decimal.t.
+      qty_of tv be w m None = zero
+
+  axiom qty_zero_when_vol_nonpositive :
+    forall tv be w m: Decimal.t, v: Decimal.t.
+      raw v <= 0 -> qty_of tv be w m (Some v) = zero
+
+  axiom qty_zero_when_equity_zero :
+    forall tv w m: Decimal.t, v: Decimal.t.
+      raw m > 0 -> raw v > 0 ->
+      qty_of tv zero w m (Some v) = zero
+
+  axiom qty_zero_when_weight_zero :
+    forall tv be m: Decimal.t, v: Decimal.t.
+      raw m > 0 -> raw v > 0 -> raw be > 0 ->
+      qty_of tv be zero m (Some v) = zero
+end

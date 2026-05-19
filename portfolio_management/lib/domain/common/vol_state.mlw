@@ -1,0 +1,28 @@
+(** Why3 companion for [vol_state.mli] — rolling-window
+    estimator of annualised volatility.
+
+    The stdev computation itself uses float arithmetic
+    (log/sqrt are not in Decimal). Why3's float theories make
+    proofs about the {b numerical} step expensive; this .mlw
+    therefore proves only the {b structural} properties the
+    OCaml side maintains: window invariants, [current]
+    domain, and the warmup precondition. *)
+
+module Vol_state
+  use int.Int
+
+  type t
+
+  function window (s: t) : int
+  function sample_count (s: t) : int
+  function current_is_some (s: t) : bool
+
+  predicate well_formed (s: t) =
+    window s >= 3 /\
+    0 <= sample_count s <= window s
+
+  (** [current] is non-[None] iff the rolling window has filled. *)
+  axiom current_warmup_gate :
+    forall s: t. well_formed s ->
+      (current_is_some s <-> sample_count s >= window s)
+end

@@ -23,6 +23,7 @@ val execute :
     (Core.Instrument.t ->
     Portfolio_management.Pair_mean_reversion.state ref list) ->
   update_mark:(Core.Instrument.t -> close:Decimal.t -> unit) ->
+  update_vol:(Core.Instrument.t -> close:Decimal.t -> unit) ->
   risk_config_for:
     (Portfolio_management.Common.Book_id.t ->
     Portfolio_management.Risk_config.t option) ->
@@ -43,9 +44,11 @@ val execute :
   publish_target_portfolio_updated:(Target_portfolio_updated.t -> unit) ->
   Apply_bar_command.t ->
   (unit, Apply_bar_command_handler.handle_error) Rop.t
-(** [update_mark] is the side-effecting port that refreshes the
-    cross-book mark cache from the bar's close. Called once per
-    successfully-parsed bar, regardless of whether any
-    pair-mean-reversion state listens to that instrument — alpha-
-    driven sizing on the same instrument depends on the same
-    mark. *)
+(** [update_mark] and [update_vol] are the side-effecting ports
+    that refresh, respectively, the cross-book mark cache and
+    the per-instrument rolling-volatility estimator from the
+    bar's close. Both fire once per successfully-parsed bar,
+    regardless of whether any pair-mean-reversion state listens
+    to that instrument — alpha-driven and vol-aware sizing on
+    the same instrument depend on the same projection of the
+    bar feed. *)

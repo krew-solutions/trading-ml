@@ -10,7 +10,9 @@ let () =
       ("pair_mean_reversion", Pair_mean_reversion_test.tests);
       ("alpha_view", Alpha_view_test.tests);
       ("construction_intent", Construction_intent_test.tests);
+      ("vol_state", Vol_state_test.tests);
       ("equity_proportional", Equity_proportional_test.tests);
+      ("volatility_target", Volatility_target_test.tests);
       ("risk_config", Risk_config_test.tests);
       ( "build_target_on_construction_intent",
         Build_target_on_construction_intent_test.tests );

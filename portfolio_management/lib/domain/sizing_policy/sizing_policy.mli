@@ -61,3 +61,11 @@ module Equity_proportional : S with type config = unit
     [direction × strength]; for {!Coupled} it is the leg's
     pre-normalised signed weight. Preserves ratios by
     construction in the {!Coupled} case. *)
+
+module Volatility_target : S with type config = Volatility_target.config
+(** Vol-target overlay: scale per-leg notional so that
+    [|qty| × mark × σ̂] matches the book's annualised volatility
+    budget. Refuses to size (qty = 0) when the volatility
+    provider has no reading for an instrument — operator picked
+    this policy because vol awareness is the point; pretending
+    to size without it would silently degrade to fixed-fractional. *)

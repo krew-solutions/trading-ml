@@ -1,7 +1,8 @@
 (** Why3 companion for [risk_config.mli] — per-book risk
     configuration aggregate. Records the [risk_budget_fraction]
-    invariant and the [book_equity] linearity property the
-    sizing pipeline depends on. *)
+    invariant, the [sizing_policy.well_formed] invariant, and
+    the [book_equity] linearity property the sizing pipeline
+    depends on. *)
 
 module Risk_config
   use int.Int
@@ -9,20 +10,21 @@ module Risk_config
   use risk.values.risk_limits.Risk_limits as RL
   use common.book_id.Book_id as BI
   use common.source.Source as Src
+  use common.sizing_policy_choice.Sizing_policy_choice as SPC
 
   type t = {
     book_id              : BI.t;
     risk_budget_fraction : Decimal.t;
     limits               : RL.t;
     construction_source  : Src.t;
+    sizing_policy        : SPC.t;
   }
 
   predicate well_formed (c: t) =
     0 <= raw c.risk_budget_fraction <= unit_ /\
-    RL.well_formed c.limits
+    RL.well_formed c.limits /\
+    SPC.well_formed c.sizing_policy
 
-  (** Logical model of [book_equity]: linear in [total_equity]
-      with [risk_budget_fraction] as slope. *)
   function book_equity (c: t) (total_equity: Decimal.t) : Decimal.t =
     mul_d total_equity c.risk_budget_fraction
 

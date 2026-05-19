@@ -146,6 +146,47 @@ let build ~bus ~now : t =
   let mark_for _book_id (instrument : Instrument.t) : Decimal.t =
     mark_lookup instrument
   in
+  (* Per-instrument [Vol_state] registry. Populated lazily on the
+     first bar observed for each instrument; updated thereafter
+     on every successfully-parsed bar. [volatility_for] is the
+     port the unified handler / vol-aware sizing consult.
+
+     Window and annualisation_factor are global defaults here:
+     hourly bars with [252 × 6.5 ≈ 1638] hourly periods per year
+     would be the "right" factor for hourly intraday; we ship a
+     daily-default [252] and a window of [20] until a future
+     per-(book, timeframe) Vol_view aggregate lands. The
+     [volatility_for] provider gracefully degrades to [None]
+     during warmup. *)
+  let vol_states : (Instrument.t, Portfolio_management.Common.Vol_state.t ref)
+      Hashtbl.t =
+    Hashtbl.create 64
+  in
+  let vol_window = 20 in
+  let vol_annualisation_factor = 252.0 in
+  let update_vol (instrument : Instrument.t) ~(close : Decimal.t) : unit =
+    if Decimal.is_positive close then
+      let state_ref =
+        match Hashtbl.find_opt vol_states instrument with
+        | Some r -> r
+        | None ->
+            let r =
+              ref
+                (Portfolio_management.Common.Vol_state.init ~window:vol_window
+                   ~annualisation_factor:vol_annualisation_factor)
+            in
+            Hashtbl.replace vol_states instrument r;
+            r
+      in
+      state_ref := Portfolio_management.Common.Vol_state.update !state_ref ~close
+  in
+  let volatility_for (instrument : Instrument.t) : Decimal.t option =
+    match Hashtbl.find_opt vol_states instrument with
+    | None -> None
+    | Some r ->
+        Option.map Portfolio_management.Common.Volatility.to_decimal
+          (Portfolio_management.Common.Vol_state.current !r)
+  in
   (* Total equity per book: [Actual_portfolio.equity] over the
      observed positions valued at the mark cache. Books without
      an Actual_portfolio entry yield zero — sizing collapses to
@@ -156,22 +197,35 @@ let build ~bus ~now : t =
     | Some ap_ref ->
         Portfolio_management.Actual_portfolio.equity !ap_ref ~mark:mark_lookup
   in
-  (* TODO: replace with a per-instrument volatility provider backed
-     either by an in-PM rolling stdev computation or by a [Volatility]
-     IE from a future Indicators BC. Today's stub is unconditional
-     [None] so any volatility-aware sizing policy refuses to size. *)
-  let volatility_for _instrument = None in
-  (* All books are sized by Equity_proportional today; future
-     per-book divergence (vol-target on book A, Kelly on book B)
-     plugs in here as a registry lookup. The closure captures the
-     policy's config (unit for Equity_proportional). *)
-  let sizing_for _book_id :
+  (* Per-book sizing dispatch: each book's [Risk_config.sizing_policy]
+     selects one of the [Sizing_policy.S] implementations. The
+     closure resolves the choice at call time so that a future
+     [Configure_risk_command] re-issued for the same book swaps
+     the policy without disturbing the unified handler. *)
+  let sizing_for book_id :
       Portfolio_management_domain_event_handlers
       .Build_target_on_construction_intent
       .sizing_fn =
     fun ~book_equity ~mark ~volatility intent ->
-      Portfolio_management.Sizing_policy.Equity_proportional.size () ~book_equity
-        ~mark ~volatility intent
+      let choice =
+        match risk_config_for book_id with
+        | Some cfg -> Portfolio_management.Risk_config.sizing_policy cfg
+        | None ->
+            (* Fallback for the no-config branch: silent no-op
+               anyway downstream (the unified handler short-
+               circuits on missing Risk_config), so the choice
+               here is observationally irrelevant. *)
+            Portfolio_management.Common.Sizing_policy_choice.Equity_proportional
+      in
+      match choice with
+      | Portfolio_management.Common.Sizing_policy_choice.Equity_proportional ->
+          Portfolio_management.Sizing_policy.Equity_proportional.size ()
+            ~book_equity ~mark ~volatility intent
+      | Portfolio_management.Common.Sizing_policy_choice.Volatility_target
+          { target_annual_vol } ->
+          Portfolio_management.Sizing_policy.Volatility_target.size
+            { target_annual_vol }
+            ~book_equity ~mark ~volatility intent
   in
   let produce (type a) ~uri ~(yojson_of : a -> Yojson.Safe.t) : a -> unit =
     Bus.publish
@@ -242,8 +296,8 @@ let build ~bus ~now : t =
   let dispatch_apply_bar cmd =
     match
       Portfolio_management_commands.Apply_bar_command_workflow.execute
-        ~pair_mr_states_for ~update_mark ~risk_config_for ~total_equity_for
-        ~mark_for ~volatility_for ~sizing_for
+        ~pair_mr_states_for ~update_mark ~update_vol ~risk_config_for
+        ~total_equity_for ~mark_for ~volatility_for ~sizing_for
         ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with

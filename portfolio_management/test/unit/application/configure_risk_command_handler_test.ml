@@ -15,14 +15,18 @@ let alpha_source : CR.construction_source =
 let pair_source : CR.construction_source =
   `Pair_mean_reversion { CR.a = "SBER@MISX"; b = "GAZP@MISX" }
 
+let default_sizing : CR.sizing_policy = `Equity_proportional
+
 let well_formed_cmd ?(book = book_str) ?(fraction = "0.3") ?(per_inst = "100000")
-    ?(gross = "500000") ?(source = alpha_source) () : CR.t =
+    ?(gross = "500000") ?(source = alpha_source)
+    ?(sizing_policy = default_sizing) () : CR.t =
   {
     book_id = book;
     risk_budget_fraction = fraction;
     max_per_instrument_notional = per_inst;
     max_gross_exposure = gross;
     construction_source = source;
+    sizing_policy;
   }
 
 let make_registry () =
@@ -109,6 +113,34 @@ let test_rejects_invalid_alpha_id () =
   let bad = `Alpha_view { CR.alpha_source_id = "" } in
   expect_validation_failure (well_formed_cmd ~source:bad ())
 
+let test_persists_volatility_target_sizing () =
+  let tbl, persist = make_registry () in
+  let sp : CR.sizing_policy =
+    `Volatility_target { CR.target_annual_vol = "0.15" }
+  in
+  let cmd = well_formed_cmd ~sizing_policy:sp () in
+  match H.handle ~persist_risk_config:persist cmd with
+  | Ok () -> (
+      match Hashtbl.find_opt tbl book_id with
+      | Some cfg ->
+          Alcotest.(check string) "policy name" "volatility_target"
+            (Pm.Common.Sizing_policy_choice.name
+               (Pm.Risk_config.sizing_policy cfg))
+      | None -> Alcotest.fail "registry empty")
+  | Error _ -> Alcotest.fail "expected Ok"
+
+let test_rejects_negative_target_annual_vol () =
+  let sp : CR.sizing_policy =
+    `Volatility_target { CR.target_annual_vol = "-0.01" }
+  in
+  expect_validation_failure (well_formed_cmd ~sizing_policy:sp ())
+
+let test_rejects_malformed_target_annual_vol () =
+  let sp : CR.sizing_policy =
+    `Volatility_target { CR.target_annual_vol = "huge" }
+  in
+  expect_validation_failure (well_formed_cmd ~sizing_policy:sp ())
+
 let tests =
   [
     Alcotest.test_case "happy path persists alpha-view config" `Quick
@@ -129,4 +161,10 @@ let tests =
       test_rejects_pair_with_same_legs;
     Alcotest.test_case "rejects empty alpha source id" `Quick
       test_rejects_invalid_alpha_id;
+    Alcotest.test_case "persists Volatility_target sizing choice" `Quick
+      test_persists_volatility_target_sizing;
+    Alcotest.test_case "rejects negative target_annual_vol" `Quick
+      test_rejects_negative_target_annual_vol;
+    Alcotest.test_case "rejects malformed target_annual_vol" `Quick
+      test_rejects_malformed_target_annual_vol;
   ]

@@ -30,6 +30,7 @@ let risk_config ?(construction_source = alpha_source ())
     ?(risk_budget_fraction = dec "0.1") () =
   Pm.Risk_config.make ~book_id:(book ()) ~risk_budget_fraction
     ~limits:(limits ()) ~construction_source
+    ~sizing_policy:Pm.Common.Sizing_policy_choice.Equity_proportional
 
 let mark_table tbl _book i =
   match List.find_opt (fun (s, _) -> Instrument.equal s i) tbl with
@@ -130,6 +131,7 @@ let test_per_instrument_clip_in_pipeline () =
     Pm.Risk_config.make ~book_id:(book ())
       ~risk_budget_fraction:(dec "0.1") ~limits
       ~construction_source:(alpha_source ())
+      ~sizing_policy:Pm.Common.Sizing_policy_choice.Equity_proportional
   in
   let tp = ref (Pm.Target_portfolio.empty (book ())) in
   let published = ref 0 in

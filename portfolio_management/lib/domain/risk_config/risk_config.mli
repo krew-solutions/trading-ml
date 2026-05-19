@@ -1,37 +1,28 @@
 (** Per-book risk configuration aggregate. Owns the parameters
     that bound a book's construction-time behaviour.
 
-    The aggregate separates two concepts that the previous
-    {b notional_cap} placeholder conflated:
+    Four concepts kept apart deliberately:
 
     - [risk_budget_fraction] — the {b sizing} primitive: the
       share of total account equity allocated to this book. A
       book with [risk_budget_fraction = 0.3] sizes positions
-      against [0.3 × total_equity]. This is operator-level
-      capital allocation between books — a deliberate config
-      decision, not a derived quantity. Operating in a closed
-      interval [\[0, 1\]]; the aggregate enforces.
+      against [0.3 × total_equity]. Operator-level capital
+      allocation in [\[0, 1\]].
     - [limits] — the {b clipping} primitive: absolute caps
-      (per-instrument notional, gross exposure) the construction
-      output must respect regardless of sizing. These come from
-      regulators, prime brokers, or risk management mandates;
-      they are NOT functions of equity.
+      (per-instrument notional, gross exposure) the
+      construction output must respect regardless of sizing.
+      Regulatory / prime-broker constraints, NOT functions of
+      equity.
     - [construction_source] — exactly one
       {!Common.Source.t} permitted to publish targets to this
-      book. Encodes "one construction source per book" as a
-      structural invariant rather than a coordination
-      convention. {!Target_portfolio.apply_proposal}-side
-      validation rejects proposals whose [source] does not
-      match.
-
-    The aggregate is small and value-shaped today (no events),
-    but is modelled as an aggregate rather than a VO because:
-
-    - it owns a per-book identity and lifecycle (creation,
-      future re-configuration);
-    - its invariants ([fraction ∈ \[0, 1\]], [limits.well_formed],
-      [construction_source matched]) are load-bearing across
-      the construction → clip → apply pipeline. *)
+      book. "One construction source per book" as a
+      structural invariant.
+    - [sizing_policy] — which {!Sizing_policy.S}
+      implementation runs on this book. Different books on the
+      same installation can pick different policies
+      ({!Equity_proportional} for one, {!Volatility_target}
+      with its own target for another); per-book divergence
+      is the whole point of the pluggable abstraction. *)
 
 type t
 
@@ -40,18 +31,19 @@ val make :
   risk_budget_fraction:Decimal.t ->
   limits:Risk.Values.Risk_limits.t ->
   construction_source:Common.Source.t ->
+  sizing_policy:Common.Sizing_policy_choice.t ->
   t
-(** [make ~book_id ~risk_budget_fraction ~limits
-       ~construction_source] constructs the configuration.
-
-    Raises [Invalid_argument] when [risk_budget_fraction] is
-    outside [\[0, 1\]]. [limits] is already validated by
-    {!Risk.Values.Risk_limits.make}. *)
+(** Raises [Invalid_argument] when [risk_budget_fraction] is
+    outside [\[0, 1\]] or when
+    [sizing_policy = Volatility_target { target_annual_vol }]
+    with [target_annual_vol] strictly negative. [limits] is
+    already validated by {!Risk.Values.Risk_limits.make}. *)
 
 val book_id : t -> Common.Book_id.t
 val risk_budget_fraction : t -> Decimal.t
 val limits : t -> Risk.Values.Risk_limits.t
 val construction_source : t -> Common.Source.t
+val sizing_policy : t -> Common.Sizing_policy_choice.t
 
 val book_equity : t -> total_equity:Decimal.t -> Decimal.t
 (** [book_equity t ~total_equity] is the equity slice a sizing

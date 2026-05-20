@@ -1,6 +1,6 @@
-(** Wire-format tests for [Finam.Ws]: subscription envelope encoding
-    and inbound event decoding. Mirrors the asyncapi-v1.0.0 spec
-    bundled in [finam-trade-api/specs/asyncapi/]. *)
+(** Wire-format tests for [Finam.Ws]: per-channel subscription
+    envelope encoding and inbound event decoding. Mirrors the
+    asyncapi-v1.0.0 spec bundled in [finam-trade-api/specs/asyncapi/]. *)
 
 open Core
 
@@ -12,8 +12,8 @@ let mk_inst ?board ticker mic =
 let test_subscribe_bars_envelope () =
   let inst = mk_inst "SBER" "MISX" in
   let j =
-    Finam.Ws.subscribe_message ~token:"JWT123"
-      (Sub_bars { instrument = inst; timeframe = Timeframe.D1 })
+    Finam.Ws.Requests.Bars.subscribe ~token:"JWT123" ~instrument:inst
+      ~timeframe:Timeframe.D1
   in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "action" "SUBSCRIBE" (member "action" j |> to_string);
@@ -28,8 +28,7 @@ let test_subscribe_bars_envelope () =
 let test_unsubscribe_bars_envelope () =
   let inst = mk_inst "SBER" "MISX" in
   let j =
-    Finam.Ws.unsubscribe_message ~token:"T"
-      (Sub_bars { instrument = inst; timeframe = Timeframe.H1 })
+    Finam.Ws.Requests.Bars.unsubscribe ~token:"T" ~instrument:inst ~timeframe:Timeframe.H1
   in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "action" "UNSUBSCRIBE" (member "action" j |> to_string);
@@ -38,14 +37,14 @@ let test_unsubscribe_bars_envelope () =
 let test_subscribe_quotes_envelope () =
   let a = mk_inst "SBER" "MISX" in
   let b = mk_inst "GAZP" "MISX" in
-  let j = Finam.Ws.subscribe_message ~token:"T" (Sub_quotes [ a; b ]) in
+  let j = Finam.Ws.Requests.Quotes.subscribe ~token:"T" [ a; b ] in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "type" "QUOTES" (member "type" j |> to_string);
   let symbols = member "data" j |> member "symbols" |> to_list |> List.map to_string in
   Alcotest.(check (list string)) "symbols list" [ "SBER@MISX"; "GAZP@MISX" ] symbols
 
 let test_subscribe_account_envelope () =
-  let j = Finam.Ws.subscribe_message ~token:"T" (Sub_account "ACC1") in
+  let j = Finam.Ws.Requests.Account.subscribe ~token:"T" ~account_id:"ACC1" in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "type" "ACCOUNT" (member "type" j |> to_string);
   Alcotest.(check string)
@@ -160,7 +159,7 @@ let test_decode_error () =
   | _ -> Alcotest.fail "expected Error_ev"
 
 let test_subscribe_trades_envelope () =
-  let j = Finam.Ws.subscribe_message ~token:"T" (Sub_trades "ACC1") in
+  let j = Finam.Ws.Requests.Trades.subscribe ~token:"T" ~account_id:"ACC1" in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "type" "TRADES" (member "type" j |> to_string);
   Alcotest.(check string)
@@ -202,9 +201,7 @@ let test_decode_trades () =
       Alcotest.(check string) "trade_id" "T-001" t0.trade_id;
       Alcotest.(check string) "order_id" "O-100" t0.order_id;
       Alcotest.(check string) "account_id" "ACC1" t0.account_id;
-      Alcotest.(check string)
-        "symbol" "SBER@MISX"
-        (Instrument.to_qualified t0.instrument);
+      Alcotest.(check string) "symbol" "SBER@MISX" (Instrument.to_qualified t0.instrument);
       Alcotest.(check string) "side BUY" "BUY" (Side.to_string t0.side);
       Alcotest.(check (float 1e-6)) "size" 10.0 (Decimal.to_float t0.quantity);
       Alcotest.(check (float 1e-6)) "price" 302.5 (Decimal.to_float t0.price)
@@ -231,8 +228,7 @@ let test_decode_trades_sell_side () =
   |}
   in
   match Finam.Ws.event_of_json j with
-  | Trades [ t ] ->
-      Alcotest.(check string) "side SELL" "SELL" (Side.to_string t.side)
+  | Trades [ t ] -> Alcotest.(check string) "side SELL" "SELL" (Side.to_string t.side)
   | _ -> Alcotest.fail "expected one Trade"
 
 let test_decode_lifecycle () =

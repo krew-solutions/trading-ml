@@ -77,14 +77,14 @@ let make ~env ~sw ~cfg ~auth ~on_event : bridge =
 
 let send_subscribe t ~instrument ~timeframe =
   let token = Auth.current t.auth in
-  let j = Ws.subscribe_message ~token (Sub_bars { instrument; timeframe }) in
+  let j = Ws.Requests.Bars.subscribe ~token ~instrument ~timeframe in
   match t.conn with
   | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
   | None -> ()
 
 let send_subscribe_trades t ~account_id =
   let token = Auth.current t.auth in
-  let j = Ws.subscribe_message ~token (Sub_trades account_id) in
+  let j = Ws.Requests.Trades.subscribe ~token ~account_id in
   match t.conn with
   | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
   | None -> ()
@@ -96,9 +96,7 @@ let resubscribe_all t () =
   SubMap.iter
     (fun (instrument, timeframe) _ -> send_subscribe t ~instrument ~timeframe)
     bar_subs;
-  StringSet.iter
-    (fun account_id -> send_subscribe_trades t ~account_id)
-    trade_subs
+  StringSet.iter (fun account_id -> send_subscribe_trades t ~account_id) trade_subs
 
 let ensure_conn t =
   match t.conn with
@@ -116,7 +114,7 @@ let subscribe_bars (t : bridge) ~instrument ~timeframe : unit =
 
 let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   let token = Auth.current t.auth in
-  let j = Ws.unsubscribe_message ~token (Sub_bars { instrument; timeframe }) in
+  let j = Ws.Requests.Bars.unsubscribe ~token ~instrument ~timeframe in
   let should_close =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
         t.bar_subs <- SubMap.remove (instrument, timeframe) t.bar_subs;
@@ -145,7 +143,7 @@ let subscribe_trades (t : bridge) ~(account_id : string) : unit =
 
 let unsubscribe_trades (t : bridge) ~(account_id : string) : unit =
   let token = Auth.current t.auth in
-  let j = Ws.unsubscribe_message ~token (Sub_trades account_id) in
+  let j = Ws.Requests.Trades.unsubscribe ~token ~account_id in
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
       t.trade_subs <- StringSet.remove account_id t.trade_subs);
   match t.conn with

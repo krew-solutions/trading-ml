@@ -1,8 +1,17 @@
 (library
  (name finam)
  (public_name trading.finam)
- (libraries core broker_domain decimal broker broker_view_models http_transport websocket log acl_common datetime
+ (libraries core broker_domain decimal broker broker_view_models
+            broker_integration_events
+            http_transport websocket log acl_common datetime
             eio eio.unix yojson uri uuidm
             tls tls-eio x509
             base64 digestif digestif.c)
  (flags (:standard -open Broker_domain -open Broker_view_models)))
+
+; Per-channel WS requests + events live under [ws/]. Qualified
+; mode wraps subdirectory names into the module path:
+;   ws/ws.ml             → Finam.Ws (collapse-rule main module)
+;   ws/requests/bars.ml  → Finam.Ws.Requests.Bars
+;   ws/events/bars.ml    → Finam.Ws.Events.Bars
+(include_subdirs qualified)

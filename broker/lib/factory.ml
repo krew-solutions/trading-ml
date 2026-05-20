@@ -32,82 +32,32 @@ let finam_live_setup
   let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
   (* Per-placement cumulative-fill accumulator. Finam ships each
      execution leg separately; [new_total_filled] is the sum of
-     [fill_quantity] across every observed [trade_update] for the
+     [fill_quantity] across every observed trade update for the
      same [placement_id]. Lives in process memory — survives only
      the adapter's lifetime, replayed on reconnect from the
      venue if needed via REST. *)
   let total_filled : (int, Decimal.t) Hashtbl.t = Hashtbl.create 16 in
-  let bump_total ~placement_id ~delta =
-    let prev =
-      match Hashtbl.find_opt total_filled placement_id with
-      | Some d -> d
-      | None -> Decimal.zero
-    in
-    let next = Decimal.add prev delta in
-    Hashtbl.replace total_filled placement_id next;
-    next
+  let push_to_stream ~instrument ~timeframe candle =
+    match !registry_ref with
+    | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
+    | None -> ()
   in
-  let handle_trade (tu : Finam.Ws.trade_update) =
-    match Finam.Finam_broker.placement_id_by_order_id finam ~order_id:tu.order_id with
-    | None ->
-        Log.warn "[finam ws] trade for unknown order_id=%s — skipping" tu.order_id
-    | Some placement_id -> (
-        match origin_correlation_id ~placement_id with
-        | None ->
-            Log.warn
-              "[finam ws] trade for placement_id=%d has no Submit correlation_id; \
-               skipping"
-              placement_id
-        | Some correlation_id ->
-            let new_total = bump_total ~placement_id ~delta:tu.quantity in
-            let ie : Broker_integration_events.Order_filled_integration_event.t =
-              {
-                correlation_id;
-                placement_id;
-                id = tu.order_id;
-                exec_id = tu.trade_id;
-                instrument =
-                  Broker_view_models.Instrument_view_model.of_domain tu.instrument;
-                side = Side.to_string tu.side;
-                fill_quantity = Decimal.to_string tu.quantity;
-                fill_price = Decimal.to_string tu.price;
-                fee = "0";
-                new_total_filled = Decimal.to_string new_total;
-                fill_ts = Datetime.Iso8601.format tu.ts;
-              }
-            in
-            publish_order_filled ie)
+  let timeframes_fallback instrument =
+    match !bridge_ref with
+    | None -> []
+    | Some b -> Finam.Ws_bridge.timeframes_for_instrument b instrument
   in
   let on_event (ev : Finam.Ws.event) =
     match ev with
-    | Bars { instrument; timeframe; bars } ->
-        let tfs : Timeframe.t list =
-          match timeframe with
-          | Some tf -> [ tf ]
-          | None -> (
-              match !bridge_ref with
-              | None -> []
-              | Some b -> Finam.Ws_bridge.timeframes_for_instrument b instrument)
-        in
-        List.iter
-          (fun (tf : Timeframe.t) ->
-            List.iter
-              (fun (candle : Candle.t) ->
-                (match !registry_ref with
-                | Some r ->
-                    Server.Stream.push_from_upstream r ~instrument ~timeframe:tf candle
-                | None -> ());
-                publish_bar_updated
-                  (Broker_integration_events.Bar_updated_integration_event.of_domain
-                     ~instrument ~timeframe:tf ~candle))
-              bars)
-          tfs
-    | Trades trades -> List.iter handle_trade trades
-    | Error_ev { code; type_; message } ->
-        Log.warn "[finam ws] error %d %s: %s" code type_ message
-    | Lifecycle { event; code; reason } ->
-        Log.info "[finam ws] %s (%d) %s" event code reason
-    | _ -> ()
+    | Bars b ->
+        Finam.Ws.Events.Bars_handler.handle ~push_to_stream ~publish_bar_updated
+          ~timeframes_fallback b
+    | Trades trades ->
+        Finam.Ws.Events.Trade_handler.handle ~finam ~origin_correlation_id ~total_filled
+          ~publish_order_filled trades
+    | Error_ev e -> Finam.Ws.Events.Error_handler.handle e
+    | Lifecycle ev -> Finam.Ws.Events.Lifecycle_handler.handle ev
+    | Quote _ | Other _ -> ()
   in
   let bridge = Finam.Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event in
   bridge_ref := Some bridge;
@@ -117,8 +67,7 @@ let finam_live_setup
   (try
      Finam.Ws_bridge.subscribe_trades bridge
        ~account_id:(Finam.Finam_broker.account_id finam)
-   with e ->
-     Log.warn "[finam ws] subscribe_trades failed: %s" (Printexc.to_string e));
+   with e -> Log.warn "[finam ws] subscribe_trades failed: %s" (Printexc.to_string e));
   Server.Http.
     {
       on_first =
@@ -175,9 +124,7 @@ let bcs_polling_setup
     Hashtbl.replace total_filled placement_id next;
     next
   in
-  let now_ts () =
-    Int64.of_float (Eio.Time.now (Eio.Stdenv.clock env))
-  in
+  let now_ts () = Int64.of_float (Eio.Time.now (Eio.Stdenv.clock env)) in
   let poll_once () =
     let to_ts = now_ts () in
     (* Look back 5 minutes per poll — bounded recent window is
@@ -194,7 +141,7 @@ let bcs_polling_setup
       (fun (order_num, (exec : Broker_domain.Order.execution)) ->
         match Bcs.Bcs_broker.placement_id_by_order_num bcs ~order_num with
         | None -> ()
-        | Some placement_id -> (
+        | Some placement_id ->
             let key =
               ( placement_id,
                 exec.ts,
@@ -207,8 +154,8 @@ let bcs_polling_setup
               match origin_correlation_id ~placement_id with
               | None ->
                   Log.warn
-                    "[bcs poll] deal for placement_id=%d has no Submit \
-                     correlation_id; skipping"
+                    "[bcs poll] deal for placement_id=%d has no Submit correlation_id; \
+                     skipping"
                     placement_id
               | Some correlation_id ->
                   (* BCS's deal payload does not carry side per leg;
@@ -223,8 +170,7 @@ let bcs_polling_setup
                      synthetic SBER@MISX placeholder so the IE
                      remains schema-valid. *)
                   let parent =
-                    try Bcs.Bcs_broker.get_order bcs ~placement_id
-                    with _ -> None
+                    try Bcs.Bcs_broker.get_order bcs ~placement_id with _ -> None
                   in
                   let instrument =
                     match parent with
@@ -236,11 +182,12 @@ let bcs_polling_setup
                              ~venue:(Core.Mic.of_string "MISX") ())
                   in
                   let side =
-                    match parent with Some o -> o.side | None -> "BUY"
+                    match parent with
+                    | Some o -> o.side
+                    | None -> "BUY"
                   in
                   let new_total = bump_total ~placement_id ~delta:exec.quantity in
-                  let ie :
-                      Broker_integration_events.Order_filled_integration_event.t =
+                  let ie : Broker_integration_events.Order_filled_integration_event.t =
                     {
                       correlation_id;
                       placement_id;
@@ -261,14 +208,13 @@ let bcs_polling_setup
                     }
                   in
                   publish_order_filled ie
-            end))
+            end)
       deals
   in
   Eio.Fiber.fork ~sw (fun () ->
       while true do
         (try poll_once ()
-         with e ->
-           Log.warn "[bcs poll] tick failed: %s" (Printexc.to_string e));
+         with e -> Log.warn "[bcs poll] tick failed: %s" (Printexc.to_string e));
         Eio.Time.sleep (Eio.Stdenv.clock env) (Float.of_int poll_interval)
       done)
 
@@ -301,10 +247,9 @@ let bcs_live_setup
      Finam's always-on Sub_trades but via REST polling since BCS
      has no WS push for personal events. *)
   (try
-     bcs_polling_setup ~env ~poll_interval:5 ~publish_order_filled
-       ~origin_correlation_id ~bcs ~sw
-   with e ->
-     Log.warn "[bcs poll] setup failed: %s" (Printexc.to_string e));
+     bcs_polling_setup ~env ~poll_interval:5 ~publish_order_filled ~origin_correlation_id
+       ~bcs ~sw
+   with e -> Log.warn "[bcs poll] setup failed: %s" (Printexc.to_string e));
   Server.Http.
     {
       on_first =

@@ -62,10 +62,6 @@ let env_broker_overlay (base : T.broker option) : T.broker option =
   | Some (`Bcs creds) ->
       let merged : T.bcs_credentials =
         {
-          account_id =
-            (match Sys.getenv_opt "BCS_ACCOUNT_ID" with
-            | Some _ as s -> s
-            | None -> creds.account_id);
           client_id =
             (match Sys.getenv_opt "BCS_CLIENT_ID" with
             | Some _ as s -> s

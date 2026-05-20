@@ -36,10 +36,15 @@ type finam_credentials = {
 }
 
 type bcs_credentials = {
-  ?account_id <doc text="BCS account id."> : string option;
   ?client_id <doc text="OAuth client id (BCS distinguishes trade-api-read / trade-api-write — must match the client whose refresh-token is in the store)."> : string option;
   ?secret_seed <doc text="Optional bootstrap secret. If present, overwrites the persistent refresh-token store before reading. Use to recover from a stale rotated token."> : string option;
 }
+(* BCS scopes its API through the refresh-token itself (Keycloak issues
+   each token against a specific account at issue time), not through an
+   account_id URL parameter — none of the BCS REST paths carry
+   {account_id} as Finam's do. The Bcs.Config.account_id field
+   in our codebase is a dead leftover from an earlier symmetry attempt
+   with Finam; it should not surface through the wire-level config. *)
 
 type server = {
   ?host <doc text="HTTP listener host. Defaults to 127.0.0.1 in default.config.json."> : string option;

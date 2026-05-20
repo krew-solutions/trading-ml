@@ -496,7 +496,6 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
     | Some "bcs" ->
         let creds : Trading_config.bcs_credentials =
           {
-            account_id = arg_value "--account" args;
             client_id = arg_value "--client-id" args;
             secret_seed = arg_value "--secret" args;
           }
@@ -547,7 +546,10 @@ let cmd_serve args =
     match broker_choice with
     | `Synthetic -> (None, None, None)
     | `Finam creds -> (creds.secret, creds.account_id, None)
-    | `Bcs creds -> (creds.secret_seed, creds.account_id, creds.client_id)
+    | `Bcs creds -> (creds.secret_seed, None, creds.client_id)
+    (* BCS has no account_id parameter at the API level; the
+       middle slot here is uniformly None so the surrounding
+       open_bcs ?account_id receives nothing to forward. *)
   in
   let log_level =
     match cfg.logging with

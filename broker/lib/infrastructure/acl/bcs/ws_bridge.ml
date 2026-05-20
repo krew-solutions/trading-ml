@@ -55,7 +55,7 @@ let subscribe_bars
         (Timeframe.to_string timeframe)
     in
     let send_subscribe client =
-      let sub_msg = Ws.subscribe_last_candle_message ~class_code ~ticker ~timeframe in
+      let sub_msg = Ws.Requests.Candles.subscribe ~class_code ~ticker ~timeframe in
       Websocket.Client.send_text client (Yojson.Safe.to_string sub_msg)
     in
     let config : Websocket.Resilient.config =
@@ -110,7 +110,7 @@ let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   Option.iter
     (fun c ->
       let ticker, class_code = route t instrument in
-      let msg = Ws.unsubscribe_last_candle_message ~class_code ~ticker ~timeframe in
+      let msg = Ws.Requests.Candles.unsubscribe ~class_code ~ticker ~timeframe in
       Websocket.Resilient.send c (Yojson.Safe.to_string msg);
       Websocket.Resilient.close c)
     conn_opt

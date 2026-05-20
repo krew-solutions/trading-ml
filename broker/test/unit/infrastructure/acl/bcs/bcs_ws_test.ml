@@ -1,11 +1,13 @@
-(** Wire-format tests for [Bcs.Ws]. Reference: saved copy of the
-    official BCS docs "Последняя-свеча-БКС-Торговое-API.html". *)
+(** Wire-format tests for [Bcs.Ws]: per-channel subscription
+    envelope encoding and inbound event decoding. Reference:
+    saved copy of the official BCS docs
+    "Последняя-свеча-БКС-Торговое-API.html". *)
 
 open Core
 
 let test_subscribe_envelope () =
   let j =
-    Bcs.Ws.subscribe_last_candle_message ~class_code:"TQBR" ~ticker:"SBER"
+    Bcs.Ws.Requests.Candles.subscribe ~class_code:"TQBR" ~ticker:"SBER"
       ~timeframe:Timeframe.M1
   in
   let open Yojson.Safe.Util in
@@ -28,7 +30,7 @@ let test_subscribe_envelope () =
 
 let test_unsubscribe_envelope () =
   let j =
-    Bcs.Ws.unsubscribe_last_candle_message ~class_code:"TQBR" ~ticker:"SBER"
+    Bcs.Ws.Requests.Candles.unsubscribe ~class_code:"TQBR" ~ticker:"SBER"
       ~timeframe:Timeframe.H1
   in
   let open Yojson.Safe.Util in

@@ -5,3 +5,10 @@
             eio eio.unix yojson uri uuidm
             tls x509)
  (flags (:standard -open Broker_domain -open Broker_view_models)))
+
+; Per-channel WS requests + events live under [ws/]. Qualified
+; mode wraps subdirectory names into the module path:
+;   ws/ws.ml                → Bcs.Ws (collapse-rule main module)
+;   ws/requests/candles.ml  → Bcs.Ws.Requests.Candles
+;   ws/events/candle.ml     → Bcs.Ws.Events.Candle
+(include_subdirs qualified)

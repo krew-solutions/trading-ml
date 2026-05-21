@@ -24,8 +24,8 @@ let cfg_target vol = ({ target_annual_vol = dec vol } : VT.config)
 
 let scalar_intent ~instrument ~direction ~strength =
   CI.scalar ~book_id:(book ()) ~instrument ~direction
-    ~strength:(Strength.of_decimal strength) ~source:(alpha_source ())
-    ~observed_at:1L
+    ~strength:(Strength.of_decimal strength)
+    ~source:(alpha_source ()) ~observed_at:1L
 
 let test_zero_qty_when_vol_unknown () =
   let i = inst "SBER@MISX" in
@@ -33,15 +33,15 @@ let test_zero_qty_when_vol_unknown () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.10")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.10") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> None)
       intent
   in
   match proposal.positions with
   | [ pos ] ->
-      Alcotest.(check string) "qty 0 when vol unknown" "0"
+      Alcotest.(check string)
+        "qty 0 when vol unknown" "0"
         (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
@@ -51,16 +51,14 @@ let test_zero_qty_when_vol_is_zero () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.10")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.10") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> Some Decimal.zero)
       intent
   in
   match proposal.positions with
   | [ pos ] ->
-      Alcotest.(check string) "qty 0 when sigma=0" "0"
-        (Decimal.to_string pos.target_qty)
+      Alcotest.(check string) "qty 0 when sigma=0" "0" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let test_target_vol_matches_instrument_vol () =
@@ -73,15 +71,13 @@ let test_target_vol_matches_instrument_vol () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.20")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.20") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> Some (dec "0.20"))
       intent
   in
   match proposal.positions with
-  | [ pos ] ->
-      Alcotest.(check string) "qty 500" "500" (Decimal.to_string pos.target_qty)
+  | [ pos ] -> Alcotest.(check string) "qty 500" "500" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let test_lower_vol_gets_larger_position () =
@@ -92,16 +88,14 @@ let test_lower_vol_gets_larger_position () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.20")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.20") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> Some (dec "0.10"))
       intent
   in
   match proposal.positions with
   | [ pos ] ->
-      Alcotest.(check string) "qty 1000" "1000"
-        (Decimal.to_string pos.target_qty)
+      Alcotest.(check string) "qty 1000" "1000" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let test_higher_vol_gets_smaller_position () =
@@ -112,15 +106,13 @@ let test_higher_vol_gets_smaller_position () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.10")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.10") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> Some (dec "0.20"))
       intent
   in
   match proposal.positions with
-  | [ pos ] ->
-      Alcotest.(check string) "qty 250" "250" (Decimal.to_string pos.target_qty)
+  | [ pos ] -> Alcotest.(check string) "qty 250" "250" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let test_zero_qty_when_mark_unknown () =
@@ -129,16 +121,14 @@ let test_zero_qty_when_mark_unknown () =
     scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.10")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.10") ~book_equity:(dec "100000")
       ~mark:(fun _ -> Decimal.zero)
       ~volatility:(fun _ -> Some (dec "0.20"))
       intent
   in
   match proposal.positions with
   | [ pos ] ->
-      Alcotest.(check string) "qty 0 stale mark" "0"
-        (Decimal.to_string pos.target_qty)
+      Alcotest.(check string) "qty 0 stale mark" "0" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let test_sign_follows_direction () =
@@ -147,16 +137,14 @@ let test_sign_follows_direction () =
     scalar_intent ~instrument:i ~direction:Direction.Down ~strength:(dec "0.5")
   in
   let proposal =
-    VT.size (cfg_target "0.20")
-      ~book_equity:(dec "100000")
+    VT.size (cfg_target "0.20") ~book_equity:(dec "100000")
       ~mark:(const [ (i, dec "100") ])
       ~volatility:(fun _ -> Some (dec "0.20"))
       intent
   in
   match proposal.positions with
   | [ pos ] ->
-      Alcotest.(check string) "qty -500 (short)" "-500"
-        (Decimal.to_string pos.target_qty)
+      Alcotest.(check string) "qty -500 (short)" "-500" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "single position"
 
 let tests =
@@ -171,8 +159,7 @@ let tests =
       test_lower_vol_gets_larger_position;
     Alcotest.test_case "higher vol → smaller position" `Quick
       test_higher_vol_gets_smaller_position;
-    Alcotest.test_case "stale mark → qty zero" `Quick
-      test_zero_qty_when_mark_unknown;
+    Alcotest.test_case "stale mark → qty zero" `Quick test_zero_qty_when_mark_unknown;
     Alcotest.test_case "Down direction yields negative qty" `Quick
       test_sign_follows_direction;
   ]

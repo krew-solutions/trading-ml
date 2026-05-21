@@ -31,8 +31,7 @@ let apply_fill t ~(fill : Values.Fill_record.t) =
     let new_filled = Decimal.add t.cumulative_filled fill.quantity in
     if Decimal.compare new_filled t.requested_quantity > 0 then
       invalid_arg
-        "Placement.apply_fill: would push cumulative_filled past \
-         requested_quantity"
+        "Placement.apply_fill: would push cumulative_filled past requested_quantity"
     else
       let status =
         if Decimal.equal new_filled t.requested_quantity then
@@ -53,7 +52,6 @@ let cancel t =
   if Values.Placement_status.is_terminal t.status then t
   else { t with status = Values.Placement_status.Cancelled }
 
-let remaining_quantity t =
-  Decimal.sub t.requested_quantity t.cumulative_filled
+let remaining_quantity t = Decimal.sub t.requested_quantity t.cumulative_filled
 
 let is_terminal t = Values.Placement_status.is_terminal t.status

@@ -4,24 +4,20 @@ module Pm = Portfolio_management
 module DPM = Portfolio_management_commands.Define_pair_mr_command
 module H = Portfolio_management_commands.Define_pair_mr_command_handler
 
-let well_formed_cmd ?(book = "book-α") ?(a = "SBER@MISX") ?(b = "GAZP@MISX")
-    ?(hedge = "1.0") ?(window = 50) ?(z_entry = "2.0") ?(z_exit = "0.5") () :
-    DPM.t =
-  {
-    book_id = book;
-    a;
-    b;
-    hedge_ratio = hedge;
-    window;
-    z_entry;
-    z_exit;
-  }
+let well_formed_cmd
+    ?(book = "book-α")
+    ?(a = "SBER@MISX")
+    ?(b = "GAZP@MISX")
+    ?(hedge = "1.0")
+    ?(window = 50)
+    ?(z_entry = "2.0")
+    ?(z_exit = "0.5")
+    () : DPM.t =
+  { book_id = book; a; b; hedge_ratio = hedge; window; z_entry; z_exit }
 
 let make_registry () =
   let tbl :
-      ( Pm.Common.Book_id.t * Pm.Common.Pair.t,
-        Pm.Pair_mean_reversion.state )
-      Hashtbl.t =
+      (Pm.Common.Book_id.t * Pm.Common.Pair.t, Pm.Pair_mean_reversion.state) Hashtbl.t =
     Hashtbl.create 4
   in
   let persist ~book_id ~pair ~state = Hashtbl.replace tbl (book_id, pair) state in
@@ -41,12 +37,8 @@ let test_happy_path_persists () =
 
 let test_replaces_existing () =
   let tbl, persist = make_registry () in
-  let _ =
-    H.handle ~persist_pair_mr_state:persist (well_formed_cmd ~window:50 ())
-  in
-  let _ =
-    H.handle ~persist_pair_mr_state:persist (well_formed_cmd ~window:80 ())
-  in
+  let _ = H.handle ~persist_pair_mr_state:persist (well_formed_cmd ~window:50 ()) in
+  let _ = H.handle ~persist_pair_mr_state:persist (well_formed_cmd ~window:80 ()) in
   Alcotest.(check int) "still one entry (replaced)" 1 (Hashtbl.length tbl)
 
 let test_rejects_same_legs () =
@@ -58,13 +50,11 @@ let test_rejects_negative_hedge_ratio () =
 let test_rejects_zero_hedge_ratio () =
   expect_validation_failure (well_formed_cmd ~hedge:"0" ())
 
-let test_rejects_zero_window () =
-  expect_validation_failure (well_formed_cmd ~window:0 ())
+let test_rejects_zero_window () = expect_validation_failure (well_formed_cmd ~window:0 ())
 
 let test_rejects_z_entry_not_above_z_exit () =
   (* hysteresis invariant: |z_entry| > |z_exit| *)
-  expect_validation_failure
-    (well_formed_cmd ~z_entry:"0.5" ~z_exit:"1.0" ())
+  expect_validation_failure (well_formed_cmd ~z_entry:"0.5" ~z_exit:"1.0" ())
 
 let test_rejects_malformed_instrument () =
   expect_validation_failure (well_formed_cmd ~a:"not-qualified" ())

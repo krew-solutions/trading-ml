@@ -10,8 +10,7 @@ open Order_ticket_harness
 let ticket_id = 42
 
 let operator_cancel_before_any_fill =
-  Gherkin.scenario
-    "An operator cancels a working ticket before any fill arrives"
+  Gherkin.scenario "An operator cancels a working ticket before any fill arrives"
     fresh_ctx
     [
       Gherkin.given "an Immediate ticket has been opened" (fun ctx ->
@@ -28,8 +27,7 @@ let operator_cancel_before_any_fill =
           match lifecycle ctx ~ticket_id with
           | Cancelling _ -> ()
           | _ -> Alcotest.fail "expected Cancelling lifecycle");
-      Gherkin.when_
-        "the broker confirms every outstanding placement was cancelled"
+      Gherkin.when_ "the broker confirms every outstanding placement was cancelled"
         (fun ctx ->
           let pids = outstanding_after_open ctx ~ticket_id in
           List.fold_left
@@ -37,8 +35,7 @@ let operator_cancel_before_any_fill =
               apply_placement_cancelled ctx ~ticket_id
                 ~placement_id:(Ot.Placement.Values.Placement_id.to_int pid))
             ctx pids);
-      Gherkin.then_
-        "the ticket reaches the Cancelled terminal state and announces it"
+      Gherkin.then_ "the ticket reaches the Cancelled terminal state and announces it"
         (fun ctx ->
           let evs = emitted ctx in
           Alcotest.(check int)
@@ -51,11 +48,9 @@ let operator_cancel_before_any_fill =
 
 let cancel_after_full_fill_is_a_noop =
   Gherkin.scenario
-    "A cancel arriving after the ticket already filled completely is absorbed"
-    fresh_ctx
+    "A cancel arriving after the ticket already filled completely is absorbed" fresh_ctx
     [
-      Gherkin.given "an Immediate ticket has been opened and fully filled"
-        (fun ctx ->
+      Gherkin.given "an Immediate ticket has been opened and fully filled" (fun ctx ->
           let ctx =
             open_immediate_ticket ctx ~ticket_id ~correlation_id:"saga-cancel-B"
           in
@@ -106,8 +101,7 @@ let late_placement_cancelled_in_terminal_is_dropped =
               apply_placement_cancelled ctx ~ticket_id
                 ~placement_id:(Ot.Placement.Values.Placement_id.to_int pid))
             ctx pids);
-      Gherkin.when_
-        "a late broker Order_cancelled arrives for the same placement"
+      Gherkin.when_ "a late broker Order_cancelled arrives for the same placement"
         (fun ctx ->
           let pid = placement_id_of_terminal_ticket ctx in
           apply_placement_cancelled ctx ~ticket_id ~placement_id:pid);

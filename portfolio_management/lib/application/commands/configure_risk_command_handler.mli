@@ -24,9 +24,7 @@ val handle_error_to_string : handle_error -> string
 
 val handle :
   persist_risk_config:
-    (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management.Risk_config.t ->
-    unit) ->
+    (Portfolio_management.Common.Book_id.t -> Portfolio_management.Risk_config.t -> unit) ->
   Configure_risk_command.t ->
   (unit, handle_error) Rop.t
 (** Validate the wire command, build a

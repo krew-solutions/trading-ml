@@ -18,8 +18,7 @@ let delivers_to_matching_subscriber () =
   let t = Feed.create () in
   let received = ref 0 in
   let _ : Feed.subscription =
-    Feed.subscribe t ~instrument:instrument_sber
-      ~on_quote:(fun _ -> incr received)
+    Feed.subscribe t ~instrument:instrument_sber ~on_quote:(fun _ -> incr received)
   in
   Feed.deliver t ~instrument:instrument_sber ~quote:(quote ~price:"100");
   Alcotest.(check int) "one delivery" 1 !received
@@ -28,8 +27,7 @@ let does_not_deliver_to_other_instrument () =
   let t = Feed.create () in
   let received = ref 0 in
   let _ : Feed.subscription =
-    Feed.subscribe t ~instrument:instrument_sber
-      ~on_quote:(fun _ -> incr received)
+    Feed.subscribe t ~instrument:instrument_sber ~on_quote:(fun _ -> incr received)
   in
   Feed.deliver t ~instrument:instrument_gazp ~quote:(quote ~price:"100");
   Alcotest.(check int) "no delivery" 0 !received
@@ -38,8 +36,7 @@ let unsubscribe_stops_deliveries () =
   let t = Feed.create () in
   let received = ref 0 in
   let sub =
-    Feed.subscribe t ~instrument:instrument_sber
-      ~on_quote:(fun _ -> incr received)
+    Feed.subscribe t ~instrument:instrument_sber ~on_quote:(fun _ -> incr received)
   in
   Feed.deliver t ~instrument:instrument_sber ~quote:(quote ~price:"100");
   Feed.unsubscribe t sub;
@@ -52,6 +49,5 @@ let tests =
       delivers_to_matching_subscriber;
     Alcotest.test_case "no delivery to other instrument" `Quick
       does_not_deliver_to_other_instrument;
-    Alcotest.test_case "unsubscribe stops deliveries" `Quick
-      unsubscribe_stops_deliveries;
+    Alcotest.test_case "unsubscribe stops deliveries" `Quick unsubscribe_stops_deliveries;
   ]

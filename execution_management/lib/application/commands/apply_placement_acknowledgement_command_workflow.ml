@@ -7,7 +7,9 @@ let execute
     ~(publish : Ot.event -> unit)
     ~(now : unit -> int64)
     (cmd : Apply_placement_acknowledgement_command.t) =
-  let module S = (val store : Execution_management_ports.Ticket_store.S with type t = store) in
+  let module S =
+    (val store : Execution_management_ports.Ticket_store.S with type t = store)
+  in
   match Ot.Values.Ticket_id.of_int cmd.ticket_id with
   | exception Invalid_argument m ->
       Rop.fail (Command_error.Invalid_payload ("ticket_id: " ^ m))

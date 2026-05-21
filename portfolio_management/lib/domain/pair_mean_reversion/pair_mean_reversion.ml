@@ -44,13 +44,9 @@ let intent_for_direction
   let beta = Common.Hedge_ratio.to_decimal config.hedge_ratio in
   let denom = Decimal.add Decimal.one beta in
   let w_mag_a =
-    if Decimal.is_zero denom then Decimal.zero
-    else Decimal.div Decimal.one denom
+    if Decimal.is_zero denom then Decimal.zero else Decimal.div Decimal.one denom
   in
-  let w_mag_b =
-    if Decimal.is_zero denom then Decimal.zero
-    else Decimal.div beta denom
-  in
+  let w_mag_b = if Decimal.is_zero denom then Decimal.zero else Decimal.div beta denom in
   let w_a, w_b =
     match direction with
     | Direction.Flat -> (Decimal.zero, Decimal.zero)
@@ -60,18 +56,11 @@ let intent_for_direction
   let a = Common.Pair.a config.pair in
   let b = Common.Pair.b config.pair in
   let legs : Common.Construction_intent.leg list =
-    [
-      { instrument = a; weight = w_a };
-      { instrument = b; weight = w_b };
-    ]
+    [ { instrument = a; weight = w_a }; { instrument = b; weight = w_b } ]
   in
-  let coupling =
-    Common.Coupling.make ~source:name observed_at
-  in
-  Common.Construction_intent.coupled ~book_id:config.book_id ~legs
-    ~coupling
-    ~source:(Common.Source.Pair_mean_reversion config.pair)
-    ~observed_at
+  let coupling = Common.Coupling.make ~source:name observed_at in
+  Common.Construction_intent.coupled ~book_id:config.book_id ~legs ~coupling
+    ~source:(Common.Source.Pair_mean_reversion config.pair) ~observed_at
 
 let on_bar (state : State.t) ~instrument ~candle :
     State.t * Common.Construction_intent.t option =
@@ -97,7 +86,6 @@ let on_bar (state : State.t) ~instrument ~candle :
           | Some new_dir ->
               let state'' = State.with_direction state' new_dir in
               let intent =
-                intent_for_direction ~config:cfg ~direction:new_dir
-                  ~observed_at:candle.ts
+                intent_for_direction ~config:cfg ~direction:new_dir ~observed_at:candle.ts
               in
               (state'', Some intent)))

@@ -16,12 +16,10 @@ let limits () =
   Risk_limits.make ~max_per_instrument_notional:(dec "100000")
     ~max_gross_exposure:(dec "500000")
 
-let alpha_src () =
-  Source.Alpha_view (Alpha_source_id.of_string "momentum-1")
+let alpha_src () = Source.Alpha_view (Alpha_source_id.of_string "momentum-1")
 
 let pair_src () =
-  Source.Pair_mean_reversion
-    (Pair.make ~a:(inst "SBER@MISX") ~b:(inst "GAZP@MISX"))
+  Source.Pair_mean_reversion (Pair.make ~a:(inst "SBER@MISX") ~b:(inst "GAZP@MISX"))
 
 let default_sizing = SPC.Equity_proportional
 
@@ -47,9 +45,9 @@ let test_make_rejects_negative_fraction () =
   Alcotest.check_raises "negative" (Invalid_argument "") (fun () ->
       try
         let _ =
-          Risk_config.make ~book_id:(book ())
-            ~risk_budget_fraction:(dec "-0.01") ~limits:(limits ())
-            ~construction_source:(alpha_src ()) ~sizing_policy:default_sizing
+          Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "-0.01")
+            ~limits:(limits ()) ~construction_source:(alpha_src ())
+            ~sizing_policy:default_sizing
         in
         ()
       with Invalid_argument _ -> raise (Invalid_argument ""))
@@ -58,9 +56,9 @@ let test_make_rejects_above_one_fraction () =
   Alcotest.check_raises "above 1" (Invalid_argument "") (fun () ->
       try
         let _ =
-          Risk_config.make ~book_id:(book ())
-            ~risk_budget_fraction:(dec "1.01") ~limits:(limits ())
-            ~construction_source:(alpha_src ()) ~sizing_policy:default_sizing
+          Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "1.01")
+            ~limits:(limits ()) ~construction_source:(alpha_src ())
+            ~sizing_policy:default_sizing
         in
         ()
       with Invalid_argument _ -> raise (Invalid_argument ""))
@@ -69,8 +67,7 @@ let test_make_accepts_vol_target () =
   let _ =
     Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "0.3")
       ~limits:(limits ()) ~construction_source:(alpha_src ())
-      ~sizing_policy:
-        (SPC.Volatility_target { target_annual_vol = dec "0.15" })
+      ~sizing_policy:(SPC.Volatility_target { target_annual_vol = dec "0.15" })
   in
   Alcotest.(check pass) "constructed" () ()
 
@@ -78,11 +75,9 @@ let test_make_rejects_negative_target_vol () =
   Alcotest.check_raises "negative target" (Invalid_argument "") (fun () ->
       try
         let _ =
-          Risk_config.make ~book_id:(book ())
-            ~risk_budget_fraction:(dec "0.3") ~limits:(limits ())
-            ~construction_source:(alpha_src ())
-            ~sizing_policy:
-              (SPC.Volatility_target { target_annual_vol = dec "-0.05" })
+          Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "0.3")
+            ~limits:(limits ()) ~construction_source:(alpha_src ())
+            ~sizing_policy:(SPC.Volatility_target { target_annual_vol = dec "-0.05" })
         in
         ()
       with Invalid_argument _ -> raise (Invalid_argument ""))
@@ -91,11 +86,12 @@ let test_sizing_policy_roundtrips () =
   let cfg =
     Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "0.3")
       ~limits:(limits ()) ~construction_source:(alpha_src ())
-      ~sizing_policy:
-        (SPC.Volatility_target { target_annual_vol = dec "0.10" })
+      ~sizing_policy:(SPC.Volatility_target { target_annual_vol = dec "0.10" })
   in
-  Alcotest.(check bool) "vol_target" true
-    (SPC.equal (Risk_config.sizing_policy cfg)
+  Alcotest.(check bool)
+    "vol_target" true
+    (SPC.equal
+       (Risk_config.sizing_policy cfg)
        (SPC.Volatility_target { target_annual_vol = dec "0.10" }))
 
 let test_book_equity_is_linear () =
@@ -113,14 +109,11 @@ let test_authorises_matches_only_same_source () =
       ~limits:(limits ()) ~construction_source:(alpha_src ())
       ~sizing_policy:default_sizing
   in
-  Alcotest.(check bool) "same source" true
-    (Risk_config.authorises cfg (alpha_src ()));
-  Alcotest.(check bool) "different kind" false
-    (Risk_config.authorises cfg (pair_src ()));
-  let other_alpha =
-    Source.Alpha_view (Alpha_source_id.of_string "momentum-2")
-  in
-  Alcotest.(check bool) "different alpha id" false
+  Alcotest.(check bool) "same source" true (Risk_config.authorises cfg (alpha_src ()));
+  Alcotest.(check bool) "different kind" false (Risk_config.authorises cfg (pair_src ()));
+  let other_alpha = Source.Alpha_view (Alpha_source_id.of_string "momentum-2") in
+  Alcotest.(check bool)
+    "different alpha id" false
     (Risk_config.authorises cfg other_alpha)
 
 let tests =

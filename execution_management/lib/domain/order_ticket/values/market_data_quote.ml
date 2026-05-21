@@ -1,9 +1,4 @@
-type t = {
-  ts : int64;
-  bid : Decimal.t;
-  ask : Decimal.t;
-  realised_volatility : float;
-}
+type t = { ts : int64; bid : Decimal.t; ask : Decimal.t; realised_volatility : float }
 
 let make ~ts ~bid ~ask ~realised_volatility =
   if Decimal.compare bid Decimal.zero <= 0 then

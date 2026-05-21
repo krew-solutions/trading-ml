@@ -1,10 +1,6 @@
 open Core
 
-type t = {
-  instrument : Instrument.t;
-  timeframe : Timeframe.t;
-  candle : Candle.t;
-}
+type t = { instrument : Instrument.t; timeframe : Timeframe.t; candle : Candle.t }
 
 let num_field k j =
   let open Yojson.Safe.Util in
@@ -16,8 +12,7 @@ let num_field k j =
   | _ -> Decimal.zero
 
 let instrument_from ~ticker ~class_code =
-  Instrument.make ~ticker:(Ticker.of_string ticker)
-    ~venue:(Mic.of_string "MISX")
+  Instrument.make ~ticker:(Ticker.of_string ticker) ~venue:(Mic.of_string "MISX")
     ~board:(Board.of_string class_code) ()
 
 let parse (j : Yojson.Safe.t) : t =
@@ -33,11 +28,7 @@ let parse (j : Yojson.Safe.t) : t =
     | _ -> 0L
   in
   let candle =
-    Candle.make ~ts
-      ~open_:(num_field "open" j)
-      ~high:(num_field "high" j)
-      ~low:(num_field "low" j)
-      ~close:(num_field "close" j)
-      ~volume:(num_field "volume" j)
+    Candle.make ~ts ~open_:(num_field "open" j) ~high:(num_field "high" j)
+      ~low:(num_field "low" j) ~close:(num_field "close" j) ~volume:(num_field "volume" j)
   in
   { instrument; timeframe; candle }

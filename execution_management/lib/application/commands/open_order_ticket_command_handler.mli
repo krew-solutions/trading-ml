@@ -7,9 +7,7 @@
 
 val resolve_directive :
   Open_order_ticket_command.directive option ->
-  ( Execution_management.Order_ticket.Values.Execution_directive.t,
-    Command_error.t )
-  result
+  (Execution_management.Order_ticket.Values.Execution_directive.t, Command_error.t) result
 (** Maps the optional wire-shape directive (kind + opaque JSON
     params blob) to the typed
     {!Order_ticket.Values.Execution_directive.t}. [None] falls
@@ -20,7 +18,6 @@ val resolve_directive :
 val handle :
   now:int64 ->
   Open_order_ticket_command.t ->
-  (Execution_management.Order_ticket.t
-   * Execution_management.Order_ticket.event list,
-   Command_error.t)
+  ( Execution_management.Order_ticket.t * Execution_management.Order_ticket.event list,
+    Command_error.t )
   Rop.t

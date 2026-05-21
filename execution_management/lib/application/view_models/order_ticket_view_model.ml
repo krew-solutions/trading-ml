@@ -13,8 +13,7 @@ let lifecycle_to_strings (l : Ot.lifecycle) : string * string option =
   | Cancelling { reason; _ } ->
       ("CANCELLING", Some (Ot.Values.Cancel_reason.to_string reason))
   | Filled -> ("FILLED", None)
-  | Cancelled reason ->
-      ("CANCELLED", Some (Ot.Values.Cancel_reason.to_string reason))
+  | Cancelled reason -> ("CANCELLED", Some (Ot.Values.Cancel_reason.to_string reason))
   | Failed reason -> ("FAILED", Some reason)
 
 let strategy_of_lifecycle (l : Ot.lifecycle) : Ot.Strategies.Strategy.t option =

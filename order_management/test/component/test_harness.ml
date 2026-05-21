@@ -15,11 +15,8 @@ let fresh_ctx () =
   let engine = Pm.Engine.create ~store ~dispatch in
   { engine; dispatched }
 
-let start_saga ?directive ctx ~correlation_id ~book_id ~symbol ~side ~quantity
-    ~price =
-  let payload =
-    Pm.initial_payload ?directive ~book_id ~symbol ~side ~quantity ()
-  in
+let start_saga ?directive ctx ~correlation_id ~book_id ~symbol ~side ~quantity ~price =
+  let payload = Pm.initial_payload ?directive ~book_id ~symbol ~side ~quantity () in
   Pm.Engine.start ctx.engine ~correlation_id (Pm.Awaiting_reservation { payload });
   let dispatch_cb cmd = ctx.dispatched := cmd :: !(ctx.dispatched) in
   dispatch_cb (Pm.reserve_for_start ~correlation_id ~payload ~price);
@@ -60,12 +57,18 @@ let push_reservation_rejected ctx ~correlation_id ~symbol ~side ~quantity ~reaso
   Pm.Engine.on_event ctx.engine (Pm.Reservation_rejected ev);
   ctx
 
-let progress_vm ~total_quantity ~cumulative_filled ~remaining_quantity ~total_fees
-    : Iqr.Progress_view_model.t =
+let progress_vm ~total_quantity ~cumulative_filled ~remaining_quantity ~total_fees :
+    Iqr.Progress_view_model.t =
   { total_quantity; cumulative_filled; remaining_quantity; total_fees }
 
-let push_ticket_fill_recorded ctx ~correlation_id ~ticket_id ~reservation_id
-    ~quantity ~price ~fee =
+let push_ticket_fill_recorded
+    ctx
+    ~correlation_id
+    ~ticket_id
+    ~reservation_id
+    ~quantity
+    ~price
+    ~fee =
   let ev : Inbound.Order_ticket_fill_recorded_integration_event.t =
     {
       correlation_id;
@@ -87,16 +90,15 @@ let push_ticket_completed ctx ~correlation_id ~ticket_id ~reservation_id =
       ticket_id;
       reservation_id;
       progress =
-        progress_vm ~total_quantity:"10" ~cumulative_filled:"10"
-          ~remaining_quantity:"0" ~total_fees:"0";
+        progress_vm ~total_quantity:"10" ~cumulative_filled:"10" ~remaining_quantity:"0"
+          ~total_fees:"0";
       occurred_at = "1970-01-01T00:00:00Z";
     }
   in
   Pm.Engine.on_event ctx.engine (Pm.Ticket_completed ev);
   ctx
 
-let push_ticket_cancelled ctx ~correlation_id ~ticket_id ~reservation_id
-    ~reason =
+let push_ticket_cancelled ctx ~correlation_id ~ticket_id ~reservation_id ~reason =
   let ev : Inbound.Order_ticket_cancelled_integration_event.t =
     {
       correlation_id;
@@ -104,8 +106,8 @@ let push_ticket_cancelled ctx ~correlation_id ~ticket_id ~reservation_id
       reservation_id;
       reason;
       progress =
-        progress_vm ~total_quantity:"10" ~cumulative_filled:"0"
-          ~remaining_quantity:"10" ~total_fees:"0";
+        progress_vm ~total_quantity:"10" ~cumulative_filled:"0" ~remaining_quantity:"10"
+          ~total_fees:"0";
       occurred_at = "1970-01-01T00:00:00Z";
     }
   in
@@ -120,8 +122,8 @@ let push_ticket_failed ctx ~correlation_id ~ticket_id ~reservation_id ~reason =
       reservation_id;
       reason;
       progress =
-        progress_vm ~total_quantity:"10" ~cumulative_filled:"0"
-          ~remaining_quantity:"10" ~total_fees:"0";
+        progress_vm ~total_quantity:"10" ~cumulative_filled:"0" ~remaining_quantity:"10"
+          ~total_fees:"0";
       occurred_at = "1970-01-01T00:00:00Z";
     }
   in

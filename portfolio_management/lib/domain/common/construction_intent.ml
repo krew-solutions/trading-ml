@@ -46,19 +46,16 @@ let coupled ~book_id ~legs ~coupling ~source ~observed_at =
              (Decimal.to_string weight)))
     legs;
   let legs_sorted =
-    List.sort
-      (fun a b -> Instrument.compare a.instrument b.instrument)
-      legs
+    List.sort (fun a b -> Instrument.compare a.instrument b.instrument) legs
   in
   if has_duplicate_sorted legs_sorted then
     invalid_arg "Construction_intent.coupled: duplicate instrument in legs";
   let s = sum_abs_weights legs_sorted in
   if Decimal.compare s Decimal.one > 0 then
     invalid_arg
-      (Printf.sprintf
-         "Construction_intent.coupled: Σ |weight| > 1 (got %s)" (Decimal.to_string s));
-  Coupled
-    { book_id; legs = legs_sorted; coupling; source; observed_at }
+      (Printf.sprintf "Construction_intent.coupled: Σ |weight| > 1 (got %s)"
+         (Decimal.to_string s));
+  Coupled { book_id; legs = legs_sorted; coupling; source; observed_at }
 
 let book_id = function
   | Scalar s -> s.book_id

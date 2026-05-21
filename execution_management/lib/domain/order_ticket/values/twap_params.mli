@@ -13,11 +13,7 @@
       [start_at + i × (window_seconds / n_slices)] in seconds, so
       callers must supply [start_at] on the same clock as ticks. *)
 
-type t = private {
-  n_slices : int;
-  window_seconds : int;
-  start_at : int64;
-}
+type t = private { n_slices : int; window_seconds : int; start_at : int64 }
 
 val make : n_slices:int -> window_seconds:int -> start_at:int64 -> t
 (*@ r = make ~n_slices ~window_seconds ~start_at

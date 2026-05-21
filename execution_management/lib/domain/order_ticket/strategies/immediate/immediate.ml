@@ -6,15 +6,16 @@ type lifecycle =
   | Completed  (** Filled (quantity = total). *)
   | Failed of string  (** Rejected / unreachable / cancelled. *)
 
-type state = {
-  total_quantity : Decimal.t;
-  lifecycle : lifecycle;
-}
+type state = { total_quantity : Decimal.t; lifecycle : lifecycle }
 
 let init ~(intent : Values.Trade_intent.t) ~now:_ =
   let state = { total_quantity = intent.total_quantity; lifecycle = Pending } in
   let submit : Decision.submit_request =
-    { quantity = intent.total_quantity; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
+    {
+      quantity = intent.total_quantity;
+      kind = Placement.Values.Order_kind.Market;
+      tif = Placement.Values.Tif.Day;
+    }
   in
   let decision : Decision.t =
     { submit = [ submit ]; cancel = []; terminal = Decision.Continue }
@@ -57,16 +58,16 @@ let on_event state (input : Input.t) ~now:_ : state * Decision.t =
             { Decision.empty with terminal = Decision.Failed ("rejected: " ^ reason) } )
       | Input.Placement_unreachable _ ->
           let new_state = fail_state state "unreachable" in
-          ( new_state,
-            { Decision.empty with terminal = Decision.Failed "unreachable" } )
+          (new_state, { Decision.empty with terminal = Decision.Failed "unreachable" })
       | Input.Placement_cancelled _ ->
           let new_state = fail_state state "cancelled" in
-          ( new_state,
-            { Decision.empty with terminal = Decision.Failed "cancelled" } )
+          (new_state, { Decision.empty with terminal = Decision.Failed "cancelled" })
       | Input.Tick _ | Input.Volume_bar _ | Input.Price_quote _ ->
           (* Immediate is event-driven only — clock / volume / price
              feeds are irrelevant. *)
           (state, Decision.empty))
 
 let is_complete state =
-  match state.lifecycle with Completed -> true | Pending | Failed _ -> false
+  match state.lifecycle with
+  | Completed -> true
+  | Pending | Failed _ -> false

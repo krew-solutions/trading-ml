@@ -20,27 +20,20 @@ module Target_portfolio_updated =
 
 val execute :
   pair_mr_states_for:
-    (Core.Instrument.t ->
-    Portfolio_management.Pair_mean_reversion.state ref list) ->
+    (Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list) ->
   update_mark:(Core.Instrument.t -> close:Decimal.t -> unit) ->
   update_vol:(Core.Instrument.t -> close:Decimal.t -> unit) ->
   risk_config_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management.Risk_config.t option) ->
+    (Portfolio_management.Common.Book_id.t -> Portfolio_management.Risk_config.t option) ->
   total_equity_for:(Portfolio_management.Common.Book_id.t -> Decimal.t) ->
-  mark_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Core.Instrument.t ->
-    Decimal.t) ->
+  mark_for:(Portfolio_management.Common.Book_id.t -> Core.Instrument.t -> Decimal.t) ->
   volatility_for:(Core.Instrument.t -> Decimal.t option) ->
   sizing_for:
     (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management_domain_event_handlers
-    .Build_target_on_construction_intent
+    Portfolio_management_domain_event_handlers.Build_target_on_construction_intent
     .sizing_fn) ->
   target_portfolio_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management.Target_portfolio.t ref) ->
+    (Portfolio_management.Common.Book_id.t -> Portfolio_management.Target_portfolio.t ref) ->
   publish_target_portfolio_updated:(Target_portfolio_updated.t -> unit) ->
   Apply_bar_command.t ->
   (unit, Apply_bar_command_handler.handle_error) Rop.t

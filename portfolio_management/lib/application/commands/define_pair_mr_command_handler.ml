@@ -88,5 +88,4 @@ let handle ~persist_pair_mr_state (cmd : DPM.t) : (unit, handle_error) Rop.t =
             let state = Pm.Pair_mean_reversion.init cfg in
             persist_pair_mr_state ~book_id ~pair ~state;
             Rop.succeed ()
-          with Invalid_argument msg ->
-            Error [ Validation (Invalid_config msg) ]))
+          with Invalid_argument msg -> Error [ Validation (Invalid_config msg) ]))

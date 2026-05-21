@@ -9,11 +9,9 @@ let t_of_yojson (j : Yojson.Safe.t) : t = t_of_string (Yojson.Safe.to_string j)
 let of_domain ~correlation_id (e : Opened.t) : t =
   {
     correlation_id;
-    ticket_id =
-      Execution_management.Order_ticket.Values.Ticket_id.to_int e.ticket_id;
+    ticket_id = Execution_management.Order_ticket.Values.Ticket_id.to_int e.ticket_id;
     reservation_id =
-      Execution_management.Order_ticket.Values.Reservation_id.to_int
-        e.reservation_id;
+      Execution_management.Order_ticket.Values.Reservation_id.to_int e.reservation_id;
     book_id = e.intent.book_id;
     instrument = Instrument_view_model.of_domain e.intent.instrument;
     side = Core.Side.to_string e.intent.side;

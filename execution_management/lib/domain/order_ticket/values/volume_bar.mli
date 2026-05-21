@@ -10,10 +10,7 @@
 
 (*@ function dec_raw (d : Decimal.t) : integer *)
 
-type t = private {
-  ts : int64;
-  volume : Decimal.t;
-}
+type t = private { ts : int64; volume : Decimal.t }
 
 val make : ts:int64 -> volume:Decimal.t -> t
 (*@ r = make ~ts ~volume

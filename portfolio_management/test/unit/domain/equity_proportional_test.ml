@@ -14,14 +14,13 @@ module Alpha_source_id = Portfolio_management.Common.Alpha_source_id
 let book () = Book_id.of_string "book-α"
 let inst sym = Instrument.of_qualified sym
 let dec = Decimal.of_string
-let alpha_source () =
-  Source.Alpha_view (Alpha_source_id.of_string "test-source")
+let alpha_source () = Source.Alpha_view (Alpha_source_id.of_string "test-source")
 
 let const_mark table =
-  fun i ->
-    match List.find_opt (fun (s, _) -> Instrument.equal s i) table with
-    | Some (_, p) -> p
-    | None -> Decimal.zero
+ fun i ->
+  match List.find_opt (fun (s, _) -> Instrument.equal s i) table with
+  | Some (_, p) -> p
+  | None -> Decimal.zero
 
 let no_vol _ = None
 
@@ -35,8 +34,7 @@ let test_scalar_up_qty () =
       ~source:(alpha_source ()) ~observed_at:1L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "100000")
+    SP.size () ~book_equity:(dec "100000")
       ~mark:(const_mark [ (i, dec "100") ])
       ~volatility:no_vol intent
   in
@@ -55,14 +53,12 @@ let test_scalar_down_negative_qty () =
       ~source:(alpha_source ()) ~observed_at:1L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "100000")
+    SP.size () ~book_equity:(dec "100000")
       ~mark:(const_mark [ (i, dec "100") ])
       ~volatility:no_vol intent
   in
   match proposal.positions with
-  | [ pos ] ->
-      Alcotest.(check string) "qty" "-500" (Decimal.to_string pos.target_qty)
+  | [ pos ] -> Alcotest.(check string) "qty" "-500" (Decimal.to_string pos.target_qty)
   | _ -> Alcotest.fail "expected single position"
 
 let test_scalar_flat_zero_qty () =
@@ -72,8 +68,7 @@ let test_scalar_flat_zero_qty () =
       ~strength:Strength.one ~source:(alpha_source ()) ~observed_at:1L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "100000")
+    SP.size () ~book_equity:(dec "100000")
       ~mark:(const_mark [ (i, dec "100") ])
       ~volatility:no_vol intent
   in
@@ -88,8 +83,7 @@ let test_scalar_nonpositive_mark_zero_qty () =
       ~strength:Strength.one ~source:(alpha_source ()) ~observed_at:1L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "100000")
+    SP.size () ~book_equity:(dec "100000")
       ~mark:(const_mark [ (i, Decimal.zero) ])
       ~volatility:no_vol intent
   in
@@ -126,37 +120,37 @@ let test_coupled_pair_preserves_ratio () =
           { instrument = b; weight = dec "-0.666666" };
         ]
       ~coupling:(Coupling.make ~source:"test" 1L)
-      ~source:
-        (Source.Pair_mean_reversion (Pair.make ~a ~b))
+      ~source:(Source.Pair_mean_reversion (Pair.make ~a ~b))
       ~observed_at:1L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "300000")
+    SP.size () ~book_equity:(dec "300000")
       ~mark:(const_mark [ (a, dec "100"); (b, dec "100") ])
       ~volatility:no_vol intent
   in
   (* Positions sorted by instrument name (GAZP < SBER). *)
   match proposal.positions with
   | [ p1; p2 ] ->
-      let by_inst = fun ps i ->
-        List.find (fun (p : Portfolio_management.Common.Target_position.t) ->
-          Instrument.equal p.instrument i) ps
+      let by_inst =
+       fun ps i ->
+        List.find
+          (fun (p : Portfolio_management.Common.Target_position.t) ->
+            Instrument.equal p.instrument i)
+          ps
       in
       let pa = by_inst [ p1; p2 ] a in
       let pb = by_inst [ p1; p2 ] b in
       (* 300000 × 0.333333 / 100 = 999.999 ; ÷ 666.666 = 1500.. *)
       (* Approximate: ratio |qty_b| / |qty_a| ≈ 2 *)
-      let ratio =
-        Decimal.div (Decimal.abs pb.target_qty) (Decimal.abs pa.target_qty)
-      in
-      Alcotest.(check bool) "|qty_b| / |qty_a| ≈ 2" true
+      let ratio = Decimal.div (Decimal.abs pb.target_qty) (Decimal.abs pa.target_qty) in
+      Alcotest.(check bool)
+        "|qty_b| / |qty_a| ≈ 2" true
         (Decimal.compare ratio (dec "1.999") > 0
         && Decimal.compare ratio (dec "2.001") < 0);
       Alcotest.(check bool) "coupling on a" true (pa.coupling <> None);
       Alcotest.(check bool) "coupling on b" true (pb.coupling <> None);
       let same =
-        match pa.coupling, pb.coupling with
+        match (pa.coupling, pb.coupling) with
         | Some ca, Some cb -> Coupling.equal ca cb
         | _ -> false
       in
@@ -170,16 +164,14 @@ let test_coupled_signs_match_weight_signs () =
     CI.coupled ~book_id:(book ())
       ~legs:
         [
-          { instrument = a; weight = dec "0.5" };
-          { instrument = b; weight = dec "-0.5" };
+          { instrument = a; weight = dec "0.5" }; { instrument = b; weight = dec "-0.5" };
         ]
       ~coupling:(Coupling.make 2L)
       ~source:(Source.Pair_mean_reversion (Pair.make ~a ~b))
       ~observed_at:2L
   in
   let proposal =
-    SP.size ()
-      ~book_equity:(dec "100000")
+    SP.size () ~book_equity:(dec "100000")
       ~mark:(const_mark [ (a, dec "100"); (b, dec "100") ])
       ~volatility:no_vol intent
   in
@@ -200,8 +192,7 @@ let test_coupled_signs_match_weight_signs () =
 
 let tests =
   [
-    Alcotest.test_case "Scalar Up produces positive qty" `Quick
-      test_scalar_up_qty;
+    Alcotest.test_case "Scalar Up produces positive qty" `Quick test_scalar_up_qty;
     Alcotest.test_case "Scalar Down produces negative qty" `Quick
       test_scalar_down_negative_qty;
     Alcotest.test_case "Scalar Flat → zero qty regardless of strength" `Quick

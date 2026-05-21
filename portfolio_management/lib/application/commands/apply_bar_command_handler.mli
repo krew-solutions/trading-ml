@@ -37,8 +37,7 @@ type ok = {
 
 val handle :
   pair_mr_states_for:
-    (Core.Instrument.t ->
-    Portfolio_management.Pair_mean_reversion.state ref list) ->
+    (Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list) ->
   Apply_bar_command.t ->
   (ok, handle_error) Rop.t
 (** Parse, advance every matching pair-mr state, collect emitted

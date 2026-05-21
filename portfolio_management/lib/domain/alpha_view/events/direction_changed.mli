@@ -19,10 +19,7 @@ type t = {
   occurred_at : int64;
 }
 
-val to_construction_intent :
-  t ->
-  book_id:Common.Book_id.t ->
-  Common.Construction_intent.t
+val to_construction_intent : t -> book_id:Common.Book_id.t -> Common.Construction_intent.t
 (** Pure projection: turns the event into a single-asset
     {!Construction_intent.Scalar} for the supplied subscribing
     [book_id]. One direction flip fans out to as many scalar

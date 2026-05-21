@@ -17,9 +17,14 @@ let pair_source : CR.construction_source =
 
 let default_sizing : CR.sizing_policy = `Equity_proportional
 
-let well_formed_cmd ?(book = book_str) ?(fraction = "0.3") ?(per_inst = "100000")
-    ?(gross = "500000") ?(source = alpha_source)
-    ?(sizing_policy = default_sizing) () : CR.t =
+let well_formed_cmd
+    ?(book = book_str)
+    ?(fraction = "0.3")
+    ?(per_inst = "100000")
+    ?(gross = "500000")
+    ?(source = alpha_source)
+    ?(sizing_policy = default_sizing)
+    () : CR.t =
   {
     book_id = book;
     risk_budget_fraction = fraction;
@@ -30,9 +35,7 @@ let well_formed_cmd ?(book = book_str) ?(fraction = "0.3") ?(per_inst = "100000"
   }
 
 let make_registry () =
-  let tbl : (Pm.Common.Book_id.t, Pm.Risk_config.t) Hashtbl.t =
-    Hashtbl.create 4
-  in
+  let tbl : (Pm.Common.Book_id.t, Pm.Risk_config.t) Hashtbl.t = Hashtbl.create 4 in
   let persist bid cfg = Hashtbl.replace tbl bid cfg in
   (tbl, persist)
 
@@ -46,11 +49,9 @@ let test_happy_persists_alpha_source () =
           Alcotest.(check string) "fraction" "0.3" (Decimal.to_string frac);
           let src = Pm.Risk_config.construction_source cfg in
           let expected =
-            Pm.Common.Source.Alpha_view
-              (Pm.Common.Alpha_source_id.of_string "momentum-1")
+            Pm.Common.Source.Alpha_view (Pm.Common.Alpha_source_id.of_string "momentum-1")
           in
-          Alcotest.(check bool) "alpha source" true
-            (Pm.Common.Source.equal src expected)
+          Alcotest.(check bool) "alpha source" true (Pm.Common.Source.equal src expected)
       | None -> Alcotest.fail "registry empty after persist")
   | Error _ -> Alcotest.fail "expected Ok"
 
@@ -67,8 +68,7 @@ let test_happy_persists_pair_source () =
           let expected =
             Pm.Common.Source.Pair_mean_reversion (Pm.Common.Pair.make ~a ~b)
           in
-          Alcotest.(check bool) "pair source" true
-            (Pm.Common.Source.equal src expected)
+          Alcotest.(check bool) "pair source" true (Pm.Common.Source.equal src expected)
       | None -> Alcotest.fail "registry empty")
   | Error _ -> Alcotest.fail "expected Ok"
 
@@ -78,7 +78,8 @@ let test_replaces_existing_config () =
   let _ = H.handle ~persist_risk_config:persist (well_formed_cmd ~fraction:"0.8" ()) in
   match Hashtbl.find_opt tbl book_id with
   | Some cfg ->
-      Alcotest.(check string) "second wins" "0.8"
+      Alcotest.(check string)
+        "second wins" "0.8"
         (Decimal.to_string (Pm.Risk_config.risk_budget_fraction cfg))
   | None -> Alcotest.fail "registry empty"
 
@@ -104,9 +105,7 @@ let test_rejects_negative_limit () =
   expect_validation_failure (well_formed_cmd ~per_inst:"-1" ())
 
 let test_rejects_pair_with_same_legs () =
-  let same =
-    `Pair_mean_reversion { CR.a = "SBER@MISX"; b = "SBER@MISX" }
-  in
+  let same = `Pair_mean_reversion { CR.a = "SBER@MISX"; b = "SBER@MISX" } in
   expect_validation_failure (well_formed_cmd ~source:same ())
 
 let test_rejects_invalid_alpha_id () =
@@ -115,30 +114,24 @@ let test_rejects_invalid_alpha_id () =
 
 let test_persists_volatility_target_sizing () =
   let tbl, persist = make_registry () in
-  let sp : CR.sizing_policy =
-    `Volatility_target { CR.target_annual_vol = "0.15" }
-  in
+  let sp : CR.sizing_policy = `Volatility_target { CR.target_annual_vol = "0.15" } in
   let cmd = well_formed_cmd ~sizing_policy:sp () in
   match H.handle ~persist_risk_config:persist cmd with
   | Ok () -> (
       match Hashtbl.find_opt tbl book_id with
       | Some cfg ->
-          Alcotest.(check string) "policy name" "volatility_target"
-            (Pm.Common.Sizing_policy_choice.name
-               (Pm.Risk_config.sizing_policy cfg))
+          Alcotest.(check string)
+            "policy name" "volatility_target"
+            (Pm.Common.Sizing_policy_choice.name (Pm.Risk_config.sizing_policy cfg))
       | None -> Alcotest.fail "registry empty")
   | Error _ -> Alcotest.fail "expected Ok"
 
 let test_rejects_negative_target_annual_vol () =
-  let sp : CR.sizing_policy =
-    `Volatility_target { CR.target_annual_vol = "-0.01" }
-  in
+  let sp : CR.sizing_policy = `Volatility_target { CR.target_annual_vol = "-0.01" } in
   expect_validation_failure (well_formed_cmd ~sizing_policy:sp ())
 
 let test_rejects_malformed_target_annual_vol () =
-  let sp : CR.sizing_policy =
-    `Volatility_target { CR.target_annual_vol = "huge" }
-  in
+  let sp : CR.sizing_policy = `Volatility_target { CR.target_annual_vol = "huge" } in
   expect_validation_failure (well_formed_cmd ~sizing_policy:sp ())
 
 let tests =
@@ -147,13 +140,10 @@ let tests =
       test_happy_persists_alpha_source;
     Alcotest.test_case "happy path persists pair config" `Quick
       test_happy_persists_pair_source;
-    Alcotest.test_case "second config replaces first" `Quick
-      test_replaces_existing_config;
+    Alcotest.test_case "second config replaces first" `Quick test_replaces_existing_config;
     Alcotest.test_case "rejects empty book_id" `Quick test_rejects_empty_book_id;
-    Alcotest.test_case "rejects fraction above 1" `Quick
-      test_rejects_fraction_above_one;
-    Alcotest.test_case "rejects negative fraction" `Quick
-      test_rejects_negative_fraction;
+    Alcotest.test_case "rejects fraction above 1" `Quick test_rejects_fraction_above_one;
+    Alcotest.test_case "rejects negative fraction" `Quick test_rejects_negative_fraction;
     Alcotest.test_case "rejects non-decimal fraction" `Quick
       test_rejects_non_decimal_fraction;
     Alcotest.test_case "rejects negative limit" `Quick test_rejects_negative_limit;

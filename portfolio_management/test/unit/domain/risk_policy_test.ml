@@ -108,8 +108,7 @@ let test_gross_pass_scales_legs_proportionally () =
     "LKOH scaled to 150" true
     (Decimal.equal (qty_of "LKOH@MISX") (dec 150))
 
-let coupled_position ~book_id instrument target_qty coupling
-    : Common.Target_position.t =
+let coupled_position ~book_id instrument target_qty coupling : Common.Target_position.t =
   { book_id; instrument; target_qty; coupling = Some coupling }
 
 let test_coupling_group_preserves_ratio_under_per_instrument_clip () =
@@ -147,18 +146,10 @@ let test_coupling_group_preserves_ratio_under_per_instrument_clip () =
   in
   let qa = qty_of "SBER@MISX" in
   let qb = qty_of "LKOH@MISX" in
-  Alcotest.(check bool)
-    "leg A scaled to 500" true
-    (Decimal.equal qa (dec 500));
-  Alcotest.(check bool)
-    "leg B scaled to -250" true
-    (Decimal.equal qb (dec (-250)));
-  let ratio =
-    Decimal.div (Decimal.abs qa) (Decimal.abs qb)
-  in
-  Alcotest.(check bool)
-    "|qa|/|qb| = 2 preserved" true
-    (Decimal.equal ratio (dec 2))
+  Alcotest.(check bool) "leg A scaled to 500" true (Decimal.equal qa (dec 500));
+  Alcotest.(check bool) "leg B scaled to -250" true (Decimal.equal qb (dec (-250)));
+  let ratio = Decimal.div (Decimal.abs qa) (Decimal.abs qb) in
+  Alcotest.(check bool) "|qa|/|qb| = 2 preserved" true (Decimal.equal ratio (dec 2))
 
 let test_independent_legs_clipped_separately () =
   let limits =

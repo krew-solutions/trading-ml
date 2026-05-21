@@ -11,11 +11,7 @@ module Store = Execution_management_persistence.In_memory_ticket_store
 module Ports = Execution_management_ports
 module Cmds = Execution_management_commands
 
-type ctx = {
-  store : Store.t;
-  events : Ot.event list ref;
-  now : unit -> int64;
-}
+type ctx = { store : Store.t; events : Ot.event list ref; now : unit -> int64 }
 
 let store_module = (module Store : Ports.Ticket_store.S with type t = Store.t)
 
@@ -65,9 +61,7 @@ let cancel_ticket ctx ~ticket_id ~reason =
         (String.concat "; " (List.map Cmds.Command_error.to_string errs))
 
 let apply_placement_cancelled ctx ~ticket_id ~placement_id =
-  let cmd : Cmds.Apply_placement_cancelled_command.t =
-    { ticket_id; placement_id }
-  in
+  let cmd : Cmds.Apply_placement_cancelled_command.t = { ticket_id; placement_id } in
   match
     Cmds.Apply_placement_cancelled_command_workflow.execute ~store:store_module
       ~store_handle:ctx.store ~publish:(publish ctx) ~now:ctx.now cmd
@@ -97,8 +91,7 @@ let apply_placement_fill ctx ~ticket_id ~placement_id ~quantity =
       Alcotest.failf "apply_placement_fill failed: %s"
         (String.concat "; " (List.map Cmds.Command_error.to_string errs))
 
-let ticket ctx ~ticket_id =
-  Store.get ctx.store (Values.Ticket_id.of_int ticket_id)
+let ticket ctx ~ticket_id = Store.get ctx.store (Values.Ticket_id.of_int ticket_id)
 
 let lifecycle ctx ~ticket_id =
   match ticket ctx ~ticket_id with

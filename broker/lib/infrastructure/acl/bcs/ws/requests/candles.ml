@@ -5,13 +5,8 @@ let envelope ~subscribe_type ~class_code ~ticker ~timeframe : Yojson.Safe.t =
       ("dataType", `Int 1);
       ("timeFrame", `String (Rest.timeframe_wire timeframe));
       ( "instruments",
-        `List
-          [
-            `Assoc
-              [
-                ("classCode", `String class_code); ("ticker", `String ticker);
-              ];
-          ] );
+        `List [ `Assoc [ ("classCode", `String class_code); ("ticker", `String ticker) ] ]
+      );
     ]
 
 let subscribe = envelope ~subscribe_type:0

@@ -6,8 +6,10 @@ type t =
   | Iceberg of Iceberg.state
   | Implementation_shortfall of Implementation_shortfall.state
 
-let init ~(intent : Values.Trade_intent.t)
-    ~(directive : Values.Execution_directive.t) ~now =
+let init
+    ~(intent : Values.Trade_intent.t)
+    ~(directive : Values.Execution_directive.t)
+    ~now =
   match directive with
   | Values.Execution_directive.Immediate ->
       let state, decision = Immediate.init ~intent ~now in
@@ -25,9 +27,7 @@ let init ~(intent : Values.Trade_intent.t)
       let state, decision = Iceberg.init ~intent ~params ~now in
       (Iceberg state, decision)
   | Values.Execution_directive.Implementation_shortfall params ->
-      let state, decision =
-        Implementation_shortfall.init ~intent ~params ~now
-      in
+      let state, decision = Implementation_shortfall.init ~intent ~params ~now in
       (Implementation_shortfall state, decision)
 
 let on_event (t : t) (input : Input.t) ~now : t * Decision.t =
@@ -57,5 +57,4 @@ let is_complete = function
   | Vwap state -> Vwap.is_complete state
   | Pov state -> Pov.is_complete state
   | Iceberg state -> Iceberg.is_complete state
-  | Implementation_shortfall state ->
-      Implementation_shortfall.is_complete state
+  | Implementation_shortfall state -> Implementation_shortfall.is_complete state

@@ -18,12 +18,7 @@ type t = private {
   realised_volatility : float;
 }
 
-val make :
-  ts:int64 ->
-  bid:Decimal.t ->
-  ask:Decimal.t ->
-  realised_volatility:float ->
-  t
+val make : ts:int64 -> bid:Decimal.t -> ask:Decimal.t -> realised_volatility:float -> t
 (*@ r = make ~ts ~bid ~ask ~realised_volatility
     requires dec_raw bid > 0
     requires dec_raw ask > 0

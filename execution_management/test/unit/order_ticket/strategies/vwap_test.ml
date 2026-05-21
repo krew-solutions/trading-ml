@@ -10,7 +10,8 @@ let qty s = Decimal.of_string s
 
 let intent_total qty_s =
   let instrument =
-    Core.Instrument.make ~ticker:(Core.Ticker.of_string "SBER")
+    Core.Instrument.make
+      ~ticker:(Core.Ticker.of_string "SBER")
       ~venue:(Core.Mic.of_string "MISX") ()
   in
   Values.Trade_intent.make ~book_id:"alpha" ~instrument ~side:Core.Side.Buy
@@ -41,8 +42,7 @@ let test_schedule_follows_volume_profile () =
     ts := Int64.add !ts 15L
   done;
   let total = List.fold_left Decimal.add Decimal.zero !qtys in
-  Alcotest.(check string) "Σ slice_qty = total" "100"
-    (Decimal.to_string total);
+  Alcotest.(check string) "Σ slice_qty = total" "100" (Decimal.to_string total);
   Alcotest.(check int) "exactly 4 slices emitted" 4 (List.length !qtys)
 
 let test_unnormalised_weights_get_normalised () =
@@ -65,8 +65,7 @@ let test_unnormalised_weights_get_normalised () =
       decision.submit;
     ts := Int64.add !ts 15L
   done;
-  Alcotest.(check string) "Σ = total after normalisation" "100"
-    (Decimal.to_string !total)
+  Alcotest.(check string) "Σ = total after normalisation" "100" (Decimal.to_string !total)
 
 let test_init_emits_no_immediate_submit () =
   let intent = intent_total "100" in
@@ -86,7 +85,8 @@ let test_uniform_profile_equals_twap_quantities () =
   in
   let state, _ = Vwap.init ~intent ~params ~now:1_000L in
   let _, decision = Vwap.on_event state (tick 1_000L) ~now:1_000L in
-  Alcotest.(check string) "uniform → equal slices" "25"
+  Alcotest.(check string)
+    "uniform → equal slices" "25"
     (Decimal.to_string (List.hd decision.submit).quantity)
 
 let tests =

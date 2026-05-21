@@ -102,18 +102,15 @@ let build ~bus ~now : t =
           (fun (s : Portfolio_management.Common.Alpha_subscription.t) -> s.book_id)
           subs
   in
-  let persist_subscription
-      (sub : Portfolio_management.Common.Alpha_subscription.t) : unit =
+  let persist_subscription (sub : Portfolio_management.Common.Alpha_subscription.t) : unit
+      =
     let key = (sub.alpha_source_id, sub.instrument) in
     let existing =
       match Hashtbl.find_opt alpha_subscriptions key with
       | Some xs -> xs
       | None -> []
     in
-    if
-      List.exists
-        (Portfolio_management.Common.Alpha_subscription.equal sub)
-        existing
+    if List.exists (Portfolio_management.Common.Alpha_subscription.equal sub) existing
     then ()
     else Hashtbl.replace alpha_subscriptions key (sub :: existing)
   in
@@ -123,7 +120,8 @@ let build ~bus ~now : t =
      contains no entry for a book, the unified handler is a silent
      no-op for that book — intents fall through harmlessly. *)
   let risk_configs :
-      (Portfolio_management.Common.Book_id.t, Portfolio_management.Risk_config.t)
+      ( Portfolio_management.Common.Book_id.t,
+        Portfolio_management.Risk_config.t )
       Hashtbl.t =
     Hashtbl.create 8
   in
@@ -158,8 +156,7 @@ let build ~bus ~now : t =
      per-(book, timeframe) Vol_view aggregate lands. The
      [volatility_for] provider gracefully degrades to [None]
      during warmup. *)
-  let vol_states : (Instrument.t, Portfolio_management.Common.Vol_state.t ref)
-      Hashtbl.t =
+  let vol_states : (Instrument.t, Portfolio_management.Common.Vol_state.t ref) Hashtbl.t =
     Hashtbl.create 64
   in
   let vol_window = 20 in
@@ -203,29 +200,27 @@ let build ~bus ~now : t =
      [Configure_risk_command] re-issued for the same book swaps
      the policy without disturbing the unified handler. *)
   let sizing_for book_id :
-      Portfolio_management_domain_event_handlers
-      .Build_target_on_construction_intent
+      Portfolio_management_domain_event_handlers.Build_target_on_construction_intent
       .sizing_fn =
-    fun ~book_equity ~mark ~volatility intent ->
-      let choice =
-        match risk_config_for book_id with
-        | Some cfg -> Portfolio_management.Risk_config.sizing_policy cfg
-        | None ->
-            (* Fallback for the no-config branch: silent no-op
+   fun ~book_equity ~mark ~volatility intent ->
+    let choice =
+      match risk_config_for book_id with
+      | Some cfg -> Portfolio_management.Risk_config.sizing_policy cfg
+      | None ->
+          (* Fallback for the no-config branch: silent no-op
                anyway downstream (the unified handler short-
                circuits on missing Risk_config), so the choice
                here is observationally irrelevant. *)
-            Portfolio_management.Common.Sizing_policy_choice.Equity_proportional
-      in
-      match choice with
-      | Portfolio_management.Common.Sizing_policy_choice.Equity_proportional ->
-          Portfolio_management.Sizing_policy.Equity_proportional.size ()
-            ~book_equity ~mark ~volatility intent
-      | Portfolio_management.Common.Sizing_policy_choice.Volatility_target
-          { target_annual_vol } ->
-          Portfolio_management.Sizing_policy.Volatility_target.size
-            { target_annual_vol }
-            ~book_equity ~mark ~volatility intent
+          Portfolio_management.Common.Sizing_policy_choice.Equity_proportional
+    in
+    match choice with
+    | Portfolio_management.Common.Sizing_policy_choice.Equity_proportional ->
+        Portfolio_management.Sizing_policy.Equity_proportional.size () ~book_equity ~mark
+          ~volatility intent
+    | Portfolio_management.Common.Sizing_policy_choice.Volatility_target
+        { target_annual_vol } ->
+        Portfolio_management.Sizing_policy.Volatility_target.size { target_annual_vol }
+          ~book_equity ~mark ~volatility intent
   in
   let produce (type a) ~uri ~(yojson_of : a -> Yojson.Safe.t) : a -> unit =
     Bus.publish
@@ -295,10 +290,9 @@ let build ~bus ~now : t =
   in
   let dispatch_apply_bar cmd =
     match
-      Portfolio_management_commands.Apply_bar_command_workflow.execute
-        ~pair_mr_states_for ~update_mark ~update_vol ~risk_config_for
-        ~total_equity_for ~mark_for ~volatility_for ~sizing_for
-        ~target_portfolio_for:target_portfolio_for_create
+      Portfolio_management_commands.Apply_bar_command_workflow.execute ~pair_mr_states_for
+        ~update_mark ~update_vol ~risk_config_for ~total_equity_for ~mark_for
+        ~volatility_for ~sizing_for ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with
     | Ok () -> ()
@@ -317,8 +311,8 @@ let build ~bus ~now : t =
   in
   let dispatch_subscribe_book_to_alpha cmd :
       ( unit,
-        Portfolio_management_commands.Subscribe_book_to_alpha_command_handler
-        .handle_error )
+        Portfolio_management_commands.Subscribe_book_to_alpha_command_handler.handle_error
+      )
       Rop.t =
     Portfolio_management_commands.Subscribe_book_to_alpha_command_workflow.execute
       ~persist_subscription cmd
@@ -331,8 +325,7 @@ let build ~bus ~now : t =
   in
   let dispatch_define_pair_mr cmd :
       ( unit,
-        Portfolio_management_commands.Define_pair_mr_command_handler.handle_error
-      )
+        Portfolio_management_commands.Define_pair_mr_command_handler.handle_error )
       Rop.t =
     Portfolio_management_commands.Define_pair_mr_command_workflow.execute
       ~persist_pair_mr_state cmd

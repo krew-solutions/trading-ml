@@ -10,21 +10,14 @@ let init ~window ~annualisation_factor =
   if window < 3 then
     invalid_arg
       (Printf.sprintf
-         "Vol_state.init: window must be >= 3 (Bessel-corrected sample \
-          stdev needs at least two returns), got %d"
+         "Vol_state.init: window must be >= 3 (Bessel-corrected sample stdev needs at \
+          least two returns), got %d"
          window);
   if annualisation_factor <= 0.0 then
     invalid_arg
-      (Printf.sprintf
-         "Vol_state.init: annualisation_factor must be > 0, got %g"
+      (Printf.sprintf "Vol_state.init: annualisation_factor must be > 0, got %g"
          annualisation_factor);
-  {
-    window;
-    annualisation_factor;
-    closes = Array.make window 0.0;
-    next = 0;
-    count = 0;
-  }
+  { window; annualisation_factor; closes = Array.make window 0.0; next = 0; count = 0 }
 
 let update s ~close =
   if not (Decimal.is_positive close) then
@@ -41,8 +34,7 @@ let update s ~close =
 (* Read out the [count] log-closes in chronological order. *)
 let chronological s =
   if s.count < s.window then Array.sub s.closes 0 s.count
-  else
-    Array.init s.window (fun i -> s.closes.((s.next + i) mod s.window))
+  else Array.init s.window (fun i -> s.closes.((s.next + i) mod s.window))
 
 let current s =
   if s.count < s.window then None
@@ -52,11 +44,7 @@ let current s =
     let returns = Array.init n_returns (fun i -> lc.(i + 1) -. lc.(i)) in
     let sum = Array.fold_left ( +. ) 0.0 returns in
     let mean = sum /. float_of_int n_returns in
-    let sq_dev =
-      Array.fold_left
-        (fun acc r -> acc +. ((r -. mean) ** 2.0))
-        0.0 returns
-    in
+    let sq_dev = Array.fold_left (fun acc r -> acc +. ((r -. mean) ** 2.0)) 0.0 returns in
     (* Sample standard deviation (Bessel's correction) for an
        unbiased estimator on the small windows typical here. *)
     let variance = sq_dev /. float_of_int (n_returns - 1) in

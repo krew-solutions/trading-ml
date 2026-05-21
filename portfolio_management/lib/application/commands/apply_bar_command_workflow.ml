@@ -23,11 +23,9 @@ let execute
       update_vol instrument ~close;
       List.iter
         (fun intent ->
-          Portfolio_management_domain_event_handlers
-          .Build_target_on_construction_intent
-          .handle ~risk_config_for ~total_equity_for ~mark_for
-            ~volatility_for ~sizing_for ~target_portfolio_for
-            ~publish_target_portfolio_updated intent)
+          Portfolio_management_domain_event_handlers.Build_target_on_construction_intent
+          .handle ~risk_config_for ~total_equity_for ~mark_for ~volatility_for ~sizing_for
+            ~target_portfolio_for ~publish_target_portfolio_updated intent)
         intents;
       Rop.succeed ()
   | Error errs -> Error errs

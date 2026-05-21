@@ -26,7 +26,7 @@ let handle
          is a wiring inconsistency. Silent skip — composition is
          responsible for keeping registries aligned. *)
       ()
-  | Some risk_cfg ->
+  | Some risk_cfg -> (
       let source = Common.Construction_intent.source intent in
       if not (Risk_config.authorises risk_cfg source) then
         (* One-source-per-book invariant: silently drop intents
@@ -35,21 +35,15 @@ let handle
         ()
       else
         let total_equity = total_equity_for book_id in
-        let book_equity =
-          Risk_config.book_equity risk_cfg ~total_equity
-        in
+        let book_equity = Risk_config.book_equity risk_cfg ~total_equity in
         let mark = mark_for book_id in
         let size = sizing_for book_id in
-        let proposal =
-          size ~book_equity ~mark ~volatility:volatility_for intent
-        in
+        let proposal = size ~book_equity ~mark ~volatility:volatility_for intent in
         let clipped =
-          Risk.Risk_policy.clip
-            ~limits:(Risk_config.limits risk_cfg)
-            ~mark proposal
+          Risk.Risk_policy.clip ~limits:(Risk_config.limits risk_cfg) ~mark proposal
         in
         let r = target_portfolio_for book_id in
-        (match Target_portfolio.apply_proposal !r clipped with
+        match Target_portfolio.apply_proposal !r clipped with
         | Ok (t', target_set) ->
             r := t';
             Publish_integration_event_on_target_set.handle

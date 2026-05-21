@@ -8,8 +8,8 @@ let leg_notional mark (tp : Common.Target_position.t) =
    |target_qty| × mark ≤ max_per_instrument_notional. Preserves
    sign. Treats a non-positive mark as a no-op (no basis to
    compute notional). *)
-let clip_leg_to_per_instrument ~max_notional ~mark
-    (tp : Common.Target_position.t) : Common.Target_position.t =
+let clip_leg_to_per_instrument ~max_notional ~mark (tp : Common.Target_position.t) :
+    Common.Target_position.t =
   let mark_price = mark tp.instrument in
   if not (Decimal.is_positive mark_price) then tp
   else
@@ -28,7 +28,9 @@ let clip_leg_to_per_instrument ~max_notional ~mark
    exceed the per-instrument cap, then multiply every leg of the
    group by that scale. When no leg exceeds, the group is
    untouched. *)
-let group_scale_for_per_instrument ~max_notional ~mark
+let group_scale_for_per_instrument
+    ~max_notional
+    ~mark
     (legs : Common.Target_position.t list) : Decimal.t =
   List.fold_left
     (fun acc (tp : Common.Target_position.t) ->
@@ -50,8 +52,7 @@ let scale_leg ~scale (tp : Common.Target_position.t) : Common.Target_position.t 
    Independent legs are clipped one by one (sign-preserved).
    Coupled legs are grouped by Coupling.t and each group is
    scaled by a single common factor preserving ratios. *)
-let clip_per_instrument ~max_notional ~mark
-    (positions : Common.Target_position.t list) :
+let clip_per_instrument ~max_notional ~mark (positions : Common.Target_position.t list) :
     Common.Target_position.t list =
   let independents, by_group =
     List.fold_left
@@ -59,11 +60,7 @@ let clip_per_instrument ~max_notional ~mark
         match tp.coupling with
         | None -> (tp :: indep, groups)
         | Some c -> (
-            match
-              List.partition
-                (fun (c', _) -> Common.Coupling.equal c' c)
-                groups
-            with
+            match List.partition (fun (c', _) -> Common.Coupling.equal c' c) groups with
             | [], rest -> (indep, (c, [ tp ]) :: rest)
             | [ (c', legs) ], rest -> (indep, (c', tp :: legs) :: rest)
             | _ ->

@@ -12,8 +12,7 @@
     handler-local concern is the subscriber fan-out itself
     ([subscribers_for]). *)
 
-module Direction_changed =
-  Portfolio_management.Alpha_view.Events.Direction_changed
+module Direction_changed = Portfolio_management.Alpha_view.Events.Direction_changed
 
 module Target_portfolio_updated =
   Portfolio_management_integration_events.Target_portfolio_updated_integration_event
@@ -24,20 +23,15 @@ val handle :
     instrument:Core.Instrument.t ->
     Portfolio_management.Common.Book_id.t list) ->
   risk_config_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management.Risk_config.t option) ->
+    (Portfolio_management.Common.Book_id.t -> Portfolio_management.Risk_config.t option) ->
   total_equity_for:(Portfolio_management.Common.Book_id.t -> Decimal.t) ->
-  mark_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Core.Instrument.t ->
-    Decimal.t) ->
+  mark_for:(Portfolio_management.Common.Book_id.t -> Core.Instrument.t -> Decimal.t) ->
   volatility_for:(Core.Instrument.t -> Decimal.t option) ->
   sizing_for:
     (Portfolio_management.Common.Book_id.t ->
     Build_target_on_construction_intent.sizing_fn) ->
   target_portfolio_for:
-    (Portfolio_management.Common.Book_id.t ->
-    Portfolio_management.Target_portfolio.t ref) ->
+    (Portfolio_management.Common.Book_id.t -> Portfolio_management.Target_portfolio.t ref) ->
   publish_target_portfolio_updated:(Target_portfolio_updated.t -> unit) ->
   Direction_changed.t ->
   unit

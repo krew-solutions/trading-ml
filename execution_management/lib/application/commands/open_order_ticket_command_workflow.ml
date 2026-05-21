@@ -7,7 +7,9 @@ let execute
     ~(publish : Ot.event -> unit)
     ~(now : unit -> int64)
     (cmd : Open_order_ticket_command.t) =
-  let module S = (val store : Execution_management_ports.Ticket_store.S with type t = store) in
+  let module S =
+    (val store : Execution_management_ports.Ticket_store.S with type t = store)
+  in
   match Open_order_ticket_command_handler.handle ~now:(now ()) cmd with
   | Error errs -> Error errs
   | Ok (t, events) ->

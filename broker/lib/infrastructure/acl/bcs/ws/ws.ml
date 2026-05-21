@@ -16,6 +16,5 @@ let event_of_json (j : Yojson.Safe.t) : event =
   | None -> (
       match member "responseType" j with
       | `String "CandleStick" -> Candle_ev (Events.Candle.parse j)
-      | `String "CandleStickSuccess" ->
-          Subscribe_ack (Events.Subscribe_ack.parse j)
+      | `String "CandleStickSuccess" -> Subscribe_ack (Events.Subscribe_ack.parse j)
       | _ -> Other j)

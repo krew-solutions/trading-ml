@@ -14,16 +14,12 @@ let pick (base : 'a option) (overlay : 'a option) : 'a option =
 (* Pick records field-by-field; if both sides have a Some record,
    recurse into per-field merge. Otherwise, plain "later wins"
    on the option wrapper. *)
-let merge_server (base : T.server option) (overlay : T.server option) :
-    T.server option =
+let merge_server (base : T.server option) (overlay : T.server option) : T.server option =
   match (base, overlay) with
   | None, x | x, None -> x
-  | Some b, Some o ->
-      Some
-        { T.host = pick b.host o.host; port = pick b.port o.port }
+  | Some b, Some o -> Some { T.host = pick b.host o.host; port = pick b.port o.port }
 
-let merge_engine (base : T.engine option) (overlay : T.engine option) :
-    T.engine option =
+let merge_engine (base : T.engine option) (overlay : T.engine option) : T.engine option =
   match (base, overlay) with
   | None, x | x, None -> x
   | Some b, Some o ->
@@ -47,8 +43,7 @@ let merge_logging (base : T.logging option) (overlay : T.logging option) :
    deployment" use case. To override a single credential field
    without retyping the whole variant, the operator sets the
    env-var override layer (which is field-shaped). *)
-let merge_broker (base : T.broker option) (overlay : T.broker option) :
-    T.broker option =
+let merge_broker (base : T.broker option) (overlay : T.broker option) : T.broker option =
   pick base overlay
 
 let merge (base : T.t) (overlay : T.t) : T.t =

@@ -8,11 +8,7 @@ module DPMH = Portfolio_management_commands.Define_pair_mr_command_handler
 let success_body : Yojson.Safe.t = `Assoc [ ("result", `String "ok") ]
 
 let malformed_body ~msg : Yojson.Safe.t =
-  `Assoc
-    [
-      ("result", `String "malformed_request");
-      ("message", `String msg);
-    ]
+  `Assoc [ ("result", `String "malformed_request"); ("message", `String msg) ]
 
 let validation_body_of_strings (errors : string list) : Yojson.Safe.t =
   `Assoc
@@ -27,9 +23,15 @@ let parse_body parse_string body : ('a, string) result =
   with Atdgen_runtime.Oj_run.Error msg | Yojson.Json_error msg -> Error msg
 
 let json_response ~status body : Inbound_http.Route.response =
-  let code = match status with `OK -> 200 | `Bad_request -> 400 in
+  let code =
+    match status with
+    | `OK -> 200
+    | `Bad_request -> 400
+  in
   let cohttp_status =
-    match status with `OK -> `OK | `Bad_request -> `Bad_request
+    match status with
+    | `OK -> `OK
+    | `Bad_request -> `Bad_request
   in
   (code, `Response (Inbound_http.Response.json ~status:cohttp_status body))
 
@@ -42,8 +44,7 @@ let respond_rop ~error_to_string = function
 let configure_risk_response configure_risk body : Inbound_http.Route.response =
   match parse_body CR.t_of_string body with
   | Error msg -> json_response ~status:`Bad_request (malformed_body ~msg)
-  | Ok cmd ->
-      respond_rop ~error_to_string:CRH.handle_error_to_string (configure_risk cmd)
+  | Ok cmd -> respond_rop ~error_to_string:CRH.handle_error_to_string (configure_risk cmd)
 
 let subscribe_book_to_alpha_response subscribe_book_to_alpha body :
     Inbound_http.Route.response =
@@ -57,8 +58,7 @@ let define_pair_mr_response define_pair_mr body : Inbound_http.Route.response =
   match parse_body DPM.t_of_string body with
   | Error msg -> json_response ~status:`Bad_request (malformed_body ~msg)
   | Ok cmd ->
-      respond_rop ~error_to_string:DPMH.handle_error_to_string
-        (define_pair_mr cmd)
+      respond_rop ~error_to_string:DPMH.handle_error_to_string (define_pair_mr cmd)
 
 let make_handler ~configure_risk ~subscribe_book_to_alpha ~define_pair_mr :
     Inbound_http.Route.handler =

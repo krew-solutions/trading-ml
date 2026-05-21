@@ -8,13 +8,11 @@ let parse_side = function
 
 let parse_quantity s =
   try Ok (Decimal.of_string s)
-  with Invalid_argument m ->
-    Error (Command_error.Invalid_payload ("quantity: " ^ m))
+  with Invalid_argument m -> Error (Command_error.Invalid_payload ("quantity: " ^ m))
 
 let parse_instrument s =
   try Ok (Core.Instrument.of_qualified s)
-  with Invalid_argument m ->
-    Error (Command_error.Invalid_payload ("symbol: " ^ m))
+  with Invalid_argument m -> Error (Command_error.Invalid_payload ("symbol: " ^ m))
 
 let parse_ticket_id n =
   try Ok (Values.Ticket_id.of_int n)
@@ -106,47 +104,49 @@ let parse_directive (d : Open_order_ticket_command.directive) :
     | Some s -> (
         try Ok (Yojson.Safe.from_string s)
         with _ ->
-          Error
-            (Command_error.Invalid_payload (msg ^ ": params blob is not JSON")))
+          Error (Command_error.Invalid_payload (msg ^ ": params blob is not JSON")))
   in
   let ( let* ) = Result.bind in
   let make_invalid m = Command_error.Invalid_payload m in
   match kind with
   | "IMMEDIATE" -> Ok Values.Execution_directive.Immediate
-  | "TWAP" ->
+  | "TWAP" -> (
       let* json = require_params "TWAP requires params" in
       let* n_slices = parse_int_field json "n_slices" in
       let* window_seconds = parse_int_field json "window_seconds" in
       let* start_at = parse_int64_field json "start_at" in
-      (try Ok (Values.Execution_directive.Twap (Values.Twap_params.make ~n_slices ~window_seconds ~start_at))
-       with Invalid_argument m -> Error (make_invalid ("TWAP params: " ^ m)))
-  | "VWAP" ->
+      try
+        Ok
+          (Values.Execution_directive.Twap
+             (Values.Twap_params.make ~n_slices ~window_seconds ~start_at))
+      with Invalid_argument m -> Error (make_invalid ("TWAP params: " ^ m)))
+  | "VWAP" -> (
       let* json = require_params "VWAP requires params" in
       let* n_slices = parse_int_field json "n_slices" in
       let* window_seconds = parse_int_field json "window_seconds" in
       let* start_at = parse_int64_field json "start_at" in
       let* volume_profile = parse_float_list_field json "volume_profile" in
-      (try
-         Ok
-           (Values.Execution_directive.Vwap
-              (Values.Vwap_params.make ~n_slices ~window_seconds ~start_at
-                 ~volume_profile))
-       with Invalid_argument m -> Error (make_invalid ("VWAP params: " ^ m)))
-  | "POV" ->
+      try
+        Ok
+          (Values.Execution_directive.Vwap
+             (Values.Vwap_params.make ~n_slices ~window_seconds ~start_at ~volume_profile))
+      with Invalid_argument m -> Error (make_invalid ("VWAP params: " ^ m)))
+  | "POV" -> (
       let* json = require_params "POV requires params" in
       let* participation_rate = parse_float_field json "participation_rate" in
       let* timeframe = parse_string_field json "timeframe" in
-      (try Ok (Values.Execution_directive.Pov (Values.Pov_params.make ~participation_rate ~timeframe))
-       with Invalid_argument m -> Error (make_invalid ("POV params: " ^ m)))
-  | "ICEBERG" ->
+      try
+        Ok
+          (Values.Execution_directive.Pov
+             (Values.Pov_params.make ~participation_rate ~timeframe))
+      with Invalid_argument m -> Error (make_invalid ("POV params: " ^ m)))
+  | "ICEBERG" -> (
       let* json = require_params "ICEBERG requires params" in
       let* visible_qty = parse_decimal_string_field json "visible_qty" in
-      (try
-         Ok
-           (Values.Execution_directive.Iceberg
-              (Values.Iceberg_params.make ~visible_qty))
-       with Invalid_argument m -> Error (make_invalid ("ICEBERG params: " ^ m)))
-  | "IMPLEMENTATION_SHORTFALL" ->
+      try
+        Ok (Values.Execution_directive.Iceberg (Values.Iceberg_params.make ~visible_qty))
+      with Invalid_argument m -> Error (make_invalid ("ICEBERG params: " ^ m)))
+  | "IMPLEMENTATION_SHORTFALL" -> (
       let* json = require_params "IMPLEMENTATION_SHORTFALL requires params" in
       let* n_slices = parse_int_field json "n_slices" in
       let* window_seconds = parse_int_field json "window_seconds" in
@@ -154,17 +154,17 @@ let parse_directive (d : Open_order_ticket_command.directive) :
       let* volatility = parse_float_field json "volatility" in
       let* risk_aversion = parse_float_field json "risk_aversion" in
       let* temp_impact_eta = parse_float_field json "temp_impact_eta" in
-      (try
-         Ok
-           (Values.Execution_directive.Implementation_shortfall
-              (Values.Implementation_shortfall_params.make ~n_slices
-                 ~window_seconds ~start_at ~volatility ~risk_aversion
-                 ~temp_impact_eta))
-       with Invalid_argument m ->
-         Error (make_invalid ("IMPLEMENTATION_SHORTFALL params: " ^ m)))
+      try
+        Ok
+          (Values.Execution_directive.Implementation_shortfall
+             (Values.Implementation_shortfall_params.make ~n_slices ~window_seconds
+                ~start_at ~volatility ~risk_aversion ~temp_impact_eta))
+      with Invalid_argument m ->
+        Error (make_invalid ("IMPLEMENTATION_SHORTFALL params: " ^ m)))
   | k -> Error (make_invalid ("unknown execution directive kind: " ^ k))
 
-let resolve_directive : Open_order_ticket_command.directive option ->
+let resolve_directive :
+    Open_order_ticket_command.directive option ->
     (Values.Execution_directive.t, Command_error.t) result = function
   | None -> Ok Values.Execution_policy.default
   | Some d -> parse_directive d
@@ -182,9 +182,7 @@ let handle ~now (cmd : Open_order_ticket_command.t) =
       Values.Trade_intent.make ~book_id:cmd.book_id ~instrument ~side
         ~total_quantity:quantity
     in
-    let t, events =
-      Ot.open_ticket ~ticket_id ~reservation_id ~intent ~directive ~now
-    in
+    let t, events = Ot.open_ticket ~ticket_id ~reservation_id ~intent ~directive ~now in
     Ok (t, events)
   in
   match result with

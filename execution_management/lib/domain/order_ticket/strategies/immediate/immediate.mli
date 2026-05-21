@@ -32,10 +32,7 @@
 type state
 (** Private — internal lifecycle stage tracked by the strategy. *)
 
-val init :
-  intent:Values.Trade_intent.t ->
-  now:int64 ->
-  state * Decision.t
+val init : intent:Values.Trade_intent.t -> now:int64 -> state * Decision.t
 (** Construct the initial state and the first decision (one
     submit covering the full intent). [now] is reserved for
     determinism / parity with time-driven strategies; Immediate

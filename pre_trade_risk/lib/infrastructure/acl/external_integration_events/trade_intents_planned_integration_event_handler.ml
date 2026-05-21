@@ -1,7 +1,8 @@
 module Trade_intents_planned = Trade_intents_planned_integration_event
 module Trade_intent_vm = Pre_trade_risk_external_view_models.Trade_intent_view_model
 module Instrument_vm = Pre_trade_risk_external_view_models.Instrument_view_model
-module Inbound_directive_vm = Pre_trade_risk_external_view_models.Execution_directive_view_model
+module Inbound_directive_vm =
+  Pre_trade_risk_external_view_models.Execution_directive_view_model
 module Internal_directive_vm = Pre_trade_risk_view_models.Execution_directive_view_model
 
 (** ACL: PM's [Execution_directive_view_model] wire shape is
@@ -10,8 +11,7 @@ module Internal_directive_vm = Pre_trade_risk_view_models.Execution_directive_vi
     PTR's mirror .atd). Both records carry identical fields. The
     translator below is a one-line structural copy that keeps the
     two type universes from leaking across the ACL boundary. *)
-let directive_of_inbound (d : Inbound_directive_vm.t) : Internal_directive_vm.t
-    =
+let directive_of_inbound (d : Inbound_directive_vm.t) : Internal_directive_vm.t =
   { kind = d.kind; params = d.params }
 
 let qualify (i : Instrument_vm.t) : string =

@@ -219,9 +219,7 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
         }
   in
   let _order_management = Order_management_factory.Factory.build ~bus in
-  let _execution_management =
-    Execution_management_factory.Factory.build ~bus ~now
-  in
+  let _execution_management = Execution_management_factory.Factory.build ~bus ~now in
   let _strategy =
     Strategy_factory.Factory.build ~bus ~sw ~strategy:(Some strategy)
       ~strategy_id:strategy_name ~engine_symbol:symbol
@@ -464,18 +462,17 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
   let engine : Trading_config.engine option =
     let strategy = arg_value "--strategy" args in
     let symbol = arg_value "--engine-symbol" args in
-    let paper_mode =
-      if List.mem "--paper" args then Some true else None
-    in
+    let paper_mode = if List.mem "--paper" args then Some true else None in
     if strategy = None && symbol = None && paper_mode = None then None
     else Some { strategy; symbol; paper_mode }
   in
   let logging : Trading_config.logging option =
     match arg_value "--log-level" args with
     | None -> None
-    | Some s -> ( match parse_log_level s with
-                  | None -> None
-                  | Some level -> Some { level = Some level })
+    | Some s -> (
+        match parse_log_level s with
+        | None -> None
+        | Some level -> Some { level = Some level })
   in
   let broker : Trading_config.broker option =
     (* --broker on the CLI selects the variant; --secret /
@@ -487,10 +484,7 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
     | Some "synthetic" -> Some `Synthetic
     | Some "finam" ->
         let creds : Trading_config.finam_credentials =
-          {
-            account_id = arg_value "--account" args;
-            secret = arg_value "--secret" args;
-          }
+          { account_id = arg_value "--account" args; secret = arg_value "--secret" args }
         in
         Some (`Finam creds)
     | Some "bcs" ->
@@ -502,8 +496,7 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
         in
         Some (`Bcs creds)
     | Some other ->
-        failwith
-          ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
+        failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
   in
   { broker; server; engine; logging }
 
@@ -520,16 +513,15 @@ let cmd_serve args =
   let cli_overrides = cli_overlay_of_args args in
   let local_path = arg_value "--config" args in
   let cfg =
-    Trading_config.Loader.load ~default_path:config_default_path
-      ?local_path ~env_var:config_env_var ~cli_overrides ()
+    Trading_config.Loader.load ~default_path:config_default_path ?local_path
+      ~env_var:config_env_var ~cli_overrides ()
   in
   let server : Trading_config.server =
     Option.value cfg.server ~default:{ host = None; port = None }
   in
   let port = Option.value server.port ~default:8080 in
   let engine : Trading_config.engine =
-    Option.value cfg.engine
-      ~default:{ strategy = None; symbol = None; paper_mode = None }
+    Option.value cfg.engine ~default:{ strategy = None; symbol = None; paper_mode = None }
   in
   let paper_mode = Option.value engine.paper_mode ~default:false in
   let strategy_name = engine.strategy in
@@ -569,8 +561,7 @@ let cmd_serve args =
     | None ->
         let prefix = String.uppercase_ascii broker_id in
         Printf.eprintf
-          "--broker %s requires a secret (use --secret, %s_SECRET, or the \
-           config file)\n"
+          "--broker %s requires a secret (use --secret, %s_SECRET, or the config file)\n"
           broker_id prefix;
         exit 2
   in
@@ -670,9 +661,7 @@ let cmd_serve args =
         }
   in
   let order_management = Order_management_factory.Factory.build ~bus in
-  let execution_management =
-    Execution_management_factory.Factory.build ~bus ~now
-  in
+  let execution_management = Execution_management_factory.Factory.build ~bus ~now in
   let bc_handlers =
     [
       account.http_handler;

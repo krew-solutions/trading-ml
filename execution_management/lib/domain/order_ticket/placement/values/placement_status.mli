@@ -10,13 +10,7 @@
     placement's requested quantity. Partial fills keep the
     placement in [Working]. *)
 
-type t =
-  | Pending
-  | Working
-  | Filled
-  | Rejected
-  | Unreachable
-  | Cancelled
+type t = Pending | Working | Filled | Rejected | Unreachable | Cancelled
 
 val is_terminal : t -> bool
 (*@ r = is_terminal s

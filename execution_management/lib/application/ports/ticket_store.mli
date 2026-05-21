@@ -18,7 +18,8 @@ module type S = sig
   type t
 
   val get :
-    t -> Execution_management.Order_ticket.Values.Ticket_id.t ->
+    t ->
+    Execution_management.Order_ticket.Values.Ticket_id.t ->
     Execution_management.Order_ticket.t option
 
   val put : t -> Execution_management.Order_ticket.t -> unit

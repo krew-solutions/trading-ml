@@ -18,8 +18,7 @@ type handle_error = Validation of validation_error
 val handle_error_to_string : handle_error -> string
 
 val handle :
-  persist_subscription:
-    (Portfolio_management.Common.Alpha_subscription.t -> unit) ->
+  persist_subscription:(Portfolio_management.Common.Alpha_subscription.t -> unit) ->
   Subscribe_book_to_alpha_command.t ->
   (unit, handle_error) Rop.t
 (** Validate the wire fields and hand a built

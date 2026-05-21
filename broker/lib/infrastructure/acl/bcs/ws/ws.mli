@@ -17,11 +17,11 @@ open Core
     {!Events}. This module owns the envelope-level sum type
     and the dispatcher that picks the right parser. *)
 
-(** Channel parsers (inbound). *)
 module Events = Events
+(** Channel parsers (inbound). *)
 
-(** Channel subscribe/unsubscribe encoders (outbound). *)
 module Requests = Requests
+(** Channel subscribe/unsubscribe encoders (outbound). *)
 
 (** Top-level decoded inbound event variants. *)
 type event =

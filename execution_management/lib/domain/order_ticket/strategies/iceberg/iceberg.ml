@@ -18,14 +18,15 @@ let chunk_size ~visible_qty ~remaining =
   if Decimal.compare remaining visible_qty <= 0 then remaining else visible_qty
 
 let market_submit qty : Decision.submit_request =
-  { quantity = qty; kind = Placement.Values.Order_kind.Market; tif = Placement.Values.Tif.Day }
+  {
+    quantity = qty;
+    kind = Placement.Values.Order_kind.Market;
+    tif = Placement.Values.Tif.Day;
+  }
 
-let init ~(intent : Values.Trade_intent.t) ~(params : Values.Iceberg_params.t)
-    ~now:_ =
+let init ~(intent : Values.Trade_intent.t) ~(params : Values.Iceberg_params.t) ~now:_ =
   let total = intent.total_quantity in
-  let first_chunk =
-    chunk_size ~visible_qty:params.visible_qty ~remaining:total
-  in
+  let first_chunk = chunk_size ~visible_qty:params.visible_qty ~remaining:total in
   let state =
     {
       visible_qty = params.visible_qty;
@@ -42,9 +43,7 @@ let on_event (state : state) (input : Input.t) ~now:_ : state * Decision.t =
   else
     match input with
     | Input.Placement_filled { fill; _ } ->
-        let new_chunk_filled =
-          Decimal.add state.current_chunk_filled fill.quantity
-        in
+        let new_chunk_filled = Decimal.add state.current_chunk_filled fill.quantity in
         if Decimal.compare new_chunk_filled state.current_chunk_target < 0 then
           (* Partial fill within current chunk — no new submit. *)
           ({ state with current_chunk_filled = new_chunk_filled }, Decision.empty)
@@ -75,22 +74,20 @@ let on_event (state : state) (input : Input.t) ~now:_ : state * Decision.t =
                 current_chunk_filled = Decimal.zero;
               }
             in
-            ( state',
-              { Decision.empty with submit = [ market_submit next_chunk ] } )
+            (state', { Decision.empty with submit = [ market_submit next_chunk ] })
     | Input.Placement_rejected { reason; _ } ->
         ( { state with failed = true },
-          { Decision.empty with terminal = Decision.Failed ("rejected: " ^ reason) }
-        )
+          { Decision.empty with terminal = Decision.Failed ("rejected: " ^ reason) } )
     | Input.Placement_unreachable _ ->
         ( { state with failed = true },
           { Decision.empty with terminal = Decision.Failed "unreachable" } )
     | Input.Placement_cancelled _ ->
         ( { state with failed = true },
           { Decision.empty with terminal = Decision.Failed "cancelled" } )
-    | Input.Tick _ | Input.Volume_bar _ | Input.Price_quote _
-    | Input.Placement_acknowledged _ ->
-        (state, Decision.empty)
+    | Input.Tick _
+    | Input.Volume_bar _
+    | Input.Price_quote _
+    | Input.Placement_acknowledged _ -> (state, Decision.empty)
 
 let is_complete state =
-  (not state.failed)
-  && Decimal.compare state.remaining_total Decimal.zero <= 0
+  (not state.failed) && Decimal.compare state.remaining_total Decimal.zero <= 0

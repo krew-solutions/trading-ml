@@ -3,12 +3,8 @@
 
 open Core
 
-type t = {
-  instrument : Instrument.t;
-  timeframe : Timeframe.t;
-  candle : Candle.t;
-}
+type t = { instrument : Instrument.t; timeframe : Timeframe.t; candle : Candle.t }
 
+val parse : Yojson.Safe.t -> t
 (** Decode a CandleStick payload. The caller has already
     discriminated on [responseType]. *)
-val parse : Yojson.Safe.t -> t

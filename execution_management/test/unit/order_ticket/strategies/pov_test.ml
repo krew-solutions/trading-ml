@@ -10,34 +10,32 @@ let qty s = Decimal.of_string s
 
 let intent_total qty_s =
   let instrument =
-    Core.Instrument.make ~ticker:(Core.Ticker.of_string "SBER")
+    Core.Instrument.make
+      ~ticker:(Core.Ticker.of_string "SBER")
       ~venue:(Core.Mic.of_string "MISX") ()
   in
   Values.Trade_intent.make ~book_id:"alpha" ~instrument ~side:Core.Side.Buy
     ~total_quantity:(qty qty_s)
 
-let volume_bar ~ts ~vol =
-  Values.Volume_bar.make ~ts ~volume:(Decimal.of_string vol)
+let volume_bar ~ts ~vol = Values.Volume_bar.make ~ts ~volume:(Decimal.of_string vol)
 
 let test_first_volume_bar_emits_proportional_slice () =
   let intent = intent_total "1000" in
   let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let _state', decision =
-    Pov.on_event state
-      (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" })
-      ~now:0L
+    Pov.on_event state (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" }) ~now:0L
   in
   Alcotest.(check int) "one submit" 1 (List.length decision.submit);
-  Alcotest.(check string) "emit_qty = 200 (20% of 1000)" "200"
+  Alcotest.(check string)
+    "emit_qty = 200 (20% of 1000)" "200"
     (Decimal.to_string (List.hd decision.submit).quantity)
 
 let test_no_volume_no_emission () =
   let intent = intent_total "1000" in
   let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let _state, decision = Pov.init ~intent ~params ~now:0L in
-  Alcotest.(check int) "no submit at init (no volume yet)" 0
-    (List.length decision.submit)
+  Alcotest.(check int) "no submit at init (no volume yet)" 0 (List.length decision.submit)
 
 let test_cumulative_pov_respects_rate () =
   (* observed = 1000 → emit 200; observed = 1500 → cumulative target 300;
@@ -46,16 +44,13 @@ let test_cumulative_pov_respects_rate () =
   let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let state, _ =
-    Pov.on_event state
-      (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" })
-      ~now:0L
+    Pov.on_event state (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" }) ~now:0L
   in
   let _state', decision =
-    Pov.on_event state
-      (Input.Volume_bar { bar = volume_bar ~ts:1L ~vol:"500" })
-      ~now:1L
+    Pov.on_event state (Input.Volume_bar { bar = volume_bar ~ts:1L ~vol:"500" }) ~now:1L
   in
-  Alcotest.(check string) "incremental emit = 100" "100"
+  Alcotest.(check string)
+    "incremental emit = 100" "100"
     (Decimal.to_string (List.hd decision.submit).quantity)
 
 let test_emission_capped_by_remaining () =
@@ -65,34 +60,28 @@ let test_emission_capped_by_remaining () =
   let params = Values.Pov_params.make ~participation_rate:0.50 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let _state', decision =
-    Pov.on_event state
-      (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" })
-      ~now:0L
+    Pov.on_event state (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"1000" }) ~now:0L
   in
-  Alcotest.(check string) "capped at remaining = 100" "100"
+  Alcotest.(check string)
+    "capped at remaining = 100" "100"
     (Decimal.to_string (List.hd decision.submit).quantity)
 
 let test_tick_is_ignored () =
   let intent = intent_total "1000" in
   let params = Values.Pov_params.make ~participation_rate:0.20 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
-  let _state', decision =
-    Pov.on_event state (Input.Tick { now = 1L }) ~now:1L
-  in
-  Alcotest.(check int) "tick triggers nothing in POV" 0
-    (List.length decision.submit)
+  let _state', decision = Pov.on_event state (Input.Tick { now = 1L }) ~now:1L in
+  Alcotest.(check int) "tick triggers nothing in POV" 0 (List.length decision.submit)
 
 let test_completes_when_intent_filled () =
   let intent = intent_total "100" in
   let params = Values.Pov_params.make ~participation_rate:1.00 ~timeframe:"1m" in
   let state, _ = Pov.init ~intent ~params ~now:0L in
   let state, _ =
-    Pov.on_event state
-      (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"100" })
-      ~now:0L
+    Pov.on_event state (Input.Volume_bar { bar = volume_bar ~ts:0L ~vol:"100" }) ~now:0L
   in
-  Alcotest.(check bool) "complete after emitting the full intent" true
-    (Pov.is_complete state)
+  Alcotest.(check bool)
+    "complete after emitting the full intent" true (Pov.is_complete state)
 
 let tests =
   [

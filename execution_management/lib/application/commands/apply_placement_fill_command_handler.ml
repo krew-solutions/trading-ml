@@ -2,8 +2,7 @@ module Ot = Execution_management.Order_ticket
 
 let parse_decimal field s =
   try Ok (Decimal.of_string s)
-  with Invalid_argument m ->
-    Error (Command_error.Invalid_payload (field ^ ": " ^ m))
+  with Invalid_argument m -> Error (Command_error.Invalid_payload (field ^ ": " ^ m))
 
 let handle ~ticket (cmd : Apply_placement_fill_command.t) ~now =
   let ( let* ) = Result.bind in
@@ -17,12 +16,8 @@ let handle ~ticket (cmd : Apply_placement_fill_command.t) ~now =
     let* price = parse_decimal "fill_price" cmd.fill_price in
     let* fee = parse_decimal "fee" cmd.fee in
     let* fill =
-      try
-        Ok
-          (Ot.Placement.Values.Fill_record.make ~quantity ~price ~fee
-             ~ts:cmd.fill_ts)
-      with Invalid_argument m ->
-        Error (Command_error.Invalid_payload ("fill: " ^ m))
+      try Ok (Ot.Placement.Values.Fill_record.make ~quantity ~price ~fee ~ts:cmd.fill_ts)
+      with Invalid_argument m -> Error (Command_error.Invalid_payload ("fill: " ^ m))
     in
     let* result =
       try

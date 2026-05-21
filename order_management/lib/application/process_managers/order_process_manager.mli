@@ -37,10 +37,7 @@
     {!Trade_intents_planned_integration_event.leg.correlation_id})
     and echoed verbatim by every downstream BC. *)
 
-type directive_payload = {
-  directive_kind : string;
-  directive_params : string option;
-}
+type directive_payload = { directive_kind : string; directive_params : string option }
 (** Wire-shape execution directive carried alongside the saga
     payload (kind tag + optional per-strategy JSON params blob). *)
 
@@ -57,10 +54,7 @@ type payload = {
   directive : directive_payload option;
 }
 
-type working_state = {
-  reservation_id : int;
-  correlation_id : string;
-}
+type working_state = { reservation_id : int; correlation_id : string }
 
 type state =
   | Awaiting_reservation of { payload : payload }
@@ -73,8 +67,7 @@ type event =
   | Amount_reserved of
       Order_management_external_integration_events.Amount_reserved_integration_event.t
   | Reservation_rejected of
-      Order_management_external_integration_events
-      .Reservation_rejected_integration_event
+      Order_management_external_integration_events.Reservation_rejected_integration_event
       .t
   | Ticket_fill_recorded of
       Order_management_external_integration_events
@@ -89,9 +82,7 @@ type event =
       .Order_ticket_cancelled_integration_event
       .t
   | Ticket_failed of
-      Order_management_external_integration_events
-      .Order_ticket_failed_integration_event
-      .t
+      Order_management_external_integration_events.Order_ticket_failed_integration_event.t
 
 type command =
   | Dispatch_reserve of {
@@ -117,10 +108,7 @@ type command =
       price : string;
       fee : string;
     }
-  | Dispatch_release of {
-      correlation_id : string;
-      reservation_id : int;
-    }
+  | Dispatch_release of { correlation_id : string; reservation_id : int }
 
 module Definition :
   Workflow_engine.WORKFLOW

@@ -1,9 +1,4 @@
-type t = {
-  quantity : Decimal.t;
-  price : Decimal.t;
-  fee : Decimal.t;
-  ts : int64;
-}
+type t = { quantity : Decimal.t; price : Decimal.t; fee : Decimal.t; ts : int64 }
 
 let make ~quantity ~price ~fee ~ts =
   if Decimal.compare quantity Decimal.zero <= 0 then

@@ -139,7 +139,7 @@ let test_limit_order_lifecycle () =
           ~finally:(fun () ->
             try
               let cancelled =
-                Finam.Rest.cancel_order rest ~account_id:account ~order_id:order_id
+                Finam.Rest.cancel_order rest ~account_id:account ~order_id
               in
               Printf.printf "  [info] cancelled cid=%s status=%s\n%!" cid
                 (Order.status_to_string cancelled.status)
@@ -148,9 +148,7 @@ let test_limit_order_lifecycle () =
                 (Printexc.to_string e))
           (fun () ->
             Alcotest.(check bool) "server assigned an id" true (order_id <> "");
-            let fetched =
-              Finam.Rest.get_order rest ~account_id:account ~order_id:order_id
-            in
+            let fetched = Finam.Rest.get_order rest ~account_id:account ~order_id in
             Alcotest.(check string) "round-trip cid" cid fetched.client_order_id;
             let trades = Finam.Rest.get_trades rest ~account_id:account in
             let our_trades =

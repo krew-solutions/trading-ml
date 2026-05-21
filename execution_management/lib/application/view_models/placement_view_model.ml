@@ -12,8 +12,7 @@ let kind_fields (k : Pv.Order_kind.t) :
   match k with
   | Market -> ("MARKET", None, None, None)
   | Limit { price } -> ("LIMIT", Some (Decimal.to_string price), None, None)
-  | Stop { stop_price } ->
-      ("STOP", None, Some (Decimal.to_string stop_price), None)
+  | Stop { stop_price } -> ("STOP", None, Some (Decimal.to_string stop_price), None)
   | Stop_limit { stop_price; limit_price } ->
       ( "STOP_LIMIT",
         None,
@@ -21,12 +20,14 @@ let kind_fields (k : Pv.Order_kind.t) :
         Some (Decimal.to_string limit_price) )
 
 let tif_to_string (t : Pv.Tif.t) : string =
-  match t with Gtc -> "GTC" | Day -> "DAY" | Ioc -> "IOC" | Fok -> "FOK"
+  match t with
+  | Gtc -> "GTC"
+  | Day -> "DAY"
+  | Ioc -> "IOC"
+  | Fok -> "FOK"
 
 let of_domain (p : P.t) : t =
-  let kind_type, kind_price, kind_stop_price, kind_limit_price =
-    kind_fields p.kind
-  in
+  let kind_type, kind_price, kind_stop_price, kind_limit_price = kind_fields p.kind in
   {
     placement_id = Pv.Placement_id.to_int p.id;
     requested_quantity = Decimal.to_string p.requested_quantity;

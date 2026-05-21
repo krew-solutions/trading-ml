@@ -39,8 +39,6 @@ let handle ~persist_subscription (cmd : SBA.t) : (unit, handle_error) Rop.t =
   match parsed with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)
   | Ok (alpha_source_id, instrument, book_id) ->
-      let sub =
-        Pm.Common.Alpha_subscription.make ~alpha_source_id ~instrument ~book_id
-      in
+      let sub = Pm.Common.Alpha_subscription.make ~alpha_source_id ~instrument ~book_id in
       persist_subscription sub;
       Rop.succeed ()

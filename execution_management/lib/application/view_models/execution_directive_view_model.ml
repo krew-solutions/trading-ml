@@ -27,8 +27,7 @@ let vwap_params_json (p : Vwap.t) : string =
          ("n_slices", `Int p.n_slices);
          ("window_seconds", `Int p.window_seconds);
          ("start_at", `Intlit (Int64.to_string p.start_at));
-         ( "volume_profile",
-           `List (List.map (fun w -> `Float w) p.volume_profile) );
+         ("volume_profile", `List (List.map (fun w -> `Float w) p.volume_profile));
        ])
 
 let pov_params_json (p : Pov.t) : string =

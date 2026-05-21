@@ -1,8 +1,6 @@
 open Core
 
-type t =
-  | Alpha_view of Alpha_source_id.t
-  | Pair_mean_reversion of Pair.t
+type t = Alpha_view of Alpha_source_id.t | Pair_mean_reversion of Pair.t
 
 let to_string = function
   | Alpha_view id -> Printf.sprintf "alpha_view:%s" (Alpha_source_id.to_string id)

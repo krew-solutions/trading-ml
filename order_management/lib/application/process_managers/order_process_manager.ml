@@ -1,9 +1,6 @@
 module Inbound = Order_management_external_integration_events
 
-type directive_payload = {
-  directive_kind : string;
-  directive_params : string option;
-}
+type directive_payload = { directive_kind : string; directive_params : string option }
 
 type payload = {
   book_id : string;
@@ -18,10 +15,7 @@ type payload = {
   directive : directive_payload option;
 }
 
-type working_state = {
-  reservation_id : int;
-  correlation_id : string;
-}
+type working_state = { reservation_id : int; correlation_id : string }
 
 type state =
   | Awaiting_reservation of { payload : payload }
@@ -43,8 +37,7 @@ type state =
 type event =
   | Amount_reserved of Inbound.Amount_reserved_integration_event.t
   | Reservation_rejected of Inbound.Reservation_rejected_integration_event.t
-  | Ticket_fill_recorded of
-      Inbound.Order_ticket_fill_recorded_integration_event.t
+  | Ticket_fill_recorded of Inbound.Order_ticket_fill_recorded_integration_event.t
   | Ticket_completed of Inbound.Order_ticket_completed_integration_event.t
   | Ticket_cancelled of Inbound.Order_ticket_cancelled_integration_event.t
   | Ticket_failed of Inbound.Order_ticket_failed_integration_event.t
@@ -73,10 +66,7 @@ type command =
       price : string;
       fee : string;
     }
-  | Dispatch_release of {
-      correlation_id : string;
-      reservation_id : int;
-    }
+  | Dispatch_release of { correlation_id : string; reservation_id : int }
 
 let initial_payload ?directive ~book_id ~symbol ~side ~quantity () =
   {
@@ -134,10 +124,7 @@ module Definition = struct
             }
         in
         ( Working
-            {
-              reservation_id = ev.reservation_id;
-              correlation_id = ev.correlation_id;
-            },
+            { reservation_id = ev.reservation_id; correlation_id = ev.correlation_id },
           [ open_cmd ] )
     | Awaiting_reservation _, Reservation_rejected ev ->
         (Compensated { reason = "rejected_by_account: " ^ ev.reason }, [])
@@ -163,14 +150,12 @@ module Definition = struct
         let cmd =
           Dispatch_release { correlation_id; reservation_id = ev.reservation_id }
         in
-        ( Released { reservation_id; reason = "cancelled: " ^ ev.reason },
-          [ cmd ] )
+        (Released { reservation_id; reason = "cancelled: " ^ ev.reason }, [ cmd ])
     | Working { reservation_id; correlation_id }, Ticket_failed ev ->
         let cmd =
           Dispatch_release { correlation_id; reservation_id = ev.reservation_id }
         in
-        ( Released { reservation_id; reason = "failed: " ^ ev.reason },
-          [ cmd ] )
+        (Released { reservation_id; reason = "failed: " ^ ev.reason }, [ cmd ])
     (* Late / duplicate events for already-terminated states: silently
        absorbed (idempotent fall-through). *)
     | _, _ -> (s, [])

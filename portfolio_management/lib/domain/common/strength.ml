@@ -6,8 +6,7 @@ let one = Decimal.one
 let of_decimal d =
   if Decimal.is_negative d || Decimal.compare d Decimal.one > 0 then
     invalid_arg
-      (Printf.sprintf "Strength.of_decimal: %s — must lie in [0, 1]"
-         (Decimal.to_string d));
+      (Printf.sprintf "Strength.of_decimal: %s — must lie in [0, 1]" (Decimal.to_string d));
   d
 
 let to_decimal d = d

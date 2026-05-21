@@ -109,8 +109,7 @@ let build ~bus ~initial_cash ~market_price : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://account.commit-fill-command"
-         ~group:"account-saga"
+      (consume ~uri:"in-memory://account.commit-fill-command" ~group:"account-saga"
          ~t_of_yojson:Account_commands.Commit_fill_command.t_of_yojson)
       dispatch_commit_fill
   in

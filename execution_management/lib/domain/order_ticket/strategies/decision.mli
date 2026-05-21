@@ -10,10 +10,7 @@ type submit_request = {
   tif : Placement.Values.Tif.t;
 }
 
-type terminal =
-  | Continue
-  | Completed
-  | Failed of string
+type terminal = Continue | Completed | Failed of string
 
 type t = {
   submit : submit_request list;

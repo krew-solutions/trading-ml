@@ -12,7 +12,8 @@ let qty s = Decimal.of_string s
 
 let intent_total qty_s =
   let instrument =
-    Core.Instrument.make ~ticker:(Core.Ticker.of_string "SBER")
+    Core.Instrument.make
+      ~ticker:(Core.Ticker.of_string "SBER")
       ~venue:(Core.Mic.of_string "MISX") ()
   in
   Values.Trade_intent.make ~book_id:"alpha" ~instrument ~side:Core.Side.Buy
@@ -38,7 +39,8 @@ let test_first_tick_at_start_emits_first_slice () =
   let state, _ = Twap.init ~intent ~params ~now:1_000L in
   let _state', decision = Twap.on_event state (tick 1_000L) ~now:1_000L in
   Alcotest.(check int) "one submit" 1 (List.length decision.submit);
-  Alcotest.(check string) "quantity = 25" "25"
+  Alcotest.(check string)
+    "quantity = 25" "25"
     (Decimal.to_string (List.hd decision.submit).quantity)
 
 let test_tick_before_due_emits_nothing () =
@@ -63,10 +65,9 @@ let test_full_schedule_sums_to_total () =
       decision.submit;
     ts := Int64.add !ts 15L
   done;
-  Alcotest.(check string) "Σ slice_qty = total" "100"
-    (Decimal.to_string !total);
-  Alcotest.(check bool) "complete after all slices emitted" true
-    (Twap.is_complete !state_ref)
+  Alcotest.(check string) "Σ slice_qty = total" "100" (Decimal.to_string !total);
+  Alcotest.(check bool)
+    "complete after all slices emitted" true (Twap.is_complete !state_ref)
 
 let test_indivisible_total_residue_on_last_slice () =
   (* 100 / 3 = 33.33333333 + 33.33333333 + 33.33333334 (residue) *)
@@ -84,8 +85,8 @@ let test_indivisible_total_residue_on_last_slice () =
       decision.submit;
     ts := Int64.add !ts 20L
   done;
-  Alcotest.(check string) "Σ = total exactly even when not divisible" "100"
-    (Decimal.to_string !total)
+  Alcotest.(check string)
+    "Σ = total exactly even when not divisible" "100" (Decimal.to_string !total)
 
 let test_rejection_terminates_failed () =
   let intent = intent_total "100" in
@@ -109,8 +110,7 @@ let test_ticks_past_completion_are_noops () =
   let state, _ = Twap.on_event state (tick 1_000L) ~now:1_000L in
   let state, _ = Twap.on_event state (tick 1_030L) ~now:1_030L in
   let _state', decision = Twap.on_event state (tick 1_060L) ~now:1_060L in
-  Alcotest.(check int) "no submit after schedule done" 0
-    (List.length decision.submit)
+  Alcotest.(check int) "no submit after schedule done" 0 (List.length decision.submit)
 
 let tests =
   [

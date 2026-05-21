@@ -60,17 +60,17 @@ let test_zero_new_position_quantity_prunes () =
     (Decimal.equal (dec 50) (Actual_portfolio.cash p))
 
 let const_mark table =
-  fun i ->
-    match List.find_opt (fun (s, _) -> Instrument.equal s i) table with
-    | Some (_, p) -> p
-    | None -> Decimal.zero
+ fun i ->
+  match List.find_opt (fun (s, _) -> Instrument.equal s i) table with
+  | Some (_, p) -> p
+  | None -> Decimal.zero
 
 let test_equity_cash_only_for_empty_positions () =
   let p = Actual_portfolio.empty book in
   let p', _ =
     Actual_portfolio.commit_fill p ~instrument:(inst "SBER@MISX")
-      ~new_position_quantity:Decimal.zero ~new_avg_price:Decimal.zero
-      ~new_cash:(dec 1000) ~occurred_at:1L
+      ~new_position_quantity:Decimal.zero ~new_avg_price:Decimal.zero ~new_cash:(dec 1000)
+      ~occurred_at:1L
   in
   Alcotest.(check string)
     "equity = cash" "1000"
@@ -80,8 +80,8 @@ let test_equity_long_position_adds_marked_value () =
   let p = Actual_portfolio.empty book in
   let p', _ =
     Actual_portfolio.commit_fill p ~instrument:(inst "SBER@MISX")
-      ~new_position_quantity:(dec 10) ~new_avg_price:(dec 90)
-      ~new_cash:(dec 100) ~occurred_at:1L
+      ~new_position_quantity:(dec 10) ~new_avg_price:(dec 90) ~new_cash:(dec 100)
+      ~occurred_at:1L
   in
   let mark = const_mark [ (inst "SBER@MISX", dec 110) ] in
   (* equity = 100 cash + 10 × 110 = 1200 *)
@@ -93,8 +93,8 @@ let test_equity_short_position_subtracts_marked_value () =
   let p = Actual_portfolio.empty book in
   let p', _ =
     Actual_portfolio.commit_fill p ~instrument:(inst "SBER@MISX")
-      ~new_position_quantity:(dec (-5)) ~new_avg_price:(dec 200)
-      ~new_cash:(dec 1500) ~occurred_at:1L
+      ~new_position_quantity:(dec (-5)) ~new_avg_price:(dec 200) ~new_cash:(dec 1500)
+      ~occurred_at:1L
   in
   let mark = const_mark [ (inst "SBER@MISX", dec 100) ] in
   (* equity = 1500 cash + (-5) × 100 = 1000 *)
@@ -106,8 +106,8 @@ let test_equity_missing_mark_treats_as_zero () =
   let p = Actual_portfolio.empty book in
   let p', _ =
     Actual_portfolio.commit_fill p ~instrument:(inst "SBER@MISX")
-      ~new_position_quantity:(dec 10) ~new_avg_price:(dec 90)
-      ~new_cash:(dec 100) ~occurred_at:1L
+      ~new_position_quantity:(dec 10) ~new_avg_price:(dec 90) ~new_cash:(dec 100)
+      ~occurred_at:1L
   in
   let no_marks _ = Decimal.zero in
   Alcotest.(check string)
@@ -121,12 +121,12 @@ let tests =
       `Quick,
       test_commit_fill_records_state_atomically );
     ("zero new_position_quantity prunes", `Quick, test_zero_new_position_quantity_prunes);
-    ("equity = cash only for empty positions", `Quick,
-      test_equity_cash_only_for_empty_positions);
-    ("equity adds long marked value", `Quick,
-      test_equity_long_position_adds_marked_value);
-    ("equity subtracts short marked value", `Quick,
-      test_equity_short_position_subtracts_marked_value);
-    ("equity treats missing mark as zero", `Quick,
-      test_equity_missing_mark_treats_as_zero);
+    ( "equity = cash only for empty positions",
+      `Quick,
+      test_equity_cash_only_for_empty_positions );
+    ("equity adds long marked value", `Quick, test_equity_long_position_adds_marked_value);
+    ( "equity subtracts short marked value",
+      `Quick,
+      test_equity_short_position_subtracts_marked_value );
+    ("equity treats missing mark as zero", `Quick, test_equity_missing_mark_treats_as_zero);
   ]

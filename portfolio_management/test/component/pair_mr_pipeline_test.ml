@@ -31,9 +31,7 @@ let configure_book ctx =
       ~risk_budget_fraction:(Decimal.of_string "0.1")
       ~construction_source:(Pm.Common.Source.Pair_mean_reversion (pair ()))
   in
-  let ctx =
-    set_total_equity ctx ~book_id:book_alpha ~equity:(Decimal.of_int 100_000)
-  in
+  let ctx = set_total_equity ctx ~book_id:book_alpha ~equity:(Decimal.of_int 100_000) in
   let ctx =
     set_mark ctx ~book_id:book_alpha ~instrument:sber ~price:(Decimal.of_int 100)
   in

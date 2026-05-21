@@ -1,8 +1,7 @@
 (** Unit tests for {!Pre_trade_risk.Rate_limit}. *)
 
 let cfg ~max_orders ~window_seconds =
-  Pre_trade_risk.Rate_limit.Values.Rate_limit_config.make ~max_orders
-    ~window_seconds
+  Pre_trade_risk.Rate_limit.Values.Rate_limit_config.make ~max_orders ~window_seconds
 
 let test_allows_under_cap () =
   let r =

@@ -1,6 +1,4 @@
-type t =
-  | Equity_proportional
-  | Volatility_target of { target_annual_vol : Decimal.t }
+type t = Equity_proportional | Volatility_target of { target_annual_vol : Decimal.t }
 
 let equal a b =
   match (a, b) with

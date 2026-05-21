@@ -4,6 +4,6 @@
 
 type t = { code : string; message : string }
 
+val parse : Yojson.Safe.t -> t option
 (** Extracts the first entry of the [errors] array if present.
     [None] means the envelope is not an error. *)
-val parse : Yojson.Safe.t -> t option

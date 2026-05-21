@@ -16,15 +16,13 @@ let validation_error_to_string = function
   | Invalid_book_id s -> Printf.sprintf "invalid book_id: %S" s
   | Invalid_decimal { field; value } ->
       Printf.sprintf "invalid decimal for %s: %S" field value
-  | Invalid_fraction_range s ->
-      Printf.sprintf "risk_budget_fraction out of [0, 1]: %s" s
+  | Invalid_fraction_range s -> Printf.sprintf "risk_budget_fraction out of [0, 1]: %s" s
   | Invalid_limits s -> Printf.sprintf "invalid Risk_limits: %s" s
   | Invalid_alpha_source_id s -> Printf.sprintf "invalid alpha_source_id: %S" s
   | Invalid_instrument { field; value } ->
       Printf.sprintf "invalid instrument for %s: %S" field value
   | Invalid_pair s -> Printf.sprintf "invalid pair: %s" s
-  | Invalid_target_vol s ->
-      Printf.sprintf "target_annual_vol must be >= 0 (got %s)" s
+  | Invalid_target_vol s -> Printf.sprintf "target_annual_vol must be >= 0 (got %s)" s
 
 type handle_error = Validation of validation_error
 
@@ -65,14 +63,14 @@ let parse_construction_source (src : CR.construction_source) :
       match parsed with
       | Error _ as e -> e
       | Ok (a, b) -> (
-          try Rop.succeed (Pm.Common.Source.Pair_mean_reversion (Pm.Common.Pair.make ~a ~b))
+          try
+            Rop.succeed (Pm.Common.Source.Pair_mean_reversion (Pm.Common.Pair.make ~a ~b))
           with Invalid_argument msg -> Rop.fail (Invalid_pair msg)))
 
 let parse_sizing_policy (sp : CR.sizing_policy) :
     (Pm.Common.Sizing_policy_choice.t, validation_error) Rop.t =
   match sp with
-  | `Equity_proportional ->
-      Rop.succeed Pm.Common.Sizing_policy_choice.Equity_proportional
+  | `Equity_proportional -> Rop.succeed Pm.Common.Sizing_policy_choice.Equity_proportional
   | `Volatility_target { CR.target_annual_vol } -> (
       match try Some (Decimal.of_string target_annual_vol) with _ -> None with
       | None ->
@@ -82,8 +80,8 @@ let parse_sizing_policy (sp : CR.sizing_policy) :
           if Decimal.is_negative d then Rop.fail (Invalid_target_vol target_annual_vol)
           else
             Rop.succeed
-              (Pm.Common.Sizing_policy_choice.Volatility_target
-                 { target_annual_vol = d }))
+              (Pm.Common.Sizing_policy_choice.Volatility_target { target_annual_vol = d })
+      )
 
 let in_unit_interval d =
   (not (Decimal.is_negative d)) && Decimal.compare d Decimal.one <= 0
@@ -101,12 +99,11 @@ let build_risk_config
   else
     try
       let limits =
-        Pm.Risk.Values.Risk_limits.make ~max_per_instrument_notional
-          ~max_gross_exposure
+        Pm.Risk.Values.Risk_limits.make ~max_per_instrument_notional ~max_gross_exposure
       in
       Rop.succeed
-        (Pm.Risk_config.make ~book_id ~risk_budget_fraction ~limits
-           ~construction_source ~sizing_policy)
+        (Pm.Risk_config.make ~book_id ~risk_budget_fraction ~limits ~construction_source
+           ~sizing_policy)
     with Invalid_argument msg -> Rop.fail (Invalid_limits msg)
 
 let handle ~persist_risk_config (cmd : CR.t) : (unit, handle_error) Rop.t =
@@ -116,8 +113,7 @@ let handle ~persist_risk_config (cmd : CR.t) : (unit, handle_error) Rop.t =
     and+ risk_budget_fraction =
       parse_decimal ~field:"risk_budget_fraction" cmd.risk_budget_fraction
     and+ max_per_instrument_notional =
-      parse_decimal ~field:"max_per_instrument_notional"
-        cmd.max_per_instrument_notional
+      parse_decimal ~field:"max_per_instrument_notional" cmd.max_per_instrument_notional
     and+ max_gross_exposure =
       parse_decimal ~field:"max_gross_exposure" cmd.max_gross_exposure
     and+ construction_source = parse_construction_source cmd.construction_source
@@ -139,9 +135,8 @@ let handle ~persist_risk_config (cmd : CR.t) : (unit, handle_error) Rop.t =
         construction_source,
         sizing_policy ) -> (
       match
-        build_risk_config ~book_id ~risk_budget_fraction
-          ~max_per_instrument_notional ~max_gross_exposure
-          ~construction_source ~sizing_policy
+        build_risk_config ~book_id ~risk_budget_fraction ~max_per_instrument_notional
+          ~max_gross_exposure ~construction_source ~sizing_policy
       with
       | Error errs -> Error (List.map (fun e -> Validation e) errs)
       | Ok cfg ->

@@ -72,15 +72,11 @@ let test_intent_is_coupled_and_carries_pair () =
   | Some (CI.Coupled c) ->
       Alcotest.(check int) "two legs" 2 (List.length c.legs);
       let mentions sym =
-        List.exists
-          (fun (l : CI.leg) -> Instrument.equal l.instrument (inst sym))
-          c.legs
+        List.exists (fun (l : CI.leg) -> Instrument.equal l.instrument (inst sym)) c.legs
       in
       Alcotest.(check bool) "SBER mentioned" true (mentions "SBER@MISX");
       Alcotest.(check bool) "LKOH mentioned" true (mentions "LKOH@MISX");
-      Alcotest.(check string)
-        "book_id alpha" "alpha"
-        (Common.Book_id.to_string c.book_id)
+      Alcotest.(check string) "book_id alpha" "alpha" (Common.Book_id.to_string c.book_id)
   | Some (CI.Scalar _) -> Alcotest.fail "expected Coupled intent"
 
 let tests =

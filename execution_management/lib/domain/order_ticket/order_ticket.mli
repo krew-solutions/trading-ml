@@ -31,10 +31,7 @@ type t
     state transitions are driven only through the operations below. *)
 type lifecycle =
   | Working of Strategies.Strategy.t
-  | Cancelling of {
-      strategy : Strategies.Strategy.t;
-      reason : Values.Cancel_reason.t;
-    }
+  | Cancelling of { strategy : Strategies.Strategy.t; reason : Values.Cancel_reason.t }
   | Filled
   | Cancelled of Values.Cancel_reason.t
   | Failed of string
@@ -55,8 +52,9 @@ type event =
   | Ev_ticket_cancelled of Events.Ticket_cancelled.t
   | Ev_ticket_failed of Events.Ticket_failed.t
 
-(** Inspection. *)
 val ticket_id : t -> Values.Ticket_id.t
+(** Inspection. *)
+
 val reservation_id : t -> Values.Reservation_id.t
 val intent : t -> Values.Trade_intent.t
 val directive : t -> Values.Execution_directive.t
@@ -108,13 +106,11 @@ val on_clock_tick : t -> now:int64 -> t * event list
     additional submits the strategy proposes (TWAP / VWAP / IS
     typically emit on ticks). No-op in terminal lifecycle states. *)
 
-val on_volume_bar :
-  t -> bar:Values.Volume_bar.t -> now:int64 -> t * event list
+val on_volume_bar : t -> bar:Values.Volume_bar.t -> now:int64 -> t * event list
 (** Forward a volume bar to the strategy (POV consumes these).
     No-op in terminal lifecycle states. *)
 
-val cancel :
-  t -> reason:Values.Cancel_reason.t -> now:int64 -> t * event list
+val cancel : t -> reason:Values.Cancel_reason.t -> now:int64 -> t * event list
 (** Operator-initiated cancel. Transitions [Working → Cancelling];
     emits [Ev_ticket_cancelling_started] carrying the
     outstanding placement_ids the application layer must

@@ -14,6 +14,4 @@ val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t
 
 val of_domain :
-  correlation_id:string ->
-  Execution_management.Order_ticket.Events.Ticket_opened.t ->
-  t
+  correlation_id:string -> Execution_management.Order_ticket.Events.Ticket_opened.t -> t

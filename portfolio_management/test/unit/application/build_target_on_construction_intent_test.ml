@@ -26,11 +26,12 @@ let limits () =
     ~max_per_instrument_notional:(Decimal.of_int 1_000_000_000)
     ~max_gross_exposure:(Decimal.of_int 1_000_000_000)
 
-let risk_config ?(construction_source = alpha_source ())
-    ?(risk_budget_fraction = dec "0.1") () =
-  Pm.Risk_config.make ~book_id:(book ()) ~risk_budget_fraction
-    ~limits:(limits ()) ~construction_source
-    ~sizing_policy:Pm.Common.Sizing_policy_choice.Equity_proportional
+let risk_config
+    ?(construction_source = alpha_source ())
+    ?(risk_budget_fraction = dec "0.1")
+    () =
+  Pm.Risk_config.make ~book_id:(book ()) ~risk_budget_fraction ~limits:(limits ())
+    ~construction_source ~sizing_policy:Pm.Common.Sizing_policy_choice.Equity_proportional
 
 let mark_table tbl _book i =
   match List.find_opt (fun (s, _) -> Instrument.equal s i) tbl with
@@ -40,19 +41,18 @@ let mark_table tbl _book i =
 let no_vol _ = None
 
 let sizing_fn _book : DEH.Build_target_on_construction_intent.sizing_fn =
-  fun ~book_equity ~mark ~volatility intent ->
-    Pm.Sizing_policy.Equity_proportional.size () ~book_equity ~mark
-      ~volatility intent
+ fun ~book_equity ~mark ~volatility intent ->
+  Pm.Sizing_policy.Equity_proportional.size () ~book_equity ~mark ~volatility intent
 
 let make_scalar_intent ~instrument ~direction ~strength =
   CI.scalar ~book_id:(book ()) ~instrument ~direction
-    ~strength:(Strength.of_decimal strength) ~source:(alpha_source ())
-    ~observed_at:1L
+    ~strength:(Strength.of_decimal strength)
+    ~source:(alpha_source ()) ~observed_at:1L
 
 let test_no_risk_config_silent_noop () =
   let i = inst "SBER@MISX" in
-  let intent = make_scalar_intent ~instrument:i ~direction:Direction.Up
-    ~strength:(dec "0.5")
+  let intent =
+    make_scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let tp = ref (Pm.Target_portfolio.empty (book ())) in
   let published = ref 0 in
@@ -60,13 +60,13 @@ let test_no_risk_config_silent_noop () =
     ~risk_config_for:(fun _ -> None)
     ~total_equity_for:(fun _ -> Decimal.of_int 100_000)
     ~mark_for:(mark_table [ (i, Decimal.of_int 100) ])
-    ~volatility_for:no_vol
-    ~sizing_for:sizing_fn
+    ~volatility_for:no_vol ~sizing_for:sizing_fn
     ~target_portfolio_for:(fun _ -> tp)
     ~publish_target_portfolio_updated:(fun _ -> incr published)
     intent;
   Alcotest.(check int) "no publications" 0 !published;
-  Alcotest.(check int) "target portfolio unchanged" 0
+  Alcotest.(check int)
+    "target portfolio unchanged" 0
     (List.length (Pm.Target_portfolio.positions !tp))
 
 let test_unauthorised_source_silent_noop () =
@@ -84,20 +84,19 @@ let test_unauthorised_source_silent_noop () =
     ~risk_config_for:(fun _ -> Some cfg)
     ~total_equity_for:(fun _ -> Decimal.of_int 100_000)
     ~mark_for:(mark_table [ (i, Decimal.of_int 100) ])
-    ~volatility_for:no_vol
-    ~sizing_for:sizing_fn
+    ~volatility_for:no_vol ~sizing_for:sizing_fn
     ~target_portfolio_for:(fun _ -> tp)
     ~publish_target_portfolio_updated:(fun _ -> incr published)
     intent;
   Alcotest.(check int) "no publications" 0 !published;
-  Alcotest.(check int) "target portfolio unchanged" 0
+  Alcotest.(check int)
+    "target portfolio unchanged" 0
     (List.length (Pm.Target_portfolio.positions !tp))
 
 let test_happy_path_sizes_clips_publishes () =
   let i = inst "SBER@MISX" in
   let intent =
-    make_scalar_intent ~instrument:i ~direction:Direction.Up
-      ~strength:(dec "0.5")
+    make_scalar_intent ~instrument:i ~direction:Direction.Up ~strength:(dec "0.5")
   in
   let cfg = risk_config () in
   let tp = ref (Pm.Target_portfolio.empty (book ())) in
@@ -106,8 +105,7 @@ let test_happy_path_sizes_clips_publishes () =
     ~risk_config_for:(fun _ -> Some cfg)
     ~total_equity_for:(fun _ -> Decimal.of_int 100_000)
     ~mark_for:(mark_table [ (i, Decimal.of_int 100) ])
-    ~volatility_for:no_vol
-    ~sizing_for:sizing_fn
+    ~volatility_for:no_vol ~sizing_for:sizing_fn
     ~target_portfolio_for:(fun _ -> tp)
     ~publish_target_portfolio_updated:(fun ie -> published := ie :: !published)
     intent;
@@ -119,17 +117,14 @@ let test_happy_path_sizes_clips_publishes () =
 let test_per_instrument_clip_in_pipeline () =
   let i = inst "SBER@MISX" in
   let intent =
-    make_scalar_intent ~instrument:i ~direction:Direction.Up
-      ~strength:Decimal.one
+    make_scalar_intent ~instrument:i ~direction:Direction.Up ~strength:Decimal.one
   in
   let limits =
-    Pm.Risk.Values.Risk_limits.make
-      ~max_per_instrument_notional:(Decimal.of_int 1_000)
+    Pm.Risk.Values.Risk_limits.make ~max_per_instrument_notional:(Decimal.of_int 1_000)
       ~max_gross_exposure:(Decimal.of_int 1_000_000_000)
   in
   let cfg =
-    Pm.Risk_config.make ~book_id:(book ())
-      ~risk_budget_fraction:(dec "0.1") ~limits
+    Pm.Risk_config.make ~book_id:(book ()) ~risk_budget_fraction:(dec "0.1") ~limits
       ~construction_source:(alpha_source ())
       ~sizing_policy:Pm.Common.Sizing_policy_choice.Equity_proportional
   in
@@ -139,8 +134,7 @@ let test_per_instrument_clip_in_pipeline () =
     ~risk_config_for:(fun _ -> Some cfg)
     ~total_equity_for:(fun _ -> Decimal.of_int 100_000)
     ~mark_for:(mark_table [ (i, Decimal.of_int 100) ])
-    ~volatility_for:no_vol
-    ~sizing_for:sizing_fn
+    ~volatility_for:no_vol ~sizing_for:sizing_fn
     ~target_portfolio_for:(fun _ -> tp)
     ~publish_target_portfolio_updated:(fun _ -> incr published)
     intent;

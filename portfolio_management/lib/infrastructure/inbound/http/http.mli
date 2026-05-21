@@ -30,13 +30,12 @@ val make_handler :
   subscribe_book_to_alpha:
     (Portfolio_management_commands.Subscribe_book_to_alpha_command.t ->
     ( unit,
-      Portfolio_management_commands.Subscribe_book_to_alpha_command_handler
-      .handle_error )
+      Portfolio_management_commands.Subscribe_book_to_alpha_command_handler.handle_error
+    )
     Rop.t) ->
   define_pair_mr:
     (Portfolio_management_commands.Define_pair_mr_command.t ->
     ( unit,
-      Portfolio_management_commands.Define_pair_mr_command_handler.handle_error
-    )
+      Portfolio_management_commands.Define_pair_mr_command_handler.handle_error )
     Rop.t) ->
   Inbound_http.Route.handler

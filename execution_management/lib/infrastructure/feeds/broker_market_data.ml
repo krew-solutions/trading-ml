@@ -1,14 +1,8 @@
 module Mq = Execution_management.Order_ticket.Values.Market_data_quote
 
-type subscription = {
-  id : int;
-  key : string;
-}
+type subscription = { id : int; key : string }
 
-type entry = {
-  sub : subscription;
-  on_quote : Mq.t -> unit;
-}
+type entry = { sub : subscription; on_quote : Mq.t -> unit }
 
 type t = {
   table : (string, entry list ref) Hashtbl.t;
@@ -16,8 +10,7 @@ type t = {
   mutable next_id : int;
 }
 
-let create () =
-  { table = Hashtbl.create 32; mutex = Mutex.create (); next_id = 1 }
+let create () = { table = Hashtbl.create 32; mutex = Mutex.create (); next_id = 1 }
 
 let with_lock t f =
   Mutex.lock t.mutex;
@@ -58,7 +51,4 @@ let deliver t ~instrument ~quote =
         | None -> []
         | Some bucket -> !bucket)
   in
-  List.iter
-    (fun e ->
-      try e.on_quote quote with _ -> ())
-    entries
+  List.iter (fun e -> try e.on_quote quote with _ -> ()) entries

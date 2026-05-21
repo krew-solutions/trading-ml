@@ -10,15 +10,9 @@
 
 (*@ function dec_raw (d : Decimal.t) : integer *)
 
-type t = private {
-  quantity : Decimal.t;
-  price : Decimal.t;
-  fee : Decimal.t;
-  ts : int64;
-}
+type t = private { quantity : Decimal.t; price : Decimal.t; fee : Decimal.t; ts : int64 }
 
-val make :
-  quantity:Decimal.t -> price:Decimal.t -> fee:Decimal.t -> ts:int64 -> t
+val make : quantity:Decimal.t -> price:Decimal.t -> fee:Decimal.t -> ts:int64 -> t
 (** Raises [Invalid_argument] when any invariant is violated. *)
 (*@ r = make ~quantity ~price ~fee ~ts
     requires dec_raw quantity > 0

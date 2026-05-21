@@ -1,10 +1,4 @@
-type t =
-  | Pending
-  | Working
-  | Filled
-  | Rejected
-  | Unreachable
-  | Cancelled
+type t = Pending | Working | Filled | Rejected | Unreachable | Cancelled
 
 let is_terminal = function
   | Filled | Rejected | Unreachable | Cancelled -> true

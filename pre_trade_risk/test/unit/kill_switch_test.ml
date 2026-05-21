@@ -6,8 +6,7 @@ let pct f = Pre_trade_risk.Kill_switch.Values.Max_drawdown_pct.of_float f
 
 let test_disabled_never_trips () =
   let ks =
-    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000")
-      ~max_drawdown_pct:(pct 0.0)
+    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000") ~max_drawdown_pct:(pct 0.0)
   in
   let _, ev =
     Pre_trade_risk.Kill_switch.update_equity ks ~equity:(d "1") ~occurred_at:0L
@@ -16,21 +15,17 @@ let test_disabled_never_trips () =
 
 let test_within_threshold_does_not_trip () =
   let ks =
-    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000")
-      ~max_drawdown_pct:(pct 0.2)
+    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000") ~max_drawdown_pct:(pct 0.2)
   in
   let ks', ev =
     Pre_trade_risk.Kill_switch.update_equity ks ~equity:(d "850") ~occurred_at:0L
   in
   Alcotest.(check bool) "no trip" true (Option.is_none ev);
-  Alcotest.(check bool)
-    "not halted" false
-    (Pre_trade_risk.Kill_switch.is_halted ks')
+  Alcotest.(check bool) "not halted" false (Pre_trade_risk.Kill_switch.is_halted ks')
 
 let test_breach_trips_once () =
   let ks =
-    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000")
-      ~max_drawdown_pct:(pct 0.2)
+    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000") ~max_drawdown_pct:(pct 0.2)
   in
   let ks', ev =
     Pre_trade_risk.Kill_switch.update_equity ks ~equity:(d "750") ~occurred_at:0L
@@ -44,8 +39,7 @@ let test_breach_trips_once () =
 
 let test_peak_grows_with_equity () =
   let ks =
-    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000")
-      ~max_drawdown_pct:(pct 0.2)
+    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000") ~max_drawdown_pct:(pct 0.2)
   in
   let ks, _ =
     Pre_trade_risk.Kill_switch.update_equity ks ~equity:(d "1500") ~occurred_at:0L
@@ -56,8 +50,7 @@ let test_peak_grows_with_equity () =
 
 let test_reset_clears_halt () =
   let ks =
-    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000")
-      ~max_drawdown_pct:(pct 0.1)
+    Pre_trade_risk.Kill_switch.make ~initial_equity:(d "1000") ~max_drawdown_pct:(pct 0.1)
   in
   let ks, _ =
     Pre_trade_risk.Kill_switch.update_equity ks ~equity:(d "850") ~occurred_at:0L

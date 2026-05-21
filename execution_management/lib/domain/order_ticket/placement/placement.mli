@@ -39,6 +39,7 @@ val pending :
 
 val acknowledge : t -> t
 val apply_fill : t -> fill:Values.Fill_record.t -> t
+
 (*@ p' = apply_fill p ~fill
     requires dec_raw p.cumulative_filled + dec_raw fill.Values.Fill_record.quantity
              <= dec_raw p.requested_quantity *)

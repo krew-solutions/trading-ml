@@ -22,11 +22,7 @@ type t = private {
 }
 
 val make :
-  n_slices:int ->
-  window_seconds:int ->
-  start_at:int64 ->
-  volume_profile:float list ->
-  t
+  n_slices:int -> window_seconds:int -> start_at:int64 -> volume_profile:float list -> t
 (** Raises [Invalid_argument] on any invariant violation. The
     weights are normalised internally — callers may pass raw
     proportions (e.g. [[1.0; 3.0; 4.0; 2.0]]) without

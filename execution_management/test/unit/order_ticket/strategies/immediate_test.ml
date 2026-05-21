@@ -14,7 +14,8 @@ let price s = Decimal.of_string s
 
 let intent_buy_100 () =
   let instrument =
-    Core.Instrument.make ~ticker:(Core.Ticker.of_string "SBER")
+    Core.Instrument.make
+      ~ticker:(Core.Ticker.of_string "SBER")
       ~venue:(Core.Mic.of_string "MISX") ()
   in
   Values.Trade_intent.make ~book_id:"alpha" ~instrument ~side:Core.Side.Buy
@@ -31,9 +32,7 @@ let test_init_emits_single_submit_with_full_quantity () =
   let _state, decision = Imm.init ~intent ~now:1_700_000_000L in
   Alcotest.(check int) "exactly one submit" 1 (List.length decision.submit);
   let req = List.hd decision.submit in
-  Alcotest.(check string)
-    "submit quantity = total" "100"
-    (Decimal.to_string req.quantity);
+  Alcotest.(check string) "submit quantity = total" "100" (Decimal.to_string req.quantity);
   Alcotest.(check (list int))
     "no cancels" []
     (List.map Placement.Values.Placement_id.to_int decision.cancel);
@@ -86,9 +85,7 @@ let test_rejection_terminates_failed () =
   in
   match decision.terminal with
   | Decision.Failed reason ->
-      Alcotest.(check bool)
-        "reason carries broker message" true
-        (String.length reason > 0)
+      Alcotest.(check bool) "reason carries broker message" true (String.length reason > 0)
   | _ -> Alcotest.fail "rejection should produce Failed terminal"
 
 let test_unreachable_terminates_failed () =
@@ -129,13 +126,10 @@ let test_terminal_state_absorbs_late_events () =
   Alcotest.(check bool) "complete after full fill" true (Imm.is_complete state');
   let _state'', decision =
     Imm.on_event state'
-      (Input.Placement_rejected
-         { placement_id = placement_id_1; reason = "late ack" })
+      (Input.Placement_rejected { placement_id = placement_id_1; reason = "late ack" })
       ~now:1_700_000_020L
   in
-  Alcotest.(check int)
-    "no work on late event"
-    0 (List.length decision.submit);
+  Alcotest.(check int) "no work on late event" 0 (List.length decision.submit);
   match decision.terminal with
   | Decision.Continue -> ()
   | _ -> Alcotest.fail "late event in terminal state should yield Continue noop"
@@ -143,12 +137,13 @@ let test_terminal_state_absorbs_late_events () =
 let test_strategy_dispatcher_via_immediate_directive () =
   let intent = intent_buy_100 () in
   let strategy, decision =
-    Ot.Strategies.Strategy.init ~intent
-      ~directive:Values.Execution_directive.Immediate ~now:1_700_000_000L
+    Ot.Strategies.Strategy.init ~intent ~directive:Values.Execution_directive.Immediate
+      ~now:1_700_000_000L
   in
-  Alcotest.(check int) "init via dispatcher emits one submit" 1
-    (List.length decision.submit);
-  Alcotest.(check bool) "not complete at init" false
+  Alcotest.(check int)
+    "init via dispatcher emits one submit" 1 (List.length decision.submit);
+  Alcotest.(check bool)
+    "not complete at init" false
     (Ot.Strategies.Strategy.is_complete strategy)
 
 let tests =

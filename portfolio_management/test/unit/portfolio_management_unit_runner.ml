@@ -16,10 +16,8 @@ let () =
       ("risk_config", Risk_config_test.tests);
       ( "build_target_on_construction_intent",
         Build_target_on_construction_intent_test.tests );
-      ( "configure_risk_command_handler",
-        Configure_risk_command_handler_test.tests );
+      ("configure_risk_command_handler", Configure_risk_command_handler_test.tests);
       ( "subscribe_book_to_alpha_command_handler",
         Subscribe_book_to_alpha_command_handler_test.tests );
-      ( "define_pair_mr_command_handler",
-        Define_pair_mr_command_handler_test.tests );
+      ("define_pair_mr_command_handler", Define_pair_mr_command_handler_test.tests);
     ]

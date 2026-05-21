@@ -16,10 +16,7 @@
     Future surfaces: kill-switch reset endpoint, saga-progress SSE
     channel filtered by correlation_id. *)
 
-type cancel_result =
-  | Cancel_ok
-  | Cancel_not_found
-  | Cancel_invalid_payload of string
+type cancel_result = Cancel_ok | Cancel_not_found | Cancel_invalid_payload of string
 
 val make_handler :
   get_order_ticket:(int -> Yojson.Safe.t option) ->

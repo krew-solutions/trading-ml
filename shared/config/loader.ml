@@ -11,9 +11,7 @@ let read_file path =
 let load_file path : T.t = J.t_of_string (read_file path)
 
 let load_file_opt path : T.t option =
-  if Sys.file_exists path then
-    try Some (load_file path) with _ -> None
-  else None
+  if Sys.file_exists path then try Some (load_file path) with _ -> None else None
 
 let resolve_local_path ~local_path ~env_var : string option =
   match local_path with

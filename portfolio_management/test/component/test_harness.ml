@@ -161,11 +161,15 @@ let default_limits () =
     ~max_per_instrument_notional:(Decimal.of_int 1_000_000_000)
     ~max_gross_exposure:(Decimal.of_int 1_000_000_000)
 
-let set_risk_config ?(sizing_policy = Pm.Common.Sizing_policy_choice.Equity_proportional)
-    ctx ~book_id ~risk_budget_fraction ~construction_source =
+let set_risk_config
+    ?(sizing_policy = Pm.Common.Sizing_policy_choice.Equity_proportional)
+    ctx
+    ~book_id
+    ~risk_budget_fraction
+    ~construction_source =
   let cfg =
-    Pm.Risk_config.make ~book_id ~risk_budget_fraction
-      ~limits:(default_limits ()) ~construction_source ~sizing_policy
+    Pm.Risk_config.make ~book_id ~risk_budget_fraction ~limits:(default_limits ())
+      ~construction_source ~sizing_policy
   in
   Hashtbl.replace ctx.risk_configs (Pm.Common.Book_id.to_string book_id) cfg;
   ctx
@@ -187,23 +191,16 @@ let total_equity_for ctx book =
   | None -> Decimal.zero
 
 let mark_for ctx _book instrument =
-  match
-    Hashtbl.find_opt ctx.marks (Core.Instrument.to_qualified instrument)
-  with
+  match Hashtbl.find_opt ctx.marks (Core.Instrument.to_qualified instrument) with
   | Some p -> p
   | None -> Decimal.zero
 
 let volatility_for ctx (instrument : Core.Instrument.t) : Decimal.t option =
-  match
-    Hashtbl.find_opt ctx.vol_states (Core.Instrument.to_qualified instrument)
-  with
+  match Hashtbl.find_opt ctx.vol_states (Core.Instrument.to_qualified instrument) with
   | None -> None
-  | Some r ->
-      Option.map Pm.Common.Volatility.to_decimal
-        (Pm.Common.Vol_state.current !r)
+  | Some r -> Option.map Pm.Common.Volatility.to_decimal (Pm.Common.Vol_state.current !r)
 
-let make_update_vol ctx (instrument : Core.Instrument.t) ~(close : Decimal.t) :
-    unit =
+let make_update_vol ctx (instrument : Core.Instrument.t) ~(close : Decimal.t) : unit =
   if Decimal.is_positive close then
     let key = Core.Instrument.to_qualified instrument in
     let state_ref =
@@ -227,20 +224,18 @@ let make_update_vol ctx (instrument : Core.Instrument.t) ~(close : Decimal.t) :
    unified handler short-circuits on missing config anyway, so
    the choice is observationally irrelevant). *)
 let sizing_for ctx book_id : DEH.Build_target_on_construction_intent.sizing_fn =
-  fun ~book_equity ~mark ~volatility intent ->
-    let choice =
-      match risk_config_for ctx book_id with
-      | Some cfg -> Pm.Risk_config.sizing_policy cfg
-      | None -> Pm.Common.Sizing_policy_choice.Equity_proportional
-    in
-    match choice with
-    | Pm.Common.Sizing_policy_choice.Equity_proportional ->
-        Pm.Sizing_policy.Equity_proportional.size () ~book_equity ~mark
-          ~volatility intent
-    | Pm.Common.Sizing_policy_choice.Volatility_target { target_annual_vol }
-      ->
-        Pm.Sizing_policy.Volatility_target.size { target_annual_vol }
-          ~book_equity ~mark ~volatility intent
+ fun ~book_equity ~mark ~volatility intent ->
+  let choice =
+    match risk_config_for ctx book_id with
+    | Some cfg -> Pm.Risk_config.sizing_policy cfg
+    | None -> Pm.Common.Sizing_policy_choice.Equity_proportional
+  in
+  match choice with
+  | Pm.Common.Sizing_policy_choice.Equity_proportional ->
+      Pm.Sizing_policy.Equity_proportional.size () ~book_equity ~mark ~volatility intent
+  | Pm.Common.Sizing_policy_choice.Volatility_target { target_annual_vol } ->
+      Pm.Sizing_policy.Volatility_target.size { target_annual_vol } ~book_equity ~mark
+        ~volatility intent
 
 let define_alpha_view
     ctx
@@ -281,11 +276,10 @@ let define_alpha_view
   in
   let result =
     Define_alpha_view_wf.execute ~alpha_view_for ~subscribers_for
-      ~risk_config_for:(risk_config_for ctx)
-      ~total_equity_for:(total_equity_for ctx)
+      ~risk_config_for:(risk_config_for ctx) ~total_equity_for:(total_equity_for ctx)
       ~mark_for:(mark_for ctx) ~volatility_for:(volatility_for ctx)
-      ~sizing_for:(sizing_for ctx)
-      ~target_portfolio_for ~publish_target_portfolio_updated cmd
+      ~sizing_for:(sizing_for ctx) ~target_portfolio_for ~publish_target_portfolio_updated
+      cmd
   in
   { ctx with last_define_alpha_view_result = Some result }
 
@@ -328,11 +322,10 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
   let update_vol inst ~close = make_update_vol ctx inst ~close in
   let result =
     Apply_bar_wf.execute ~pair_mr_states_for ~update_mark ~update_vol
-      ~risk_config_for:(risk_config_for ctx)
-      ~total_equity_for:(total_equity_for ctx)
+      ~risk_config_for:(risk_config_for ctx) ~total_equity_for:(total_equity_for ctx)
       ~mark_for:(mark_for ctx) ~volatility_for:(volatility_for ctx)
-      ~sizing_for:(sizing_for ctx)
-      ~target_portfolio_for ~publish_target_portfolio_updated cmd
+      ~sizing_for:(sizing_for ctx) ~target_portfolio_for ~publish_target_portfolio_updated
+      cmd
   in
   { ctx with last_apply_bar_result = Some result }
 
@@ -369,11 +362,10 @@ let feed_bar ctx ~instrument ~ts ~close =
   let update_vol inst ~close = make_update_vol ctx inst ~close in
   let result =
     Apply_bar_wf.execute ~pair_mr_states_for ~update_mark ~update_vol
-      ~risk_config_for:(risk_config_for ctx)
-      ~total_equity_for:(total_equity_for ctx)
+      ~risk_config_for:(risk_config_for ctx) ~total_equity_for:(total_equity_for ctx)
       ~mark_for:(mark_for ctx) ~volatility_for:(volatility_for ctx)
-      ~sizing_for:(sizing_for ctx)
-      ~target_portfolio_for ~publish_target_portfolio_updated cmd
+      ~sizing_for:(sizing_for ctx) ~target_portfolio_for ~publish_target_portfolio_updated
+      cmd
   in
   { ctx with last_apply_bar_result = Some result }
 

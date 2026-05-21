@@ -8,8 +8,8 @@ type t = {
   occurred_at : int64;
 }
 
-let to_construction_intent (event : t) ~(book_id : Common.Book_id.t)
-    : Common.Construction_intent.t =
+let to_construction_intent (event : t) ~(book_id : Common.Book_id.t) :
+    Common.Construction_intent.t =
   Common.Construction_intent.scalar ~book_id ~instrument:event.instrument
     ~direction:event.new_direction
     ~strength:(Common.Strength.of_float event.strength)

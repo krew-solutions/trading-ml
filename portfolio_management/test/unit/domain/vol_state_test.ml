@@ -8,16 +8,14 @@ let dec = Decimal.of_string
 let af_daily = 252.0
 
 let test_init_rejects_small_window () =
-  Alcotest.check_raises "window=2 rejected" (Invalid_argument "")
-    (fun () ->
+  Alcotest.check_raises "window=2 rejected" (Invalid_argument "") (fun () ->
       try
         let _ = VS.init ~window:2 ~annualisation_factor:af_daily in
         ()
       with Invalid_argument _ -> raise (Invalid_argument ""))
 
 let test_init_rejects_nonpositive_factor () =
-  Alcotest.check_raises "factor=0 rejected" (Invalid_argument "")
-    (fun () ->
+  Alcotest.check_raises "factor=0 rejected" (Invalid_argument "") (fun () ->
       try
         let _ = VS.init ~window:10 ~annualisation_factor:0.0 in
         ()
@@ -37,13 +35,11 @@ let test_current_some_after_warmup () =
       s
       [ "100"; "101"; "102"; "103" ]
   in
-  Alcotest.(check bool) "current is Some after window full" true
-    (VS.current s <> None)
+  Alcotest.(check bool) "current is Some after window full" true (VS.current s <> None)
 
 let test_update_rejects_nonpositive_close () =
   let s = VS.init ~window:5 ~annualisation_factor:af_daily in
-  Alcotest.check_raises "negative close rejected" (Invalid_argument "")
-    (fun () ->
+  Alcotest.check_raises "negative close rejected" (Invalid_argument "") (fun () ->
       try
         let _ = VS.update s ~close:(dec "-1") in
         ()
@@ -84,8 +80,7 @@ let test_rising_series_has_positive_vol () =
   match VS.current s with
   | None -> Alcotest.fail "expected Some"
   | Some v ->
-      Alcotest.(check bool) "positive vol" true
-        (Decimal.is_positive (Vol.to_decimal v))
+      Alcotest.(check bool) "positive vol" true (Decimal.is_positive (Vol.to_decimal v))
 
 let tests =
   [
@@ -94,8 +89,7 @@ let tests =
       test_init_rejects_nonpositive_factor;
     Alcotest.test_case "current = None before warmup" `Quick
       test_current_is_none_before_warmup;
-    Alcotest.test_case "current = Some after warmup" `Quick
-      test_current_some_after_warmup;
+    Alcotest.test_case "current = Some after warmup" `Quick test_current_some_after_warmup;
     Alcotest.test_case "update rejects non-positive close" `Quick
       test_update_rejects_nonpositive_close;
     Alcotest.test_case "constant series has zero volatility" `Quick

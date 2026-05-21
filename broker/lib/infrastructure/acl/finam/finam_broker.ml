@@ -89,7 +89,8 @@ let account_id t = t.account_id
 
 let resolve_order_id t ~client_order_id =
   let cached =
-    Eio.Mutex.use_ro t.mutex (fun () -> Hashtbl.find_opt t.order_id_by_cid client_order_id)
+    Eio.Mutex.use_ro t.mutex (fun () ->
+        Hashtbl.find_opt t.order_id_by_cid client_order_id)
   in
   match cached with
   | Some id -> id
@@ -137,9 +138,7 @@ let cancel_order t ~placement_id : Order_view_model.t option =
   | None -> None
   | Some cid ->
       let order_id = resolve_order_id t ~client_order_id:cid in
-      let external_order =
-        Rest.cancel_order t.rest ~account_id:t.account_id ~order_id:order_id
-      in
+      let external_order = Rest.cancel_order t.rest ~account_id:t.account_id ~order_id in
       Some (project ~placement_id external_order)
 
 let get_order t ~placement_id : Order_view_model.t option =
@@ -147,9 +146,7 @@ let get_order t ~placement_id : Order_view_model.t option =
   | None -> None
   | Some cid ->
       let order_id = resolve_order_id t ~client_order_id:cid in
-      let external_order =
-        Rest.get_order t.rest ~account_id:t.account_id ~order_id:order_id
-      in
+      let external_order = Rest.get_order t.rest ~account_id:t.account_id ~order_id in
       Some (project ~placement_id external_order)
 
 let get_executions t ~placement_id : Execution_view_model.t list =

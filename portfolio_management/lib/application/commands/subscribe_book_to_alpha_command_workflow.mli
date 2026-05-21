@@ -3,7 +3,6 @@
     side effects today. *)
 
 val execute :
-  persist_subscription:
-    (Portfolio_management.Common.Alpha_subscription.t -> unit) ->
+  persist_subscription:(Portfolio_management.Common.Alpha_subscription.t -> unit) ->
   Subscribe_book_to_alpha_command.t ->
   (unit, Subscribe_book_to_alpha_command_handler.handle_error) Rop.t

@@ -17,8 +17,7 @@ type wire_reserve = {
 }
 [@@deriving yojson]
 
-type wire_release = { correlation_id : string; reservation_id : int }
-[@@deriving yojson]
+type wire_release = { correlation_id : string; reservation_id : int } [@@deriving yojson]
 
 type wire_commit_fill = {
   correlation_id : string;
@@ -29,11 +28,7 @@ type wire_commit_fill = {
 }
 [@@deriving yojson]
 
-type wire_directive = {
-  kind : string;
-  params : string option;
-}
-[@@deriving yojson]
+type wire_directive = { kind : string; params : string option } [@@deriving yojson]
 
 type wire_open_order_ticket = {
   reservation_id : int;
@@ -46,8 +41,7 @@ type wire_open_order_ticket = {
 }
 [@@deriving yojson]
 
-let qualify_instrument (i : Inbound.Trade_intent_approved_integration_event.t) :
-    string =
+let qualify_instrument (i : Inbound.Trade_intent_approved_integration_event.t) : string =
   i.symbol
 
 let build ~bus : t =
@@ -62,12 +56,10 @@ let build ~bus : t =
       (Bus.producer bus ~uri ~serialize:(fun v -> Yojson.Safe.to_string (yojson_of v)))
   in
   let publish_reserve =
-    produce ~uri:"in-memory://account.reserve-command"
-      ~yojson_of:yojson_of_wire_reserve
+    produce ~uri:"in-memory://account.reserve-command" ~yojson_of:yojson_of_wire_reserve
   in
   let publish_release =
-    produce ~uri:"in-memory://account.release-command"
-      ~yojson_of:yojson_of_wire_release
+    produce ~uri:"in-memory://account.release-command" ~yojson_of:yojson_of_wire_release
   in
   let publish_commit_fill =
     produce ~uri:"in-memory://account.commit-fill-command"
@@ -78,22 +70,14 @@ let build ~bus : t =
       ~yojson_of:yojson_of_wire_open_order_ticket
   in
 
-  (** Saga command dispatcher. All four variants leave the BC over
-      the bus (cross-BC commands per ADR 0020). *)
+  (* Saga command dispatcher. All four variants leave the BC over
+     the bus (cross-BC commands per ADR 0020). *)
   let dispatch (cmd : Pm.command) : unit =
     match cmd with
     | Dispatch_reserve { correlation_id; side; symbol; quantity; price } ->
         publish_reserve { correlation_id; side; symbol; quantity; price }
     | Dispatch_open_ticket
-        {
-          reservation_id;
-          correlation_id;
-          book_id;
-          symbol;
-          side;
-          quantity;
-          directive;
-        } ->
+        { reservation_id; correlation_id; book_id; symbol; side; quantity; directive } ->
         let execution_directive =
           Option.map
             (fun (d : Pm.directive_payload) : wire_directive ->
@@ -111,8 +95,7 @@ let build ~bus : t =
             execution_directive;
           }
     | Dispatch_commit_fill { correlation_id; reservation_id; quantity; price; fee } ->
-        publish_commit_fill
-          { correlation_id; reservation_id; quantity; price; fee }
+        publish_commit_fill { correlation_id; reservation_id; quantity; price; fee }
     | Dispatch_release { correlation_id; reservation_id } ->
         publish_release { correlation_id; reservation_id }
   in
@@ -140,8 +123,7 @@ let build ~bus : t =
             in
             let payload =
               Pm.initial_payload ?directive ~book_id:ev.book_id
-                ~symbol:(qualify_instrument ev) ~side:ev.side
-                ~quantity:ev.quantity ()
+                ~symbol:(qualify_instrument ev) ~side:ev.side ~quantity:ev.quantity ()
             in
             Pm.Engine.start engine ~correlation_id:ev.correlation_id
               (Pm.Awaiting_reservation { payload });
@@ -151,10 +133,9 @@ let build ~bus : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://account.amount-reserved"
-         ~group:"order-management-saga"
-         ~t_of_yojson:Inbound.Amount_reserved_integration_event.t_of_yojson)
-      (fun ev -> Pm.Engine.on_event engine (Pm.Amount_reserved ev))
+      (consume ~uri:"in-memory://account.amount-reserved" ~group:"order-management-saga"
+         ~t_of_yojson:Inbound.Amount_reserved_integration_event.t_of_yojson) (fun ev ->
+        Pm.Engine.on_event engine (Pm.Amount_reserved ev))
   in
   let _ : Bus.subscription =
     Bus.subscribe
@@ -165,38 +146,31 @@ let build ~bus : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume
-         ~uri:"in-memory://execution-management.order-ticket-fill-recorded"
+      (consume ~uri:"in-memory://execution-management.order-ticket-fill-recorded"
          ~group:"order-management-saga"
-         ~t_of_yojson:
-           Inbound.Order_ticket_fill_recorded_integration_event.t_of_yojson)
+         ~t_of_yojson:Inbound.Order_ticket_fill_recorded_integration_event.t_of_yojson)
       (fun ev -> Pm.Engine.on_event engine (Pm.Ticket_fill_recorded ev))
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://execution-management.order-ticket-completed"
          ~group:"order-management-saga"
-         ~t_of_yojson:
-           Inbound.Order_ticket_completed_integration_event.t_of_yojson)
+         ~t_of_yojson:Inbound.Order_ticket_completed_integration_event.t_of_yojson)
       (fun ev -> Pm.Engine.on_event engine (Pm.Ticket_completed ev))
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://execution-management.order-ticket-cancelled"
          ~group:"order-management-saga"
-         ~t_of_yojson:
-           Inbound.Order_ticket_cancelled_integration_event.t_of_yojson)
+         ~t_of_yojson:Inbound.Order_ticket_cancelled_integration_event.t_of_yojson)
       (fun ev -> Pm.Engine.on_event engine (Pm.Ticket_cancelled ev))
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://execution-management.order-ticket-failed"
          ~group:"order-management-saga"
-         ~t_of_yojson:
-           Inbound.Order_ticket_failed_integration_event.t_of_yojson)
+         ~t_of_yojson:Inbound.Order_ticket_failed_integration_event.t_of_yojson)
       (fun ev -> Pm.Engine.on_event engine (Pm.Ticket_failed ev))
   in
-  let http_handler : Inbound_http.Route.handler =
-   fun _request _body -> None
-  in
+  let http_handler : Inbound_http.Route.handler = fun _request _body -> None in
   { http_handler }

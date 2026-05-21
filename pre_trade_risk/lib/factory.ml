@@ -27,8 +27,8 @@ let build ~bus ~now ~(config : config) : t =
           Some
             (Pre_trade_risk.Rate_limit.make
                ~config:
-                 (Pre_trade_risk.Rate_limit.Values.Rate_limit_config.make
-                    ~max_orders ~window_seconds))
+                 (Pre_trade_risk.Rate_limit.Values.Rate_limit_config.make ~max_orders
+                    ~window_seconds))
       | None -> None)
   in
   let now_iso8601 () = Datetime.Iso8601.format (now ()) in
@@ -77,8 +77,8 @@ let build ~bus ~now ~(config : config) : t =
         Pre_trade_risk_integration_events.Kill_switch_tripped_integration_event
         .yojson_of_t
   in
-  (** Gate check at intake. [Allow] consumes a rate_limit token as a
-      side-effect; [Block reason] leaves the gate state untouched. *)
+  (* Gate check at intake. [Allow] consumes a rate_limit token as a
+     side-effect; [Block reason] leaves the gate state untouched. *)
   let try_intake ~now_secs : [ `Allow | `Block of string ] =
     if Pre_trade_risk.Kill_switch.is_halted !kill_switch then `Block "kill_switch"
     else
@@ -105,8 +105,7 @@ let build ~bus ~now ~(config : config) : t =
         | `Allow -> (
             match
               Pre_trade_risk_commands.Assess_trade_intent_command_workflow.execute
-                ~risk_view_for ~limits ~mark ~publish_approved
-                ~publish_rejected cmd
+                ~risk_view_for ~limits ~mark ~publish_approved ~publish_rejected cmd
             with
             | Ok () -> ()
             | Error _ -> ()))
@@ -144,21 +143,19 @@ let build ~bus ~now ~(config : config) : t =
          ~t_of_yojson:
            Pre_trade_risk_external_integration_events.Reservation_filled_integration_event
            .t_of_yojson)
-      (fun (ev :
-             Pre_trade_risk_external_integration_events
-             .Reservation_filled_integration_event
-             .t) ->
+      (fun
+        (ev :
+          Pre_trade_risk_external_integration_events.Reservation_filled_integration_event
+          .t)
+      ->
         Pre_trade_risk_external_integration_events
         .Reservation_filled_integration_event_handler
         .handle ~now ~dispatch_record_fill ev;
         with_lock (fun () ->
-            let equity =
-              try Decimal.of_string ev.new_cash with _ -> Decimal.zero
-            in
+            let equity = try Decimal.of_string ev.new_cash with _ -> Decimal.zero in
             let occurred_at = now () in
             let ks', tripped =
-              Pre_trade_risk.Kill_switch.update_equity !kill_switch ~equity
-                ~occurred_at
+              Pre_trade_risk.Kill_switch.update_equity !kill_switch ~equity ~occurred_at
             in
             kill_switch := ks';
             match tripped with

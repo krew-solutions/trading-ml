@@ -34,8 +34,7 @@ type wire_submit = {
 }
 [@@deriving yojson]
 
-type wire_cancel = { correlation_id : string; placement_id : int }
-[@@deriving yojson]
+type wire_cancel = { correlation_id : string; placement_id : int } [@@deriving yojson]
 
 (** Wire-format placement_id encoding: the OrderTicket aggregate
     mints local sequence ids (1, 2, 3, ...) per ticket; the
@@ -51,21 +50,35 @@ let decode_wire_to_ticket_id wire_pid = wire_pid / placement_id_seq_capacity
 
 let to_wire_kind (k : Ot.Placement.Values.Order_kind.t) : wire_order_kind =
   match k with
-  | Market ->
-      { type_ = "MARKET"; price = None; stop_price = None; limit_price = None }
+  | Market -> { type_ = "MARKET"; price = None; stop_price = None; limit_price = None }
   | Limit { price } ->
-      { type_ = "LIMIT"; price = Some (Decimal.to_string price);
-        stop_price = None; limit_price = None }
+      {
+        type_ = "LIMIT";
+        price = Some (Decimal.to_string price);
+        stop_price = None;
+        limit_price = None;
+      }
   | Stop { stop_price } ->
-      { type_ = "STOP"; price = None;
-        stop_price = Some (Decimal.to_string stop_price); limit_price = None }
-  | Stop_limit { stop_price; limit_price } ->
-      { type_ = "STOP_LIMIT"; price = None;
+      {
+        type_ = "STOP";
+        price = None;
         stop_price = Some (Decimal.to_string stop_price);
-        limit_price = Some (Decimal.to_string limit_price) }
+        limit_price = None;
+      }
+  | Stop_limit { stop_price; limit_price } ->
+      {
+        type_ = "STOP_LIMIT";
+        price = None;
+        stop_price = Some (Decimal.to_string stop_price);
+        limit_price = Some (Decimal.to_string limit_price);
+      }
 
 let to_wire_tif (t : Ot.Placement.Values.Tif.t) : string =
-  match t with Gtc -> "GTC" | Day -> "DAY" | Ioc -> "IOC" | Fok -> "FOK"
+  match t with
+  | Gtc -> "GTC"
+  | Day -> "DAY"
+  | Ioc -> "IOC"
+  | Fok -> "FOK"
 
 let build ~bus ~now : t =
   let mu = Mutex.create () in
@@ -97,8 +110,7 @@ let build ~bus ~now : t =
   in
   let publish_ticket_fill_recorded =
     produce ~uri:"in-memory://execution-management.order-ticket-fill-recorded"
-      ~yojson_of:
-        Outbound_ie.Order_ticket_fill_recorded_integration_event.yojson_of_t
+      ~yojson_of:Outbound_ie.Order_ticket_fill_recorded_integration_event.yojson_of_t
   in
   let publish_submit =
     produce ~uri:"in-memory://broker.submit-order-command"
@@ -114,15 +126,12 @@ let build ~bus ~now : t =
      arrives from order_management; downstream broker dispatches and
      outbound IEs read from it. *)
   let ticket_store = Persistence.In_memory_ticket_store.create () in
-  let ticket_store_module
-      : (module Ports.Ticket_store.S with type t = Persistence.In_memory_ticket_store.t)
-      =
+  let ticket_store_module :
+      (module Ports.Ticket_store.S with type t = Persistence.In_memory_ticket_store.t) =
     (module Persistence.In_memory_ticket_store)
   in
   let correlation_by_ticket : (int, string) Hashtbl.t = Hashtbl.create 64 in
-  let ticket_intent : (int, Ot.Values.Trade_intent.t) Hashtbl.t =
-    Hashtbl.create 64
-  in
+  let ticket_intent : (int, Ot.Values.Trade_intent.t) Hashtbl.t = Hashtbl.create 64 in
   let reservation_by_ticket : (int, Ot.Values.Reservation_id.t) Hashtbl.t =
     Hashtbl.create 64
   in
@@ -137,8 +146,8 @@ let build ~bus ~now : t =
      ready for mark-to-market / adaptive-strategy follow-ups). *)
   let volume_feed = Feeds.Broker_volume_feed.create () in
   let market_data = Feeds.Broker_market_data.create () in
-  let volume_subscription_by_ticket
-      : (int, Feeds.Broker_volume_feed.subscription) Hashtbl.t =
+  let volume_subscription_by_ticket :
+      (int, Feeds.Broker_volume_feed.subscription) Hashtbl.t =
     Hashtbl.create 16
   in
   let detach_volume_subscription tid =
@@ -159,8 +168,7 @@ let build ~bus ~now : t =
         | Ot.Values.Execution_directive.Pov params ->
             let sub =
               Feeds.Broker_volume_feed.subscribe volume_feed
-                ~instrument:e.intent.instrument
-                ~timeframe:params.timeframe
+                ~instrument:e.intent.instrument ~timeframe:params.timeframe
                 ~on_bar:(fun bar -> dispatch_volume_bar ~ticket_id:tid bar)
             in
             Hashtbl.replace volume_subscription_by_ticket tid sub
@@ -212,8 +220,7 @@ let build ~bus ~now : t =
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
         publish_ticket_failed
-          (Outbound_ie.Order_ticket_failed_integration_event.of_domain
-             ~correlation_id e);
+          (Outbound_ie.Order_ticket_failed_integration_event.of_domain ~correlation_id e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
@@ -222,8 +229,8 @@ let build ~bus ~now : t =
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
         publish_ticket_cancelled
-          (Outbound_ie.Order_ticket_cancelled_integration_event.of_domain
-             ~correlation_id e);
+          (Outbound_ie.Order_ticket_cancelled_integration_event.of_domain ~correlation_id
+             e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
@@ -232,8 +239,8 @@ let build ~bus ~now : t =
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
         publish_ticket_completed
-          (Outbound_ie.Order_ticket_completed_integration_event.of_domain
-             ~correlation_id e);
+          (Outbound_ie.Order_ticket_completed_integration_event.of_domain ~correlation_id
+             e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
         Hashtbl.remove ticket_intent tid;
@@ -242,7 +249,8 @@ let build ~bus ~now : t =
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
         match Hashtbl.find_opt reservation_by_ticket tid with
-        | None -> ()
+        | None ->
+            ()
             (* Should never happen: Ev_ticket_opened populates the map
                before any Placement_filled can land. Silent drop is safer
                than a crash on a future ordering edge case. *)
@@ -250,22 +258,18 @@ let build ~bus ~now : t =
             publish_ticket_fill_recorded
               (Outbound_ie.Order_ticket_fill_recorded_integration_event.of_domain
                  ~correlation_id ~reservation_id e))
-    | Ev_placement_acknowledged _ | Ev_placement_rejected _
-    | Ev_placement_unreachable _ | Ev_placement_cancelled _ ->
-        ()
+    | Ev_placement_acknowledged _
+    | Ev_placement_rejected _
+    | Ev_placement_unreachable _
+    | Ev_placement_cancelled _ -> ()
   and dispatch_volume_bar ~ticket_id (bar : Ot.Values.Volume_bar.t) =
     with_lock (fun () ->
         let cmd : Cmds.Ingest_volume_bar_command.t =
-          {
-            ticket_id;
-            bar_ts = bar.ts;
-            bar_volume = Decimal.to_string bar.volume;
-          }
+          { ticket_id; bar_ts = bar.ts; bar_volume = Decimal.to_string bar.volume }
         in
         let _ =
-          Cmds.Ingest_volume_bar_command_workflow.execute
-            ~store:ticket_store_module ~store_handle:ticket_store
-            ~publish:publish_aggregate_event ~now cmd
+          Cmds.Ingest_volume_bar_command_workflow.execute ~store:ticket_store_module
+            ~store_handle:ticket_store ~publish:publish_aggregate_event ~now cmd
         in
         ())
   in
@@ -275,10 +279,10 @@ let build ~bus ~now : t =
         t_of_yojson (Yojson.Safe.from_string s))
   in
 
-  (** Inbound cross-BC command from order_management. The intake
-      gate now lives in pre_trade_risk (ADR 0020 + step 2.5
-      follow-up); EM unconditionally opens the OrderTicket on every
-      command it receives. *)
+  (* Inbound cross-BC command from order_management. The intake
+     gate now lives in pre_trade_risk (ADR 0020 + step 2.5
+     follow-up); EM unconditionally opens the OrderTicket on every
+     command it receives. *)
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://execution-management.open-order-ticket-command"
@@ -286,12 +290,10 @@ let build ~bus ~now : t =
          ~t_of_yojson:Cmds.Open_order_ticket_command.t_of_yojson)
       (fun (cmd : Cmds.Open_order_ticket_command.t) ->
         with_lock (fun () ->
-            Hashtbl.replace correlation_by_ticket cmd.reservation_id
-              cmd.correlation_id;
+            Hashtbl.replace correlation_by_ticket cmd.reservation_id cmd.correlation_id;
             let _ =
-              Cmds.Open_order_ticket_command_workflow.execute
-                ~store:ticket_store_module ~store_handle:ticket_store
-                ~publish:publish_aggregate_event ~now cmd
+              Cmds.Open_order_ticket_command_workflow.execute ~store:ticket_store_module
+                ~store_handle:ticket_store ~publish:publish_aggregate_event ~now cmd
             in
             ()))
   in
@@ -305,34 +307,33 @@ let build ~bus ~now : t =
       (consume ~uri:"in-memory://broker.order-accepted"
          ~group:"execution-management-order-ticket"
          ~t_of_yojson:Inbound.Order_accepted_integration_event.t_of_yojson) (fun ev ->
-        Inbound.Order_accepted_integration_event_handler.handle
-          ~store:ticket_store_module ~store_handle:ticket_store
-          ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
+        Inbound.Order_accepted_integration_event_handler.handle ~store:ticket_store_module
+          ~store_handle:ticket_store ~publish:publish_aggregate_event ~now
+          ~ticket_id_of_placement_id ev)
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-filled"
          ~group:"execution-management-order-ticket"
          ~t_of_yojson:Inbound.Order_filled_integration_event.t_of_yojson) (fun ev ->
-        Inbound.Order_filled_integration_event_handler.handle
-          ~store:ticket_store_module ~store_handle:ticket_store
-          ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
+        Inbound.Order_filled_integration_event_handler.handle ~store:ticket_store_module
+          ~store_handle:ticket_store ~publish:publish_aggregate_event ~now
+          ~ticket_id_of_placement_id ev)
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-rejected"
          ~group:"execution-management-order-ticket"
          ~t_of_yojson:Inbound.Order_rejected_integration_event.t_of_yojson) (fun ev ->
-        Inbound.Order_rejected_integration_event_handler.handle
-          ~store:ticket_store_module ~store_handle:ticket_store
-          ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
+        Inbound.Order_rejected_integration_event_handler.handle ~store:ticket_store_module
+          ~store_handle:ticket_store ~publish:publish_aggregate_event ~now
+          ~ticket_id_of_placement_id ev)
   in
   let _ : Bus.subscription =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-unreachable"
          ~group:"execution-management-order-ticket"
-         ~t_of_yojson:Inbound.Order_unreachable_integration_event.t_of_yojson)
-      (fun ev ->
+         ~t_of_yojson:Inbound.Order_unreachable_integration_event.t_of_yojson) (fun ev ->
         Inbound.Order_unreachable_integration_event_handler.handle
           ~store:ticket_store_module ~store_handle:ticket_store
           ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
@@ -341,8 +342,7 @@ let build ~bus ~now : t =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.order-cancelled"
          ~group:"execution-management-order-ticket"
-         ~t_of_yojson:Inbound.Order_cancelled_integration_event.t_of_yojson)
-      (fun ev ->
+         ~t_of_yojson:Inbound.Order_cancelled_integration_event.t_of_yojson) (fun ev ->
         Inbound.Order_cancelled_integration_event_handler.handle
           ~store:ticket_store_module ~store_handle:ticket_store
           ~publish:publish_aggregate_event ~now ~ticket_id_of_placement_id ev)
@@ -353,12 +353,10 @@ let build ~bus ~now : t =
     Bus.subscribe
       (consume ~uri:"in-memory://broker.bar-updated"
          ~group:"execution-management-bar-feed"
-         ~t_of_yojson:Inbound.Bar_updated_integration_event.t_of_yojson)
-      (fun ev ->
+         ~t_of_yojson:Inbound.Bar_updated_integration_event.t_of_yojson) (fun ev ->
         Inbound.Bar_updated_integration_event_handler.handle
           ~deliver_volume_bar:(fun ~instrument ~timeframe ~bar ->
-            Feeds.Broker_volume_feed.deliver volume_feed ~instrument
-              ~timeframe ~bar)
+            Feeds.Broker_volume_feed.deliver volume_feed ~instrument ~timeframe ~bar)
           ~deliver_market_data:(fun ~instrument ~quote ->
             Feeds.Broker_market_data.deliver market_data ~instrument ~quote)
           ev)
@@ -382,9 +380,7 @@ let build ~bus ~now : t =
       Execution_management_inbound_http.Http.cancel_result =
     let parsed =
       if body = "" then
-        Some
-          ({ ticket_id; reason = "operator" }
-            : Cmds.Cancel_order_ticket_command.t)
+        Some ({ ticket_id; reason = "operator" } : Cmds.Cancel_order_ticket_command.t)
       else
         try
           let cmd = Cmds.Cancel_order_ticket_command.t_of_string body in
@@ -393,12 +389,11 @@ let build ~bus ~now : t =
     in
     match parsed with
     | None -> Cancel_invalid_payload "malformed JSON body"
-    | Some cmd -> (
+    | Some cmd ->
         with_lock (fun () ->
             match
-              Cmds.Cancel_order_ticket_command_workflow.execute
-                ~store:ticket_store_module ~store_handle:ticket_store
-                ~publish:publish_aggregate_event ~now cmd
+              Cmds.Cancel_order_ticket_command_workflow.execute ~store:ticket_store_module
+                ~store_handle:ticket_store ~publish:publish_aggregate_event ~now cmd
             with
             | Ok () -> Execution_management_inbound_http.Http.Cancel_ok
             | Error errs ->
@@ -416,7 +411,7 @@ let build ~bus ~now : t =
                     | Cmds.Command_error.Invalid_payload m :: _ -> m
                     | _ -> "cancel rejected"
                   in
-                  Cancel_invalid_payload msg))
+                  Cancel_invalid_payload msg)
   in
   let http_handler =
     Execution_management_inbound_http.Http.make_handler ~get_order_ticket

@@ -14,8 +14,8 @@ include module type of Execution_view_model_j with type t := t
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t
 
-val of_domain : Order.execution -> t
-(** Project broker's ACL-internal intermediate {!Order.execution}
+val of_domain : Order.trade -> t
+(** Project broker's ACL-internal intermediate {!Order.trade}
     onto the wire view model. The placement_id parent identity is
     {b not} on the per-execution record — it is carried by the
     calling context which already addressed the placement. *)

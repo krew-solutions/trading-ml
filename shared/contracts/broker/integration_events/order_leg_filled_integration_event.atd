@@ -1,4 +1,4 @@
-(* Wire contract: paper_broker/lib/application/integration_events/order_filled_integration_event.ml
+(* Wire contract: paper_broker/lib/application/integration_events/order_leg_filled_integration_event.ml
 
    Cross-referenced types resolved via atdgen at code-generation
    time; the consumer library opens Paper_broker_view_models so
@@ -13,8 +13,7 @@ type t = {
 
   placement_id <doc text="Client's identifier of the order, sourced from the Domain Paper_broker.Order.Events.Order_filled.placement_id. Account uses it to locate the matching ledger state on commit_fill_command."> : int;
 
-  id : string;
-  exec_id : string;
+  trade_id : string;
   instrument : instrument_view_model;
   side : string;
   fill_quantity : string;

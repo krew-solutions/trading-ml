@@ -2,7 +2,7 @@
  (name broker_integration_events)
  (public_name trading.broker.integration_events)
  (libraries yojson ppx_yojson_conv_lib atdgen-runtime
-            core broker_domain decimal broker_view_models)
+            core broker_domain decimal datetime broker_view_models)
  (preprocess
   (pps ppx_yojson_conv))
  (flags
@@ -78,12 +78,12 @@
 
 (rule
  (deps
-  (:atd %{project_root}/shared/contracts/broker/integration_events/order_filled_integration_event.atd))
- (targets order_filled_integration_event_t.ml
-          order_filled_integration_event_t.mli
-          order_filled_integration_event_j.ml
-          order_filled_integration_event_j.mli)
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_leg_filled_integration_event.atd))
+ (targets order_leg_filled_integration_event_t.ml
+          order_leg_filled_integration_event_t.mli
+          order_leg_filled_integration_event_j.ml
+          order_leg_filled_integration_event_j.mli)
  (action
   (progn
-   (run atdgen -t -o order_filled_integration_event %{atd})
-   (run atdgen -j -o order_filled_integration_event %{atd}))))
+   (run atdgen -t -o order_leg_filled_integration_event %{atd})
+   (run atdgen -j -o order_leg_filled_integration_event %{atd}))))

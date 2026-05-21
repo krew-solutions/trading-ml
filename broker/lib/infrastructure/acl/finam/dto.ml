@@ -277,7 +277,7 @@ let orders_of_json (j : Yojson.Safe.t) : External_order.t list =
   | `List items -> List.map order_of_json items
   | _ -> []
 
-type account_trade = { order_id : string; execution : Order.execution }
+type account_trade = { order_id : string; trade : Order.trade }
 (** Per-trade record from [GET /v1/accounts/{account_id}/trades].
     Shape (from the Finam swagger's [v1AccountTrade]):
     {v
@@ -310,7 +310,7 @@ let account_trade_of_json (j : Yojson.Safe.t) : account_trade =
   in
   {
     order_id = str "order_id";
-    execution = { ts; quantity = dec "size"; price = dec "price"; fee = Decimal.zero };
+    trade = { ts; quantity = dec "size"; price = dec "price"; fee = Decimal.zero };
   }
 
 let account_trades_of_json (j : Yojson.Safe.t) : account_trade list =

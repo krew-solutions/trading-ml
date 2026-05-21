@@ -47,9 +47,9 @@ type t = {
           epoch, RFC 3339, etc.) into our int64 form. *)
 }
 
-type execution = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
-(** One execution (trade / fill slice) observed at the venue.
-    A single {!t} may be filled across multiple executions;
+type trade = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
+(** One trade (fill slice) observed at the venue against this
+    order. A single {!t} may be filled across multiple trades;
     the sum of [quantity] over the list equals the order's
     [filled]. Price and fee are venue-actual numbers per fill
     (not intended). [ts] is the venue-reported fill timestamp

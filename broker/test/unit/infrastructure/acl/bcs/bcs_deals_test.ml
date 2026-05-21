@@ -24,9 +24,7 @@ let sample_deal =
 |}
 
 let test_decode_single_deal () =
-  let order_num, exec =
-    Rest.bcs_execution_of_json (Yojson.Safe.from_string sample_deal)
-  in
+  let order_num, exec = Rest.bcs_trade_of_json (Yojson.Safe.from_string sample_deal) in
   Alcotest.(check string) "orderNum stringified" "1234567890" order_num;
   Alcotest.(check (float 1e-6))
     "tradeQuantity" 10.0
@@ -51,7 +49,7 @@ let test_decode_tolerant_numerics () =
     }
   |}
   in
-  let _, exec = Rest.bcs_execution_of_json j in
+  let _, exec = Rest.bcs_trade_of_json j in
   Alcotest.(check (float 1e-6))
     "quantity from float" 7.0
     (Decimal.to_float exec.Order.quantity);
@@ -71,7 +69,7 @@ let test_orderNum_as_string () =
     }
   |}
   in
-  let order_num, _ = Rest.bcs_execution_of_json j in
+  let order_num, _ = Rest.bcs_trade_of_json j in
   Alcotest.(check string) "string orderNum preserved" "9999999999999" order_num
 
 let test_decode_records_list () =
@@ -83,7 +81,7 @@ let test_decode_records_list () =
   let open Yojson.Safe.Util in
   let items =
     match member "records" j with
-    | `List l -> List.map Rest.bcs_execution_of_json l
+    | `List l -> List.map Rest.bcs_trade_of_json l
     | _ -> []
   in
   Alcotest.(check int) "1 record" 1 (List.length items);
@@ -131,7 +129,7 @@ let test_doc_example_shape () =
   let open Yojson.Safe.Util in
   let items =
     match member "records" j with
-    | `List l -> List.map Rest.bcs_execution_of_json l
+    | `List l -> List.map Rest.bcs_trade_of_json l
     | _ -> []
   in
   Alcotest.(check int) "1 record parsed" 1 (List.length items);
@@ -175,7 +173,7 @@ let test_filter_correlates_by_order_num () =
   Alcotest.(check int) "2 fills for 1001" 2 (List.length only_1001);
   let total =
     List.fold_left
-      (fun acc (e : Order.execution) -> Decimal.add acc e.quantity)
+      (fun acc (e : Order.trade) -> Decimal.add acc e.quantity)
       Decimal.zero only_1001
   in
   Alcotest.(check (float 1e-6)) "1001 totals 10" 10.0 (Decimal.to_float total)

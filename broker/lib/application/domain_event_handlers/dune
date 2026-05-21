@@ -1,0 +1,10 @@
+(library
+ (name broker_domain_event_handlers)
+ (public_name trading.broker.domain_event_handlers)
+ (libraries
+  core
+  decimal
+  log
+  broker_domain
+  broker_view_models
+  broker_integration_events))

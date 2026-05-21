@@ -1,4 +1,5 @@
 (library
  (name synthetic)
  (public_name trading.synthetic)
- (libraries core decimal broker broker_domain broker_view_models uuidm))
+ (libraries core decimal broker broker_domain broker_view_models uuidm
+            eio eio.unix))

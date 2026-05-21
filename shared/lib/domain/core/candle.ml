@@ -26,3 +26,8 @@ let range c = Decimal.sub c.high c.low
 
 let is_bull c = Decimal.compare c.close c.open_ > 0
 let is_bear c = Decimal.compare c.close c.open_ < 0
+
+let equal (a : t) (b : t) : bool =
+  Int64.equal a.ts b.ts && Decimal.equal a.open_ b.open_ && Decimal.equal a.high b.high
+  && Decimal.equal a.low b.low && Decimal.equal a.close b.close
+  && Decimal.equal a.volume b.volume

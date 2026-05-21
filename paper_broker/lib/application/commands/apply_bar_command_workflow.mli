@@ -14,7 +14,7 @@
     to the IE-emitting DEH. *)
 
 module Order_filled :
-    module type of Paper_broker_integration_events.Order_filled_integration_event
+    module type of Paper_broker_integration_events.Order_leg_filled_integration_event
 
 module type Store = Paper_broker_store.Order_store.S
 module type Command_log = Paper_broker_store.Order_command_log.S

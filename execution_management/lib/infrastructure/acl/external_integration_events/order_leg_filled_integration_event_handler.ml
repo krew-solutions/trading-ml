@@ -1,5 +1,5 @@
-module Cmd = Execution_management_commands.Apply_placement_fill_command
-module Workflow = Execution_management_commands.Apply_placement_fill_command_workflow
+module Cmd = Execution_management_commands.Apply_placement_leg_fill_command
+module Workflow = Execution_management_commands.Apply_placement_leg_fill_command_workflow
 
 let handle
     ~store
@@ -7,7 +7,7 @@ let handle
     ~publish
     ~now
     ~ticket_id_of_placement_id
-    (ie : Order_filled_integration_event.t) =
+    (ie : Order_leg_filled_integration_event.t) =
   let cmd : Cmd.t =
     {
       ticket_id = ticket_id_of_placement_id ie.placement_id;

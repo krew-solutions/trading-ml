@@ -104,255 +104,6 @@ type t = {
   http_handler : Inbound_http.Route.handler;
 }
 
-(** Build a {!Server.Http.live_setup} that bridges Finam's WebSocket
-    feed into the SSE stream registry and into the bar-updated bus
-    publisher. Connection happens up-front on the server's switch;
-    per-key SUBSCRIBE/UNSUBSCRIBE messages flow on subscriber
-    lifecycle hooks; inbound BARS events fan out via
-    [Stream.push_from_upstream] and [publish_bar_updated]. *)
-let finam_live_setup
-    ~env
-    ~publish_bar_updated
-    ~publish_order_filled
-    ~origin_correlation_id
-    ~(finam : Finam.Finam_broker.t)
-    (rest : Finam.Rest.t)
-    ~sw : Server.Http.live_setup =
-  let cfg = Finam.Rest.cfg rest in
-  let auth = Finam.Rest.auth rest in
-  let registry_ref : Server.Stream.t option ref = ref None in
-  let bridge_ref : Finam.Ws_bridge.bridge option ref = ref None in
-  (* Per-placement cumulative-fill accumulator. Finam ships each
-     execution leg separately; [new_total_filled] is the sum of
-     [fill_quantity] across every observed trade update for the
-     same [placement_id]. Lives in process memory — survives only
-     the adapter's lifetime, replayed on reconnect from the
-     venue if needed via REST. *)
-  let total_filled : (int, Decimal.t) Hashtbl.t = Hashtbl.create 16 in
-  let push_to_stream ~instrument ~timeframe candle =
-    match !registry_ref with
-    | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
-    | None -> ()
-  in
-  let timeframes_fallback instrument =
-    match !bridge_ref with
-    | None -> []
-    | Some b -> Finam.Ws_bridge.timeframes_for_instrument b instrument
-  in
-  let on_event (ev : Finam.Ws.event) =
-    match ev with
-    | Bars b ->
-        Finam.Ws.Events.Bars_handler.handle ~push_to_stream ~publish_bar_updated
-          ~timeframes_fallback b
-    | Trades trades ->
-        Finam.Ws.Events.Trade_handler.handle ~finam ~origin_correlation_id ~total_filled
-          ~publish_order_filled trades
-    | Error_ev e -> Finam.Ws.Events.Error_handler.handle e
-    | Lifecycle ev -> Finam.Ws.Events.Lifecycle_handler.handle ev
-    | Quote _ | Other _ -> ()
-  in
-  let bridge = Finam.Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event in
-  bridge_ref := Some bridge;
-  (* Always-on trade subscription for the broker's account, so
-     fills observed at the venue surface as Order_filled IEs
-     without waiting for any per-instrument subscriber. *)
-  (try
-     Finam.Ws_bridge.subscribe_trades bridge
-       ~account_id:(Finam.Finam_broker.account_id finam)
-   with e -> Log.warn "[finam ws] subscribe_trades failed: %s" (Printexc.to_string e));
-  Server.Http.
-    {
-      on_first =
-        (fun ~instrument ~timeframe ->
-          try Finam.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[finam ws] subscribe failed: %s" (Printexc.to_string e));
-      on_last =
-        (fun ~instrument ~timeframe ->
-          try Finam.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[finam ws] unsubscribe failed: %s" (Printexc.to_string e));
-      bind = (fun r -> registry_ref := Some r);
-    }
-
-(** Spawn a polling fiber that periodically reads BCS's
-    account-wide deals feed (REST [/trades/search]) and
-    publishes a [broker.order-filled] integration event for
-    every new execution against an order this adapter placed.
-
-    BCS's WS API exposes only public market data (candles,
-    order book, anonymous trades, quotes) — there is no
-    personal-account push channel for fills. Polling is the
-    only available real-time signal for this broker, and the
-    cost is acceptable for retail traffic (one REST call per
-    [poll_interval] regardless of placement count).
-
-    Deduplication: per [(placement_id, ts, quantity, price)]
-    tuple. BCS's deal payload carries a [tradeNum] in its raw
-    JSON, but our domain [Order.execution] does not surface it;
-    a stable probabilistic key over the four numeric fields is
-    adequate for retail volumes (two genuinely identical fills
-    on the same millisecond on the same instrument at the same
-    price for the same placement do not occur outside synthetic
-    test traffic).
-
-    [poll_interval] is a clock-bound waiting period in seconds;
-    [now] is the injected clock the surrounding factory build
-    already uses. *)
-let bcs_polling_setup
-    ~env
-    ~poll_interval
-    ~publish_order_filled
-    ~origin_correlation_id
-    ~(bcs : Bcs.Bcs_broker.t)
-    ~sw : unit =
-  let observed : (int * int64 * string * string, unit) Hashtbl.t = Hashtbl.create 128 in
-  let total_filled : (int, Decimal.t) Hashtbl.t = Hashtbl.create 16 in
-  let bump_total ~placement_id ~delta =
-    let prev =
-      match Hashtbl.find_opt total_filled placement_id with
-      | Some d -> d
-      | None -> Decimal.zero
-    in
-    let next = Decimal.add prev delta in
-    Hashtbl.replace total_filled placement_id next;
-    next
-  in
-  let now_ts () = Int64.of_float (Eio.Time.now (Eio.Stdenv.clock env)) in
-  let poll_once () =
-    let to_ts = now_ts () in
-    (* Look back 5 minutes per poll — bounded recent window is
-       enough to catch fills since the previous tick and the
-       de-dup set filters anything we already published. *)
-    let from_ts = Int64.sub to_ts 300L in
-    let deals =
-      try Bcs.Bcs_broker.recent_deals ~from_ts ~to_ts bcs
-      with e ->
-        Log.warn "[bcs poll] recent_deals failed: %s" (Printexc.to_string e);
-        []
-    in
-    List.iter
-      (fun (order_num, (exec : Broker_domain.Order.execution)) ->
-        match Bcs.Bcs_broker.placement_id_by_order_num bcs ~order_num with
-        | None -> ()
-        | Some placement_id ->
-            let key =
-              ( placement_id,
-                exec.ts,
-                Decimal.to_string exec.quantity,
-                Decimal.to_string exec.price )
-            in
-            if Hashtbl.mem observed key then ()
-            else begin
-              Hashtbl.replace observed key ();
-              match origin_correlation_id ~placement_id with
-              | None ->
-                  Log.warn
-                    "[bcs poll] deal for placement_id=%d has no Submit correlation_id; \
-                     skipping"
-                    placement_id
-              | Some correlation_id ->
-                  (* BCS's deal payload does not carry side per leg;
-                     we derive it from the parent order resolved
-                     through the placement store. Fee mirrors
-                     Finam — Decimal.zero. Instrument is reachable
-                     through Get_order, but the polling path
-                     deliberately avoids per-deal extra REST calls
-                     to stay within rate limits; the leg's
-                     [instrument] is filled from the parent order
-                     when [get_order] succeeds, else left as a
-                     synthetic SBER@MISX placeholder so the IE
-                     remains schema-valid. *)
-                  let parent =
-                    try Bcs.Bcs_broker.get_order bcs ~placement_id with _ -> None
-                  in
-                  let instrument =
-                    match parent with
-                    | Some o -> o.instrument
-                    | None ->
-                        Broker_view_models.Instrument_view_model.of_domain
-                          (Core.Instrument.make
-                             ~ticker:(Core.Ticker.of_string "UNKNOWN")
-                             ~venue:(Core.Mic.of_string "MISX") ())
-                  in
-                  let side =
-                    match parent with
-                    | Some o -> o.side
-                    | None -> "BUY"
-                  in
-                  let new_total = bump_total ~placement_id ~delta:exec.quantity in
-                  let ie : Broker_integration_events.Order_filled_integration_event.t =
-                    {
-                      correlation_id;
-                      placement_id;
-                      id = order_num;
-                      exec_id =
-                        (* No first-class trade_id surfaced; the
-                           composite probabilistic key serves as
-                           identity for downstream audit. *)
-                        Printf.sprintf "%s:%Ld:%s" order_num exec.ts
-                          (Decimal.to_string exec.quantity);
-                      instrument;
-                      side;
-                      fill_quantity = Decimal.to_string exec.quantity;
-                      fill_price = Decimal.to_string exec.price;
-                      fee = "0";
-                      new_total_filled = Decimal.to_string new_total;
-                      fill_ts = Datetime.Iso8601.format exec.ts;
-                    }
-                  in
-                  publish_order_filled ie
-            end)
-      deals
-  in
-  Eio.Fiber.fork ~sw (fun () ->
-      while true do
-        (try poll_once ()
-         with e -> Log.warn "[bcs poll] tick failed: %s" (Printexc.to_string e));
-        Eio.Time.sleep (Eio.Stdenv.clock env) (Float.of_int poll_interval)
-      done)
-
-(** Build a {!Server.Http.live_setup} for BCS. Unlike Finam, BCS
-    opens one socket per subscription, so the bridge defers connect
-    to [on_first] and tears down on [on_last]. The BARS fan-out
-    callback pushes directly into the registry via
-    [Stream.push_from_upstream] and into [publish_bar_updated]. *)
-let bcs_live_setup
-    ~env
-    ~publish_bar_updated
-    ~publish_order_filled
-    ~origin_correlation_id
-    ~(bcs : Bcs.Bcs_broker.t)
-    (rest : Bcs.Rest.t)
-    ~sw : Server.Http.live_setup =
-  let cfg = Bcs.Rest.cfg rest in
-  let auth = Bcs.Rest.auth rest in
-  let bridge = Bcs.Ws_bridge.make ~env ~sw ~cfg ~auth in
-  let registry_ref : Server.Stream.t option ref = ref None in
-  let push instrument timeframe candle =
-    (match !registry_ref with
-    | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
-    | None -> ());
-    publish_bar_updated ~instrument ~timeframe ~candle
-  in
-  (* Always-on polling for personal-account fills — symmetric to
-     Finam's always-on Sub_trades but via REST polling since BCS
-     has no WS push for personal events. *)
-  (try
-     bcs_polling_setup ~env ~poll_interval:5 ~publish_order_filled ~origin_correlation_id
-       ~bcs ~sw
-   with e -> Log.warn "[bcs poll] setup failed: %s" (Printexc.to_string e));
-  Server.Http.
-    {
-      on_first =
-        (fun ~instrument ~timeframe ->
-          try Bcs.Ws_bridge.subscribe_bars bridge ~instrument ~timeframe ~on_candle:push
-          with e -> Log.warn "[bcs ws] subscribe failed: %s" (Printexc.to_string e));
-      on_last =
-        (fun ~instrument ~timeframe ->
-          try Bcs.Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
-          with e -> Log.warn "[bcs ws] unsubscribe failed: %s" (Printexc.to_string e));
-      bind = (fun r -> registry_ref := Some r);
-    }
-
 let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
   let client = Opened.client opened in
   let now_ts : unit -> int64 = now in
@@ -393,8 +144,8 @@ let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
     Broker_ohs_integration_events.Bar_updated_integration_event_publisher.make ~bus
   in
   let publish_order_filled =
-    produce ~uri:"in-memory://broker.order-filled"
-      ~yojson_of:Broker_integration_events.Order_filled_integration_event.yojson_of_t
+    produce ~uri:"in-memory://broker.order-leg-filled"
+      ~yojson_of:Broker_integration_events.Order_leg_filled_integration_event.yojson_of_t
   in
   (* Process-correlation log: [placement_id ↦ submit/cancel
      correlation_id]. Recorded by Submit on Accepted (and, when
@@ -486,17 +237,57 @@ let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
     let module CL = (val command_log_module) in
     CL.origin_correlation_id command_log ~placement_id
   in
+  (* Construct [Server.Http.live_setup] for live adapters; the
+     setup closure spawns the adapter's WS / poll machinery on
+     the server's switch and exposes per-key lifecycle hooks
+     [on_first] / [on_last] for SSE-driven subscriptions.
+
+     [on_event] is the single seam through which all events
+     flow from adapter to application. Bars route to the OHS
+     publisher (monotonicity + intra-bar dedup → bus) and to
+     the SSE Stream registry (UI live ticks). [Order_filled]
+     events get correlation-id stamping, cumulative-fill
+     accumulation, and IE construction here, then publish on
+     [broker.order-leg-filled]. *)
   let ws_setup =
     match opened with
-    | Opened.Finam { rest; adapter; _ } ->
-        Some
-          (finam_live_setup ~env ~publish_bar_updated ~publish_order_filled
-             ~origin_correlation_id ~finam:adapter rest)
-    | Opened.Bcs { rest; adapter; _ } ->
-        Some
-          (bcs_live_setup ~env ~publish_bar_updated ~publish_order_filled
-             ~origin_correlation_id ~bcs:adapter rest)
     | Opened.Synthetic _ -> None
+    | Opened.Finam _ | Opened.Bcs _ ->
+        Some
+          (fun ~sw ->
+            let registry_ref : Server.Stream.t option ref = ref None in
+            let on_event (event : Broker.event) =
+              match event with
+              | Remote_bar_updated ev -> (
+                  Broker_domain_event_handlers.Publish_integration_event_on_bar_updated
+                  .handle ~publish_bar_updated ev;
+                  match !registry_ref with
+                  | Some r ->
+                      Server.Stream.push_from_upstream r ~instrument:ev.instrument
+                        ~timeframe:ev.timeframe ev.candle
+                  | None -> ())
+              | Order_leg_filled domain_ev ->
+                  Broker_domain_event_handlers
+                  .Publish_integration_event_on_order_leg_filled
+                  .handle ~publish_order_leg_filled:publish_order_filled
+                    ~origin_correlation_id domain_ev
+            in
+            Broker.start_live_feed client ~sw ~env ~on_event;
+            Server.Http.
+              {
+                on_first =
+                  (fun ~instrument ~timeframe ->
+                    try Broker.subscribe client (Subscribe_bars { instrument; timeframe })
+                    with e ->
+                      Log.warn "[broker] subscribe failed: %s" (Printexc.to_string e));
+                on_last =
+                  (fun ~instrument ~timeframe ->
+                    try
+                      Broker.unsubscribe client (Subscribe_bars { instrument; timeframe })
+                    with e ->
+                      Log.warn "[broker] unsubscribe failed: %s" (Printexc.to_string e));
+                bind = (fun r -> registry_ref := Some r);
+              })
   in
   let http_handler = Broker_inbound_http.Http.make_handler ~broker:client in
   { client; market_price; ws_setup; http_handler }

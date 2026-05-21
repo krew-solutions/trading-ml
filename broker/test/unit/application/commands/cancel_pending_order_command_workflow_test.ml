@@ -63,6 +63,9 @@ module Fake_broker = struct
     | Some _ -> Some (view_model ~placement_id ~status:"NEW")
 
   let get_executions _ ~placement_id:_ = []
+  let start_live_feed _ ~sw:_ ~env:_ ~on_event:_ = ()
+  let subscribe _ (_ : Broker.request) = ()
+  let unsubscribe _ (_ : Broker.request) = ()
 end
 
 let fake_client (fb : Fake_broker.t) : Broker.client = Broker.make (module Fake_broker) fb

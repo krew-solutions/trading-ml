@@ -53,3 +53,6 @@ val is_bull : t -> bool
 val is_bear : t -> bool
 (*@ r = is_bear c
     ensures r <-> dec_raw c.close < dec_raw c.open_ *)
+
+val equal : t -> t -> bool
+(** Structural equality on all OHLCV fields including [ts]. *)

@@ -11,7 +11,8 @@ module Apply_bar_wf = Paper_broker_commands.Apply_bar_command_workflow
 module Cancel_wf = Paper_broker_commands.Cancel_pending_order_command_workflow
 module Order_accepted_ie =
   Paper_broker_integration_events.Order_accepted_integration_event
-module Order_filled_ie = Paper_broker_integration_events.Order_filled_integration_event
+module Order_filled_ie =
+  Paper_broker_integration_events.Order_leg_filled_integration_event
 module Order_rejected_ie =
   Paper_broker_integration_events.Order_rejected_integration_event
 module Order_cancelled_ie =

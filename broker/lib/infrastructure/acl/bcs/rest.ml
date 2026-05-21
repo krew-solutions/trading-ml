@@ -422,7 +422,7 @@ let edit_order t ~client_order_id ?quantity ?price () : External_order.t =
 
     No per-fill commission field — [fee] defaults to zero; fees live
     on the parent [Order] state, not per-execution. *)
-let bcs_execution_of_json (j : Yojson.Safe.t) : string * Order.execution =
+let bcs_trade_of_json (j : Yojson.Safe.t) : string * Order.trade =
   let open Yojson.Safe.Util in
   let int_or_str k =
     match member k j with
@@ -462,7 +462,7 @@ let bcs_execution_of_json (j : Yojson.Safe.t) : string * Order.execution =
 
     Default window = 30 days ending "now", same rationale as
     [get_orders]. *)
-let get_deals ?from_ts ?to_ts t : (string * Order.execution) list =
+let get_deals ?from_ts ?to_ts t : (string * Order.trade) list =
   let base = t.cfg.Config.rest_base in
   let path = "/trade-api-bff-trade-details/api/v1/trades/search" in
   let url = Uri.with_path base (Uri.path base ^ path) in
@@ -497,7 +497,7 @@ let get_deals ?from_ts ?to_ts t : (string * Order.execution) list =
         | `List l -> l
         | _ -> [])
   in
-  List.map bcs_execution_of_json items
+  List.map bcs_trade_of_json items
 
 (** POST /trade-api-bff-operations/api/v1/orders/{cid}/cancel — cancel.
     BCS models cancellation as its own idempotent POST: the URL path

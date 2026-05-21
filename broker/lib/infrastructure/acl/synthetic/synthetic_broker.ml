@@ -81,6 +81,19 @@ let get_order _ ~placement_id:_ = unsupported "get_order"
 
 let get_executions _ ~placement_id:_ = unsupported "get_executions"
 
+(** Live-feed surface: today's synthetic adapter is a sync REST
+    source only. [start_live_feed] / [subscribe] / [unsubscribe]
+    are no-ops because there is no async stream to drive — the
+    backtest harness in [bin/main.ml] still drives bars through
+    the bus directly. A future commit will introduce a clock-
+    driven generator fiber (live mode) and a replay fiber (loaded
+    from CSV / pre-collected [Candle.t list]) so that synthetic
+    behaves symmetrically with Finam / BCS through this port. *)
+let start_live_feed _ ~sw:_ ~env:_ ~on_event:_ = ()
+
+let subscribe _ (_ : Broker.request) = ()
+let unsubscribe _ (_ : Broker.request) = ()
+
 let as_broker (t : t) : Broker.client =
   Broker.make
     (module struct
@@ -93,5 +106,8 @@ let as_broker (t : t) : Broker.client =
       let cancel_order = cancel_order
       let get_order = get_order
       let get_executions = get_executions
+      let start_live_feed = start_live_feed
+      let subscribe = subscribe
+      let unsubscribe = unsubscribe
     end)
     t

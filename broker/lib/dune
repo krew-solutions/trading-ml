@@ -8,6 +8,8 @@
   decimal
   broker
   broker_commands
+  broker_domain
+  broker_domain_event_handlers
   broker_integration_events
   broker_ohs_integration_events
   broker_inbound_http

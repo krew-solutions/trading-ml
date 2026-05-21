@@ -110,12 +110,12 @@ let test_account_trades_parse () =
   Alcotest.(check int) "three trades" 3 (List.length trades);
   let (first : Finam.Dto.account_trade) = List.nth trades 0 in
   Alcotest.(check string) "order_id" "O1" first.order_id;
-  Alcotest.(check (float 1e-6)) "price" 101.5 (Decimal.to_float first.execution.price);
-  Alcotest.(check (float 1e-6)) "size" 10.0 (Decimal.to_float first.execution.quantity);
-  Alcotest.(check bool) "ts > 0" true (Int64.compare first.execution.ts 0L > 0);
+  Alcotest.(check (float 1e-6)) "price" 101.5 (Decimal.to_float first.trade.price);
+  Alcotest.(check (float 1e-6)) "size" 10.0 (Decimal.to_float first.trade.quantity);
+  Alcotest.(check bool) "ts > 0" true (Int64.compare first.trade.ts 0L > 0);
   Alcotest.(check (float 1e-6))
     "fee defaults to zero (no field in payload)" 0.0
-    (Decimal.to_float first.execution.fee)
+    (Decimal.to_float first.trade.fee)
 
 let test_account_trades_empty () =
   let j = Yojson.Safe.from_string {| { "trades": [] } |} in

@@ -16,6 +16,42 @@
 
 open Core
 
+(** Unified inbound event stream from the adapter. Adapter
+    encapsulates the transport (WS push, REST poll, synthetic
+    generator, replay) — the same callback fires regardless of
+    which path delivered the event. The caller pattern-matches
+    and dispatches to the appropriate OHS publisher / consumer.
+
+    New event kinds (Order_accepted, Order_cancelled, Order_book,
+    Quote, Trade_tape, ...) are added as variants here; consumer
+    pattern-matches surface exhaustivity warnings to flag
+    missing handlers. *)
+type event =
+  | Remote_bar_updated of Remote_broker.Events.Remote_bar_updated.t
+  | Order_leg_filled of Remote_broker.Events.Order_leg_filled.t
+      (** The domain event — the adapter, acting as the
+          recognizer of external venue facts (per Vernon's
+          "external system as a source of Domain Events"
+          pattern), constructs it directly from the broker's
+          fill frame and the adapter's own per-placement
+          cumulative bookkeeping. The application layer
+          consumes it as-is; no further recognition step is
+          needed at the seam. *)
+
+(** Subscription request — describes what the adapter should
+    listen to. The adapter is responsible for the upstream
+    SUBSCRIBE / poll setup; the caller doesn't know whether the
+    request lands on a multiplex socket, a dedicated socket per
+    key, a polling fiber, or a synthetic generator.
+
+    New subscription kinds (Subscribe_order_state, Subscribe_order_book,
+    Subscribe_quotes, Subscribe_trade_tape, ...) are added as
+    variants here. Adapters that don't support a kind log a
+    diagnostic and ignore — symmetric to how unrecognised
+    {!event} variants would surface as exhaustivity warnings on
+    the consumer side. *)
+type request = Subscribe_bars of { instrument : Instrument.t; timeframe : Timeframe.t }
+
 module type S = sig
   type t
 
@@ -67,6 +103,35 @@ module type S = sig
   val get_executions : t -> placement_id:int -> Execution_view_model.t list
   (** Per-execution detail for a placement. Empty list when the
       order has no fills yet or no placement is recorded. *)
+
+  val start_live_feed :
+    t -> sw:Eio.Switch.t -> env:Eio_unix.Stdenv.base -> on_event:(event -> unit) -> unit
+  (** Initialise the adapter's live event machinery. Called once
+      at composition time. After this call, the adapter is ready
+      to receive {!subscribe} / {!unsubscribe} requests; any
+      always-on transport (Finam's multiplex socket and its
+      account-wide TRADES subscription, BCS's planned personal
+      WS) is opened here.
+
+      [on_event] is invoked for every event the adapter produces,
+      regardless of which internal path (WS push, REST poll,
+      synthetic generator, replay) delivered it. The caller
+      pattern-matches and dispatches; new event variants surface
+      as exhaustivity warnings so missing handlers are caught at
+      compile time. *)
+
+  val subscribe : t -> request -> unit
+  (** Register interest in a {!request}-shaped stream. Idempotent
+      / refcounted on the adapter side: the first caller for a
+      given key triggers the actual upstream subscription;
+      subsequent callers increment an internal refcount.
+      Adapters that don't support the request kind log a
+      diagnostic and no-op. *)
+
+  val unsubscribe : t -> request -> unit
+  (** Decrement the internal refcount for the request's key;
+      only sends the actual upstream UNSUBSCRIBE (or closes the
+      per-key socket for BCS) when the count reaches zero. *)
 end
 
 type client = E : (module S with type t = 't) * 't -> client
@@ -88,3 +153,10 @@ let cancel_order (E ((module M), t)) ~placement_id = M.cancel_order t ~placement
 let get_order (E ((module M), t)) ~placement_id = M.get_order t ~placement_id
 
 let get_executions (E ((module M), t)) ~placement_id = M.get_executions t ~placement_id
+
+let start_live_feed (E ((module M), t)) ~sw ~env ~on_event =
+  M.start_live_feed t ~sw ~env ~on_event
+
+let subscribe (E ((module M), t)) request = M.subscribe t request
+
+let unsubscribe (E ((module M), t)) request = M.unsubscribe t request

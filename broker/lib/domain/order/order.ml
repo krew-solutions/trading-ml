@@ -30,7 +30,7 @@ type t = {
   placed_ts : int64;
 }
 
-type execution = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
+type trade = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
 
 let remaining_qty (o : t) = Decimal.sub o.quantity o.filled
 

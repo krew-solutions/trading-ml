@@ -20,12 +20,12 @@
 
     DTO-shaped: primitives + nested view models, no domain values. *)
 
-open Core
-
 include module type of Bar_updated_integration_event_t
 include module type of Bar_updated_integration_event_j with type t := t
 
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t
 
-val of_domain : instrument:Instrument.t -> timeframe:Timeframe.t -> candle:Candle.t -> t
+type domain = Broker_domain.Remote_broker.Events.Remote_bar_updated.t
+
+val of_domain : domain -> t

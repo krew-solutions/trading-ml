@@ -4,7 +4,7 @@ let parse_decimal field s =
   try Ok (Decimal.of_string s)
   with Invalid_argument m -> Error (Command_error.Invalid_payload (field ^ ": " ^ m))
 
-let handle ~ticket (cmd : Apply_placement_fill_command.t) ~now =
+let handle ~ticket (cmd : Apply_placement_leg_fill_command.t) ~now =
   let ( let* ) = Result.bind in
   let result =
     let* pid =

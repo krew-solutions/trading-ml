@@ -304,7 +304,11 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
     (fun candle ->
       publish_bar_updated
         (Broker_integration_events.Bar_updated_integration_event.of_domain
-           ~instrument:symbol ~timeframe:Timeframe.M5 ~candle);
+           {
+             Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument = symbol;
+             timeframe = Timeframe.M5;
+             candle;
+           });
       drain ())
     candles_list;
   drain ();

@@ -1,15 +1,30 @@
 #!/usr/bin/env bash
-# Pre-commit hook: refuse commits that introduce ocamlformat drift.
+# Pre-commit hook: refuse commits with ocamlformat-visible defects.
 #
 # Activated by symlink via tools/git-hooks/install.sh. The hook lives
 # under tools/ (tracked) rather than .git/hooks/ (untracked) so updates
 # propagate to every developer who runs the installer.
 #
-# Behaviour:
-#   - No .ml / .mli files staged    -> exit 0 (nothing to check)
-#   - dune build @fmt clean         -> exit 0 (no drift)
-#   - dune build @fmt reports drift -> exit 1, print the auto-promote
-#                                      command the developer should run
+# Two gating conditions on the [dune build @fmt] output:
+#
+#   1. Format drift — any line matching [^--- ] in the formatter
+#      output indicates an actual diff between source and the
+#      formatted version. Always reject.
+#
+#   2. Format blind spots — any line matching [Warning 50] or
+#      [ocamlformat: ignoring]. ocamlformat skips files whose
+#      shape it can't process (most commonly a [(** ... *)]
+#      docstring the parser can't bind to). A skipped file is a
+#      hole in our format coverage; the offending construct must
+#      be removed before commit.
+#
+# Why not gate at the OCaml compiler with [-w @50]: any file
+# preprocessed by ppx (e.g. [@@deriving yojson]) has its
+# docstrings stripped before reaching the compiler, so a
+# compiler-level warning never fires for the docstring in the
+# original source. ocamlformat works from its own parser without
+# ppx interposition, and is the only stage that reliably sees
+# the source as-written.
 
 set -e
 
@@ -19,13 +34,11 @@ if [ -z "$staged_ocaml" ]; then
   exit 0
 fi
 
-# Capture both stdout and stderr. We can't trust the exit code:
-# ocamlformat emits Warning 50 (unattached docstring) for files
-# that intentionally place docstrings the parser can't bind to,
-# which makes [dune build @fmt] exit non-zero even when there's
-# no actual format drift. The diff markers (^--- a) are the only
-# reliable drift signal.
+# Capture both stdout and stderr. The exit code mixes drift,
+# warnings, and "ignored file" notes; we discriminate by grepping
+# the output for the precise signals we care about.
 fmt_output=$(opam exec -- dune build @fmt 2>&1) || true
+
 if echo "$fmt_output" | grep -qE '^--- '; then
   cat >&2 <<'MSG'
 
@@ -43,5 +56,27 @@ non-compliant; catching the full set here keeps drift from
 accumulating between explicit fmt sweeps.
 
 MSG
+  exit 1
+fi
+
+if echo "$fmt_output" | grep -qE 'Warning 50|ocamlformat: ignoring'; then
+  cat >&2 <<'MSG'
+
+ocamlformat refused to process at least one file.
+
+This is most often a misplaced [(** ... *)] docstring — a
+documentation comment sitting in a position the parser can't
+bind to an item (e.g. between two [let X = ... in] inside a
+let-chain). odoc can't render it, and ocamlformat skips the
+entire file, leaving it invisible to the format gate.
+
+Fix: relocate the docstring to attach to a top-level item,
+or downgrade to a regular [(* ... *)] comment if it doesn't
+need odoc rendering.
+
+The offending file(s) and lines:
+
+MSG
+  echo "$fmt_output" | grep -E 'ignoring|Warning 50|^File ' | head -30 >&2
   exit 1
 fi

@@ -19,7 +19,14 @@ if [ -z "$staged_ocaml" ]; then
   exit 0
 fi
 
-if ! opam exec -- dune build @fmt >/dev/null 2>&1; then
+# Capture both stdout and stderr. We can't trust the exit code:
+# ocamlformat emits Warning 50 (unattached docstring) for files
+# that intentionally place docstrings the parser can't bind to,
+# which makes [dune build @fmt] exit non-zero even when there's
+# no actual format drift. The diff markers (^--- a) are the only
+# reliable drift signal.
+fmt_output=$(opam exec -- dune build @fmt 2>&1) || true
+if echo "$fmt_output" | grep -qE '^--- '; then
   cat >&2 <<'MSG'
 
 ocamlformat drift detected.

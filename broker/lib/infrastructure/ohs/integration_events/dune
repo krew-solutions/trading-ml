@@ -1,0 +1,9 @@
+(library
+ (name broker_ohs_integration_events)
+ (public_name trading.broker.ohs.integration_events)
+ (libraries
+  bus
+  core
+  decimal
+  broker_integration_events
+  yojson))

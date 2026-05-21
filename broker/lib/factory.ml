@@ -331,9 +331,7 @@ let bcs_live_setup
     (match !registry_ref with
     | Some r -> Server.Stream.push_from_upstream r ~instrument ~timeframe candle
     | None -> ());
-    publish_bar_updated
-      (Broker_integration_events.Bar_updated_integration_event.of_domain ~instrument
-         ~timeframe ~candle)
+    publish_bar_updated ~instrument ~timeframe ~candle
   in
   (* Always-on polling for personal-account fills — symmetric to
      Finam's always-on Sub_trades but via REST polling since BCS
@@ -383,9 +381,16 @@ let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
     produce ~uri:"in-memory://broker.order-cancelled"
       ~yojson_of:Broker_integration_events.Order_cancelled_integration_event.yojson_of_t
   in
+  (* Outbound publisher for [broker.bar-updated]. Stateful — owns the
+     per-(instrument, timeframe) monotonicity + intra-bar dedup
+     invariants. See
+     {!Broker_ohs_integration_events.Bar_updated_integration_event_publisher}
+     for the filtering rules and the forward direction (the
+     [Bar_series] aggregate that will replace this prototype with
+     a real logical clock keyed by
+     [(stream_type, stream_id, stream_position)]). *)
   let publish_bar_updated =
-    produce ~uri:"in-memory://broker.bar-updated"
-      ~yojson_of:Broker_integration_events.Bar_updated_integration_event.yojson_of_t
+    Broker_ohs_integration_events.Bar_updated_integration_event_publisher.make ~bus
   in
   let publish_order_filled =
     produce ~uri:"in-memory://broker.order-filled"

@@ -9,6 +9,7 @@
   broker
   broker_commands
   broker_integration_events
+  broker_ohs_integration_events
   broker_inbound_http
   broker_store
   broker_persistence

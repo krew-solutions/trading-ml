@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Pre-commit hook: refuse commits that introduce ocamlformat drift.
+#
+# Activated by symlink via tools/git-hooks/install.sh. The hook lives
+# under tools/ (tracked) rather than .git/hooks/ (untracked) so updates
+# propagate to every developer who runs the installer.
+#
+# Behaviour:
+#   - No .ml / .mli files staged    -> exit 0 (nothing to check)
+#   - dune build @fmt clean         -> exit 0 (no drift)
+#   - dune build @fmt reports drift -> exit 1, print the auto-promote
+#                                      command the developer should run
+
+set -e
+
+staged_ocaml=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+               | grep -E '\.(ml|mli)$' || true)
+if [ -z "$staged_ocaml" ]; then
+  exit 0
+fi
+
+if ! opam exec -- dune build @fmt >/dev/null 2>&1; then
+  cat >&2 <<'MSG'
+
+ocamlformat drift detected.
+
+To apply the formatter and re-stage:
+
+    opam exec -- dune build @fmt --auto-promote
+    git add -u
+    git commit  # re-run
+
+The hook checks the full project, not only staged files, because
+ocamlformat config changes can render previously-compliant files
+non-compliant; catching the full set here keeps drift from
+accumulating between explicit fmt sweeps.
+
+MSG
+  exit 1
+fi

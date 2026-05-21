@@ -15,7 +15,14 @@
     both. *)
 
 open Core
-open Broker_boot
+
+let arg_value name args =
+  let rec find = function
+    | k :: v :: _ when k = name -> Some v
+    | _ :: rest -> find rest
+    | [] -> None
+  in
+  find args
 
 let usage () =
   prerr_endline
@@ -308,7 +315,7 @@ let () =
     | Some v -> int_of_string v
     | None -> 20
   in
-  let prefix = broker_env_prefix broker_id in
+  let prefix = Broker_factory.Factory.Opened.env_prefix broker_id in
   let secret =
     match arg_value "--secret" args with
     | Some v -> Some v
@@ -336,20 +343,30 @@ let () =
               prerr_endline "finam requires --secret or FINAM_SECRET";
               exit 2
         in
-        match open_finam ~env ~secret ~account with
-        | Opened_finam { rest; _ } ->
+        let account_id =
+          match account with
+          | Some a -> a
+          | None ->
+              prerr_endline "finam requires --account or FINAM_ACCOUNT_ID";
+              exit 2
+        in
+        match Broker_factory.Factory.Opened.open_finam ~env ~secret ~account_id with
+        | Broker_factory.Factory.Opened.Finam { rest; _ } ->
             Finam.Rest.bars rest ~from_ts ~to_ts ~n:9999 ~instrument ~timeframe
         | _ -> assert false)
     | "bcs" -> (
-        match open_bcs ~env ~secret ~account ~client_id with
-        | Opened_bcs { rest; _ } ->
+        match
+          Broker_factory.Factory.Opened.open_bcs ~env ?secret ?account_id:account
+            ?client_id ()
+        with
+        | Broker_factory.Factory.Opened.Bcs { rest; _ } ->
             Bcs.Rest.bars rest ~from_ts ~to_ts ~n:9999 ~instrument ~timeframe
         | _ -> assert false)
     | other ->
         Printf.eprintf "unknown --broker: %s\n" other;
         exit 2
   in
-  let candles = paginate_bars ~fetch ~from_ts ~to_ts in
+  let candles = Bars_paginator.paginate_bars ~fetch ~from_ts ~to_ts in
   Printf.printf "Fetched %d bars from %s (%s)\n%!" (List.length candles) broker_id symbol;
   if candles = [] then exit 0;
   let arr = Array.of_list candles in

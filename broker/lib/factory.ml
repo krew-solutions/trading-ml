@@ -1,9 +1,101 @@
 open Core
+module Token_store = Broker_persistence.Token_store
 
-type rest =
-  | Finam of { rest : Finam.Rest.t; adapter : Finam.Finam_broker.t }
-  | Bcs of { rest : Bcs.Rest.t; adapter : Bcs.Bcs_broker.t }
-  | Synthetic
+(** Discriminated handle for an opened broker adapter — combines the
+    abstract [Broker.client] (used by command/query ports) with the
+    concrete REST handle and adapter that the WS bridge and reconcile
+    fibers need direct reach into.
+
+    Composition-root code (typically [bin/]) calls one of
+    {!Opened.open_finam}, {!Opened.open_bcs}, {!Opened.open_synthetic}
+    and passes the result to {!build}; nothing outside this module
+    needs to know how a Finam / BCS / Synthetic adapter is wired
+    internally. *)
+module Opened = struct
+  type t =
+    | Finam of {
+        client : Broker.client;
+        rest : Finam.Rest.t;
+        adapter : Finam.Finam_broker.t;
+            (** Concrete adapter kept alongside the abstract client:
+                the WS-side trade-update producer needs to reach the
+                per-adapter placement map to reverse-lookup
+                [order_id → placement_id]. *)
+      }
+    | Bcs of {
+        client : Broker.client;
+        rest : Bcs.Rest.t;
+        adapter : Bcs.Bcs_broker.t;
+            (** Same rationale as the Finam variant — the polling
+                fiber that surfaces order fills reaches the
+                per-adapter placement map to reverse-lookup
+                [order_num → placement_id]. *)
+      }
+    | Synthetic of { client : Broker.client }
+
+  let client : t -> Broker.client = function
+    | Finam { client; _ } | Bcs { client; _ } | Synthetic { client } -> client
+
+  (** Selects the env-var prefix per broker. Keeps CLI invocations
+      single-flagged while letting users park credentials for several
+      brokers side by side ([FINAM_SECRET], [BCS_SECRET], ...). *)
+  let env_prefix = function
+    | "bcs" -> "BCS"
+    | _ -> "FINAM"
+
+  (** State-file path for the persisted BCS refresh-token. Follows
+      the XDG Base Directory spec — [$XDG_STATE_HOME], with
+      [~/.local/state] as the documented fallback. The file is
+      [chmod 0o600] by {!Broker_persistence.Token_store.file}. *)
+  let bcs_refresh_token_path () =
+    let state_home =
+      match Sys.getenv_opt "XDG_STATE_HOME" with
+      | Some p when p <> "" -> p
+      | _ -> Filename.concat (Sys.getenv "HOME") ".local/state"
+    in
+    let dir = Filename.concat state_home "trading" in
+    (try Unix.mkdir dir 0o700 with Unix.Unix_error (EEXIST, _, _) -> ());
+    Filename.concat dir "bcs-refresh-token"
+
+  let open_finam ~env ~secret ~account_id : t =
+    let cfg = Finam.Config.make ~account_id ~secret () in
+    let transport = Http_transport.make_eio ~env in
+    let rest = Finam.Rest.make ~transport ~cfg in
+    let adapter = Finam.Finam_broker.make ~account_id rest in
+    Finam { client = Finam.Finam_broker.as_broker adapter; rest; adapter }
+
+  (** Credential sources, in precedence order:
+      1. [?secret] — when present, seeds the persistent file
+         immediately, then reads from it. Use for first-time setup
+         or to force-overwrite a stale rotated token.
+      2. Persistent file at {!bcs_refresh_token_path} — authoritative
+         once populated. Keycloak rotations ([refresh_token] in the
+         /token response) land here automatically.
+      3. [BCS_SECRET] env var — bootstrap fallback when the file
+         is still empty. Same env convention as Finam uses.
+
+      [?client_id] must match the Keycloak client under which the
+      refresh-token was issued (BCS portal distinguishes
+      [trade-api-read] for data and [trade-api-write] for orders). *)
+  let open_bcs ~env ?secret ?account_id ?client_id () : t =
+    let file_path = bcs_refresh_token_path () in
+    let file_store = Token_store.file ~path:file_path in
+    (match secret with
+    | Some s -> Token_store.save file_store s
+    | None -> ());
+    let token_store =
+      Token_store.fallback file_store (Token_store.env ~name:"BCS_SECRET")
+    in
+    let cfg = Bcs.Config.make ?account_id ?client_id () in
+    let transport = Http_transport.make_eio ~env in
+    let rest = Bcs.Rest.make ~transport ~cfg ~token_store in
+    let adapter = Bcs.Bcs_broker.make rest in
+    Bcs { client = Bcs.Bcs_broker.as_broker adapter; rest; adapter }
+
+  let open_synthetic () : t =
+    let adapter = Synthetic.Synthetic_broker.make () in
+    Synthetic { client = Synthetic.Synthetic_broker.as_broker adapter }
+end
 
 type t = {
   client : Broker.client;
@@ -263,8 +355,8 @@ let bcs_live_setup
       bind = (fun r -> registry_ref := Some r);
     }
 
-let build ~bus ~env ~now ~source_client ~rest ~paper_mode : t =
-  let client = source_client in
+let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
+  let client = Opened.client opened in
   let now_ts : unit -> int64 = now in
   let market_price ~instrument =
     match Broker.bars client ~n:1 ~instrument ~timeframe:Timeframe.H1 with
@@ -390,16 +482,16 @@ let build ~bus ~env ~now ~source_client ~rest ~paper_mode : t =
     CL.origin_correlation_id command_log ~placement_id
   in
   let ws_setup =
-    match rest with
-    | Finam { rest = r; adapter } ->
+    match opened with
+    | Opened.Finam { rest; adapter; _ } ->
         Some
           (finam_live_setup ~env ~publish_bar_updated ~publish_order_filled
-             ~origin_correlation_id ~finam:adapter r)
-    | Bcs { rest = r; adapter } ->
+             ~origin_correlation_id ~finam:adapter rest)
+    | Opened.Bcs { rest; adapter; _ } ->
         Some
           (bcs_live_setup ~env ~publish_bar_updated ~publish_order_filled
-             ~origin_correlation_id ~bcs:adapter r)
-    | Synthetic -> None
+             ~origin_correlation_id ~bcs:adapter rest)
+    | Opened.Synthetic _ -> None
   in
   let http_handler = Broker_inbound_http.Http.make_handler ~broker:client in
   { client; market_price; ws_setup; http_handler }

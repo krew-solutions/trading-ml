@@ -21,7 +21,17 @@
         outbound integration events. *)
 
 open Core
-open Broker_boot
+
+(** Locate the value following a CLI flag (e.g. ["--port" "8080"]
+    returns [Some "8080"]). Single-value variant; {!arg_values}
+    below collects every value for repeated flags. *)
+let arg_value name args =
+  let rec find = function
+    | k :: v :: _ when k = name -> Some v
+    | _ :: rest -> find rest
+    | [] -> None
+  in
+  find args
 
 let usage () =
   prerr_endline
@@ -193,12 +203,8 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
             | _ -> ())
         | _ -> ())
   in
-  let opened = open_synthetic () in
-  let source_client = opened_client opened in
-  let broker =
-    Broker_factory.Factory.build ~bus ~env ~now ~source_client ~rest:Synthetic
-      ~paper_mode:true
-  in
+  let opened = Broker_factory.Factory.Opened.open_synthetic () in
+  let broker = Broker_factory.Factory.build ~bus ~env ~now ~opened ~paper_mode:true in
   let _paper_broker =
     Paper_broker_factory.Factory.build ~bus ~now
       ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
@@ -572,12 +578,22 @@ let cmd_serve args =
   in
   let opened =
     match broker_id with
-    | "synthetic" -> open_synthetic ()
-    | "finam" -> open_finam ~env ~secret:(need_secret ()) ~account
-    | "bcs" -> open_bcs ~env ~secret ~account ~client_id
+    | "synthetic" -> Broker_factory.Factory.Opened.open_synthetic ()
+    | "finam" ->
+        let account_id =
+          match account with
+          | Some a -> a
+          | None ->
+              Printf.eprintf "--broker finam requires --account (or FINAM_ACCOUNT_ID)\n";
+              exit 2
+        in
+        Broker_factory.Factory.Opened.open_finam ~env ~secret:(need_secret ()) ~account_id
+    | "bcs" ->
+        Broker_factory.Factory.Opened.open_bcs ~env ?secret ?account_id:account ?client_id
+          ()
     | other -> failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
   in
-  let source_client = opened_client opened in
+  let source_client = Broker_factory.Factory.Opened.client opened in
   (* Resolve [--strategy] CLI arg into a built [Strategies.Strategy.t].
      Registry lookup and per-strategy [--param] parsing stay in the
      composition root; the actual engine construction lives in
@@ -614,15 +630,7 @@ let cmd_serve args =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
         t_of_yojson (Yojson.Safe.from_string s))
   in
-  let rest : Broker_factory.Factory.rest =
-    match opened with
-    | Opened_finam { rest; adapter; _ } -> Finam { rest; adapter }
-    | Opened_bcs { rest; adapter; _ } -> Bcs { rest; adapter }
-    | Opened_synthetic _ -> Synthetic
-  in
-  let broker =
-    Broker_factory.Factory.build ~bus ~env ~now ~source_client ~rest ~paper_mode
-  in
+  let broker = Broker_factory.Factory.build ~bus ~env ~now ~opened ~paper_mode in
   let _paper_broker =
     if paper_mode then
       Some

@@ -1,7 +1,3 @@
-; Two executables sharing [broker_boot.ml] — dune's single stanza
-; puts them in the same source namespace so both pick up the
-; helper module automatically.
-
 (executables
  (names main export_training_data train_logistic)
  (public_names trading trading_export_training_data trading_train_logistic)

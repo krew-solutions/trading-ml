@@ -23,7 +23,7 @@ load-bearing input (instrument volatility) is unavailable.
 The presence of a second implementation also retroactively
 {b validates} `Sizing_policy.S` as an abstraction: with only
 `Equity_proportional` it was an architectural placeholder
-exposed to premature-abstraction critique (CLAUDE.md, YAGNI).
+exposed to premature-abstraction critique (YAGNI).
 With `Volatility_target` in place, the module type now has two
 real consumers whose signature differs along the [volatility]
 provider — the abstraction earns its keep on observable

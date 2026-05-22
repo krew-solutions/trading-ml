@@ -120,9 +120,9 @@ layers. Two function ports in opposite directions is the moment
 a BC split becomes inevitable; better to split now.
 
 **Make the saga subscribe to bus IEs from inside EM.** Still
-violates the "BC doesn't react to its own IEs" rule from
-CLAUDE.md. Pushing the saga into a separate BC removes the rule
-violation by construction.
+violates the project's "BC doesn't react to its own IEs" rule.
+Pushing the saga into a separate BC removes the rule violation
+by construction.
 
 **Compose at the composition root via two function ports.** A
 non-orthodox shape: would let the saga stay in OM (clean) and

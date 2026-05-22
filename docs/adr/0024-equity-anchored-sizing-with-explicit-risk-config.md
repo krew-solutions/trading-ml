@@ -173,8 +173,8 @@ hypothetical `Notional_fixed` reads a per-book configured cap.
 
 Rejected for today because there is no current driver — every
 present policy reads equity. Holding both modalities open in
-the abstraction without an implementation that needs it is the
-premature-abstraction smell CLAUDE.md flags. If a future driver
+the abstraction without an implementation that needs it is a
+premature-abstraction smell (YAGNI). If a future driver
 appears, `Sizing_policy.S` is wide enough to accommodate
 (the [config] type is per-implementation): a `Notional_fixed`
 module can take a notional cap in its config and produce a

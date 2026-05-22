@@ -81,7 +81,7 @@ its lifetime.
 
 The saga's terminal transition emits a `Dispatch_open_ticket`
 command. This **does not** go on the bus. The project's rule
-(CLAUDE.md / ADR 0001) forbids a model inside a BC from
+(ADR 0001) forbids a model inside a BC from
 publishing a Command to itself — a future Transactional Outbox
 would otherwise split the saga commit and the aggregate-open
 work into two transactions whose interleaving has no benefit

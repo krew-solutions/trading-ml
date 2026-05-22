@@ -212,7 +212,7 @@ Three DEHs translate DEs into IEs:
 
 - `publish_integration_event_on_order_accepted.ml` →
   `in-memory://broker.order-accepted`
-- `publish_integration_event_on_order_filled.ml` →
+- `publish_integration_event_on_order_leg_filled.ml` →
   `in-memory://broker.order-filled` (**new topic, this ADR**)
 - `publish_integration_event_on_order_cancelled.ml` →
   `in-memory://broker.order-cancelled` (also new)

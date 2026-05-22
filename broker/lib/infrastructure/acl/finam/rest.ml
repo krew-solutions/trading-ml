@@ -134,14 +134,14 @@ let account t ~account_id = get_json t (Printf.sprintf "/v1/accounts/%s" account
 let exchanges t : Yojson.Safe.t = get_json t "/v1/exchanges" []
 
 (** GET /v1/accounts/{account_id}/orders — list all orders. *)
-let get_orders t ~account_id : External_order.t list =
+let get_orders t ~account_id : Dto.Order.t list =
   let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
-  Dto.orders_of_json (get_json t path [])
+  Dto.Order.list_of_json (get_json t path [])
 
 (** GET /v1/accounts/{account_id}/orders/{order_id} — single order. *)
-let get_order t ~account_id ~order_id : External_order.t =
+let get_order t ~account_id ~order_id : Dto.Order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
-  Dto.order_of_json (get_json t path [])
+  Dto.Order.of_json (get_json t path [])
 
 (** POST /v1/accounts/{account_id}/orders — place a new order.
     Returns the server's order state (including the assigned
@@ -155,12 +155,13 @@ let place_order
     ~(kind : Order.kind)
     ~(tif : Order.time_in_force)
     ?client_order_id
-    () : External_order.t =
+    () : Dto.Order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders" account_id in
   let payload =
-    Dto.place_order_payload ~instrument ~side ~quantity ~kind ~tif ?client_order_id ()
+    Dto.Order.place_order_payload ~instrument ~side ~quantity ~kind ~tif ?client_order_id
+      ()
   in
-  Dto.order_of_json (post_json t path payload)
+  Dto.Order.of_json (post_json t path payload)
 
 (** GET /v1/accounts/{account_id}/trades — account-wide execution
     history. Caller filters by [order_id] to get the executions
@@ -174,7 +175,7 @@ let place_order
     window is the last 24 hours, which is what the live engine's
     reconcile loop needs; callers wanting historical backfill can
     pass [from_ts] / [to_ts] explicitly. *)
-let get_trades ?from_ts ?to_ts t ~account_id : Dto.account_trade list =
+let get_trades ?from_ts ?to_ts t ~account_id : Dto.Trade.t list =
   let path = Printf.sprintf "/v1/accounts/%s/trades" account_id in
   let now_ts = Int64.of_float (Unix.gettimeofday ()) in
   let end_ts = Option.value to_ts ~default:now_ts in
@@ -185,13 +186,13 @@ let get_trades ?from_ts ?to_ts t ~account_id : Dto.account_trade list =
       ("interval.end_time", iso8601_of_ts end_ts);
     ]
   in
-  Dto.account_trades_of_json (get_json t path q)
+  Dto.Trade.list_of_json (get_json t path q)
 
 (** DELETE /v1/accounts/{account_id}/orders/{order_id} — cancel. *)
-let cancel_order t ~account_id ~order_id : External_order.t =
+let cancel_order t ~account_id ~order_id : Dto.Order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in
   let resp = send_with_auth_retry t ~meth:`DELETE ~url:(url t.cfg path []) ~body:None in
-  Dto.order_of_json (Yojson.Safe.from_string (ensure_ok resp))
+  Dto.Order.of_json (Yojson.Safe.from_string (ensure_ok resp))
 
 (** Exposed for [Ws_bridge] so it can put the current JWT into the
     upgrade handshake's Authorization header. *)

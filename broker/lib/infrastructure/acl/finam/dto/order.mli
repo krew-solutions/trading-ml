@@ -1,10 +1,10 @@
 (** An order as the external system (Finam broker firm)
     represents it.
 
-    Produced by {!Dto.order_of_json} when the ACL parses a
+    Produced by {!of_json} when the ACL parses a
     Finam payload (HTTP response today, WS push event
     tomorrow); {!Finam_broker} translates it to broker BC's
-    domain [Order.t] by attaching the saga's [placement_id] and
+    domain [Broker_domain.Order.t] by attaching the saga's [placement_id] and
     dropping the foreign-handle bookkeeping.
 
     Distinct from {!Broker_domain.Order.t} which is broker BC's
@@ -32,17 +32,41 @@ type t = {
   side : Core.Side.t;
   quantity : Decimal.t;
   filled : Decimal.t;
-  kind : Order.kind;
-  tif : Order.time_in_force;
-  status : Order.status;
+  kind : Broker_domain.Order.kind;
+  tif : Broker_domain.Order.time_in_force;
+  status : Broker_domain.Order.status;
   placed_ts : int64;
       (** Finam's [transact_at] parsed into int64 epoch — the
           domain-event timestamp of the placement, as the
           external system reports it. *)
 }
 
-val to_domain : placement_id:int -> t -> Order.t
+val to_domain : placement_id:int -> t -> Broker_domain.Order.t
 (** Project to broker BC's internal domain order by attaching
     the saga's [placement_id]. Finam-side handles
     ([client_order_id], [order_id], [exec_id]) are dropped —
     they never leave the finam library. *)
+
+val place_order_payload :
+  instrument:Core.Instrument.t ->
+  side:Core.Side.t ->
+  quantity:Decimal.t ->
+  kind:Broker_domain.Order.kind ->
+  tif:Broker_domain.Order.time_in_force ->
+  ?client_order_id:string ->
+  unit ->
+  Yojson.Safe.t
+(** Build the JSON body for [POST /v1/accounts/{id}/orders].
+    Prices and quantities go on the wire wrapped as proto
+    [google.type.Decimal] ([{ "value": "..." }]). *)
+
+val of_json : Yojson.Safe.t -> t
+(** Decode a single Finam [OrderState] JSON (returned by
+    GetOrder, PlaceOrder, and as array elements in GetOrders).
+    The nested [order] object carries the original request
+    parameters; top-level fields carry execution state. *)
+
+val list_of_json : Yojson.Safe.t -> t list
+(** Decode the full [accountsOrdersResponse] payload, reading
+    the top-level [orders] array. Returns [] if the array is
+    missing or malformed. *)

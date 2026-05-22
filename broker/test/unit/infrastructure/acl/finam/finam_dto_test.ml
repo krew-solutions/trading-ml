@@ -108,9 +108,9 @@ let test_account_trades_parse () =
           "timestamp": "2024-01-02T10:32:00Z" }
       ] } |}
   in
-  let trades = Finam.Dto.account_trades_of_json j in
+  let trades = Finam.Dto.Trade.list_of_json j in
   Alcotest.(check int) "three trades" 3 (List.length trades);
-  let (first : Finam.Dto.account_trade) = List.nth trades 0 in
+  let (first : Finam.Dto.Trade.t) = List.nth trades 0 in
   Alcotest.(check string) "trade_id round-trips" "T1" first.trade_id;
   Alcotest.(check string) "order_id" "O1" first.order_id;
   Alcotest.(check string)
@@ -126,7 +126,7 @@ let test_account_trades_parse () =
   Alcotest.(check (float 1e-6))
     "fee defaults to zero (no field in payload)" 0.0
     (Decimal.to_float first.trade.fee);
-  let (third : Finam.Dto.account_trade) = List.nth trades 2 in
+  let (third : Finam.Dto.Trade.t) = List.nth trades 2 in
   Alcotest.(check bool) "third trade Sell side" true (third.side = Side.Sell);
   Alcotest.(check string)
     "third trade ticker" "GAZP"
@@ -134,11 +134,11 @@ let test_account_trades_parse () =
 
 let test_account_trades_empty () =
   let j = Yojson.Safe.from_string {| { "trades": [] } |} in
-  Alcotest.(check int) "empty" 0 (List.length (Finam.Dto.account_trades_of_json j));
+  Alcotest.(check int) "empty" 0 (List.length (Finam.Dto.Trade.list_of_json j));
   let j' = Yojson.Safe.from_string {| {} |} in
   Alcotest.(check int)
     "missing key → empty" 0
-    (List.length (Finam.Dto.account_trades_of_json j'))
+    (List.length (Finam.Dto.Trade.list_of_json j'))
 
 let tests =
   [

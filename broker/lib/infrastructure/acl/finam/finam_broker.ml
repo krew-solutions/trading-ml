@@ -184,7 +184,7 @@ let resolve_order_id t ~client_order_id =
       let orders = Rest.get_orders t.rest ~account_id:t.account_id in
       match
         List.find_opt
-          (fun (o : External_order.t) -> o.client_order_id = client_order_id)
+          (fun (o : Dto.Order.t) -> o.client_order_id = client_order_id)
           orders
       with
       | Some o ->
@@ -202,8 +202,8 @@ let mint_client_order_id () =
   let uuid = Uuidm.v4_gen (Random.State.make_self_init ()) () |> Uuidm.to_string in
   String.concat "" (String.split_on_char '-' uuid)
 
-let project ~placement_id (v : External_order.t) : Order_view_model.t =
-  Order_view_model.of_domain (External_order.to_domain ~placement_id v)
+let project ~placement_id (v : Dto.Order.t) : Order_view_model.t =
+  Order_view_model.of_domain (Dto.Order.to_domain ~placement_id v)
 
 let place_order t ~placement_id ~instrument ~side ~quantity ~kind ~tif :
     Order_view_model.t =
@@ -241,7 +241,7 @@ let get_executions t ~placement_id : Execution_view_model.t list =
   | Some cid ->
       let order_id = resolve_order_id t ~client_order_id:cid in
       Rest.get_trades t.rest ~account_id:t.account_id
-      |> List.filter_map (fun (at : Dto.account_trade) ->
+      |> List.filter_map (fun (at : Dto.Trade.t) ->
           if at.order_id = order_id then Some (Execution_view_model.of_domain at.trade)
           else None)
 
@@ -325,7 +325,7 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
     side fields), so the REST branch produces structurally
     identical events to the WS branch and dedup on [trade_id]
     is exact. *)
-let order_leg_filled_of_rest_trade t (at : Dto.account_trade) :
+let order_leg_filled_of_rest_trade t (at : Dto.Trade.t) :
     Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
   match placement_id_by_order_id t ~order_id:at.order_id with
   | None -> None

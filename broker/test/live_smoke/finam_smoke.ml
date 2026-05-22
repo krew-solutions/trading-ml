@@ -129,7 +129,7 @@ let test_limit_order_lifecycle () =
                   | Ok o -> o
                   | Error m -> failwith m))
         in
-        let order_id = placed.Finam.External_order.order_id in
+        let order_id = placed.Finam.Dto.Order.order_id in
         Printf.printf "  [info] placed cid=%s server=%s status=%s\n%!" cid order_id
           (Order.status_to_string placed.status);
         (* Always cancel, even if a subsequent assert fails. Leaving a
@@ -152,9 +152,7 @@ let test_limit_order_lifecycle () =
             Alcotest.(check string) "round-trip cid" cid fetched.client_order_id;
             let trades = Finam.Rest.get_trades rest ~account_id:account in
             let our_trades =
-              List.filter
-                (fun (t : Finam.Dto.account_trade) -> t.order_id = order_id)
-                trades
+              List.filter (fun (t : Finam.Dto.Trade.t) -> t.order_id = order_id) trades
             in
             Alcotest.(check int)
               "no executions on far-from-market limit" 0 (List.length our_trades))

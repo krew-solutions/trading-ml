@@ -11,7 +11,8 @@ let sber =
 
 let test_place_order_payload_limit () =
   let j =
-    Finam.Dto.place_order_payload ~instrument:sber ~side:Buy ~quantity:(Decimal.of_int 10)
+    Finam.Dto.Order.place_order_payload ~instrument:sber ~side:Buy
+      ~quantity:(Decimal.of_int 10)
       ~kind:(Limit (Decimal.of_float 150.50))
       ~tif:DAY ()
   in
@@ -30,8 +31,8 @@ let test_place_order_payload_limit () =
 
 let test_place_order_payload_market () =
   let j =
-    Finam.Dto.place_order_payload ~instrument:sber ~side:Sell ~quantity:(Decimal.of_int 5)
-      ~kind:Market ~tif:IOC ()
+    Finam.Dto.Order.place_order_payload ~instrument:sber ~side:Sell
+      ~quantity:(Decimal.of_int 5) ~kind:Market ~tif:IOC ()
   in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "type" "ORDER_TYPE_MARKET" (member "type" j |> to_string);
@@ -42,7 +43,8 @@ let test_place_order_payload_market () =
 
 let test_place_order_payload_stop_limit () =
   let j =
-    Finam.Dto.place_order_payload ~instrument:sber ~side:Buy ~quantity:(Decimal.of_int 1)
+    Finam.Dto.Order.place_order_payload ~instrument:sber ~side:Buy
+      ~quantity:(Decimal.of_int 1)
       ~kind:(Stop_limit { stop = Decimal.of_float 300.0; limit = Decimal.of_float 305.0 })
       ~tif:GTC ~client_order_id:"my-id-123" ()
   in
@@ -92,7 +94,7 @@ let sample_order_state =
 |}
 
 let test_decode_order_state () =
-  let o = Finam.Dto.order_of_json (Yojson.Safe.from_string sample_order_state) in
+  let o = Finam.Dto.Order.of_json (Yojson.Safe.from_string sample_order_state) in
   Alcotest.(check string) "order_id" "12345678" o.order_id;
   Alcotest.(check string) "exec_id" "exec-001" o.exec_id;
   Alcotest.(check string) "status" "NEW" (Order.status_to_string o.status);
@@ -132,7 +134,7 @@ let test_decode_partially_filled () =
     }
   |}
   in
-  let o = Finam.Dto.order_of_json j in
+  let o = Finam.Dto.Order.of_json j in
   Alcotest.(check string) "status" "PARTIALLY_FILLED" (Order.status_to_string o.status);
   Alcotest.(check (float 1e-6)) "filled" 60.0 (Decimal.to_float o.filled)
 
@@ -140,7 +142,7 @@ let test_decode_orders_list () =
   let j =
     Yojson.Safe.from_string (Printf.sprintf {| { "orders": [ %s ] } |} sample_order_state)
   in
-  let orders = Finam.Dto.orders_of_json j in
+  let orders = Finam.Dto.Order.list_of_json j in
   Alcotest.(check int) "1 order" 1 (List.length orders);
   Alcotest.(check string) "first order_id" "12345678" (List.hd orders).order_id
 

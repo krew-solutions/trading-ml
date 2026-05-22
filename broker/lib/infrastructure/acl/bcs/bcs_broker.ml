@@ -69,9 +69,9 @@ type t = {
           between the WS execution-status branch and the REST
           [get_deals] fallback branch so the same fill never
           crosses the ACL boundary twice. Keyed by
-          [placement_id]; [equal_value] compares
-          [(fill_quantity, fill_price)] — the discriminator
-          available on both transports. *)
+          [placement_id]; [equal_value] compares [trade_id]
+          since BCS surfaces it on both wire paths — WS as
+          [executionId], REST as [tradeNum]. *)
   bar_dedup : (Instrument.t * Timeframe.t, Candle.t) Acl_common.Stream_dedup.t;
       (** Inbound bar-stream deduplicator: drops stale snapshots
           and exact intra-period duplicates before they cross
@@ -87,8 +87,7 @@ let make (rest : Rest.t) : t =
   let fill_equal
       (a : Broker_domain.Remote_broker.Events.Order_leg_filled.t)
       (b : Broker_domain.Remote_broker.Events.Order_leg_filled.t) : bool =
-    Decimal.equal a.fill_quantity b.fill_quantity
-    && Decimal.equal a.fill_price b.fill_price
+    String.equal a.trade_id b.trade_id
   in
   {
     rest;
@@ -157,9 +156,16 @@ let get_executions t ~placement_id : Execution_view_model.t list =
       if external_order.exec_id = "" then []
       else
         Rest.get_deals t.rest
-        |> List.filter_map (fun (order_num, exec) ->
-            if order_num = external_order.exec_id then
-              Some (Execution_view_model.of_domain exec)
+        |> List.filter_map (fun (e : External_execution.t) ->
+            if e.order_num = external_order.exec_id then
+              Some
+                (Execution_view_model.of_domain
+                   {
+                     Broker_domain.Order.ts = e.ts;
+                     quantity = e.quantity;
+                     price = e.price;
+                     fee = e.fee;
+                   })
             else None)
 
 (** Reverse lookup [order_num → placement_id]. In BCS the
@@ -179,9 +185,9 @@ let placement_id_by_order_num t ~order_num : int option =
     [/trade-api-bff-trade-details/api/v1/trades/search]). Used
     by the broker's WS-equivalent polling fiber to discover new
     fills outside command-in-scope. Returns BCS's
-    [(order_num, execution)] pairs verbatim; callers filter to
-    their own placements via [placement_id_by_order_num]. *)
-let recent_deals ?from_ts ?to_ts t : (string * Broker_domain.Order.trade) list =
+    [External_execution.t]s verbatim; callers filter to their
+    own placements via [placement_id_by_order_num]. *)
+let recent_deals ?from_ts ?to_ts t : External_execution.t list =
   Rest.get_deals ?from_ts ?to_ts t.rest
 
 let dispatch t (event : Broker.event) : unit =
@@ -190,54 +196,27 @@ let dispatch t (event : Broker.event) : unit =
       try f event with e -> Log.warn "[bcs] on_event raised: %s" (Printexc.to_string e))
   | None -> ()
 
-(** Convert a single REST-deal tuple into a (raw) domain event
+(** Convert a single REST-deal record into a (raw) domain event
     suitable for funnelling into the fill supervisor. The
     [new_total_filled] field is a placeholder ([Decimal.zero]):
     the final value is computed by {!finalize_and_dispatch}
     after dedup, so that catch-up replays of an already-seen
-    fill don't double-count the cumulative.
-
-    {b Known gap.} BCS REST [get_deals] does not return the
-    instrument or side per execution. Until the
-    {!Placement_handle_store} carries those at submit time,
-    fills arriving via the REST branch carry an [UNKNOWN]
-    placeholder; the WS branch (when up) provides the
-    canonical instrument. Dedup compares fills on
-    [(fill_quantity, fill_price)] only, so an UNKNOWN-instrument
-    REST event still suppresses the matching WS event (and
-    vice versa) — but if the REST event wins the race,
-    downstream sees the placeholder. Pre-existing limitation;
-    addressed separately when the placement store grows
-    domain-typed fields. *)
-let order_leg_filled_of_rest t ~(order_num : string) (exec : Broker_domain.Order.trade) :
+    fill don't double-count the cumulative. *)
+let order_leg_filled_of_rest t (e : External_execution.t) :
     Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
-  match placement_id_by_order_num t ~order_num with
+  match placement_id_by_order_num t ~order_num:e.order_num with
   | None -> None
   | Some placement_id ->
-      let parent = try get_order t ~placement_id with _ -> None in
-      let side =
-        match parent with
-        | Some o -> ( try Side.of_string o.side with _ -> Side.Buy)
-        | None -> Side.Buy
-      in
-      let instrument =
-        Core.Instrument.make
-          ~ticker:(Core.Ticker.of_string "UNKNOWN")
-          ~venue:(Core.Mic.of_string "MISX") ()
-      in
-      let trade_id =
-        Printf.sprintf "%s:%Ld:%s" order_num exec.ts (Decimal.to_string exec.quantity)
-      in
       Some
         {
           placement_id;
-          trade_id;
-          instrument;
-          side;
-          fill_quantity = exec.quantity;
-          fill_price = exec.price;
-          fee = Decimal.zero;
-          fill_ts = exec.ts;
+          trade_id = e.trade_id;
+          instrument = e.instrument;
+          side = e.side;
+          fill_quantity = e.quantity;
+          fill_price = e.price;
+          fee = e.fee;
+          fill_ts = e.ts;
           new_total_filled = Decimal.zero;
         }
 
@@ -247,8 +226,7 @@ let order_leg_filled_of_rest t ~(order_num : string) (exec : Broker_domain.Order
     events (cumulative-bump happens at the seam, not here). *)
 let poll_fill_window t ~since_ts ~to_ts :
     Broker_domain.Remote_broker.Events.Order_leg_filled.t list =
-  recent_deals ~from_ts:since_ts ~to_ts t
-  |> List.filter_map (fun (order_num, exec) -> order_leg_filled_of_rest t ~order_num exec)
+  recent_deals ~from_ts:since_ts ~to_ts t |> List.filter_map (order_leg_filled_of_rest t)
 
 (** WS-side branch: takes a parsed BCS execution-status event,
     looks up the placement, and returns a (raw, not finalised)

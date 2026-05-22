@@ -396,15 +396,21 @@ let edit_order t ~client_order_id ?quantity ?price () : External_order.t =
     placed_ts = 0L;
   }
 
-(** Decode one record from the BCS Deals payload into a
-    (order_num, execution) pair. Field shape per official BCS docs
+(** Decode one record from the BCS Deals payload into an
+    {!External_execution.t}. Field shape per official BCS docs
     (paginated retail API):
 
     - [orderNum] int64       broker order number (correlates with
                              [exec_id] on the parent [Order.t])
-    - [tradeNum] int64       deal/execution id (informational, unused)
+    - [tradeNum] int64       per-leg execution id; used as the
+                             cross-transport dedup key in the fill
+                             supervisor (the WS execution-status
+                             frame carries the same value in its
+                             [executionId] field)
     - [clientCode] string    client account code (not an order id)
-    - [ticker], [classCode]  instrument identity
+    - [ticker], [classCode]  instrument identity — composed into
+                             {!Core.Instrument.t} with [board =
+                             classCode] and [venue = "MISX"]
     - [side] string "1"/"2"  BUY/SELL
     - [tradeDateTime]        execution timestamp (RFC 3339)
     - [price] double         execution price
@@ -422,7 +428,7 @@ let edit_order t ~client_order_id ?quantity ?price () : External_order.t =
 
     No per-fill commission field — [fee] defaults to zero; fees live
     on the parent [Order] state, not per-execution. *)
-let bcs_trade_of_json (j : Yojson.Safe.t) : string * Order.trade =
+let bcs_trade_of_json (j : Yojson.Safe.t) : External_execution.t =
   let open Yojson.Safe.Util in
   let int_or_str k =
     match member k j with
@@ -443,13 +449,39 @@ let bcs_trade_of_json (j : Yojson.Safe.t) : string * Order.trade =
     | `String s -> Datetime.Iso8601.parse s
     | _ -> 0L
   in
-  ( int_or_str "orderNum",
-    {
-      Order.ts;
-      quantity = float_d "tradeQuantity";
-      price = float_d "price";
-      fee = Decimal.zero;
-    } )
+  let side =
+    match member "side" j with
+    | `String "1" | `Int 1 -> Side.Buy
+    | `String "2" | `Int 2 -> Side.Sell
+    | _ -> Side.Buy
+  in
+  let instrument =
+    let ticker =
+      match member "ticker" j with
+      | `String s -> s
+      | _ -> ""
+    in
+    let class_code =
+      match member "classCode" j with
+      | `String s -> s
+      | _ -> ""
+    in
+    Instrument.make
+      ~ticker:(Ticker.of_string (if ticker = "" then "UNKNOWN" else ticker))
+      ~venue:(Mic.of_string "MISX")
+      ?board:(if class_code = "" then None else Some (Board.of_string class_code))
+      ()
+  in
+  {
+    order_num = int_or_str "orderNum";
+    trade_id = int_or_str "tradeNum";
+    instrument;
+    side;
+    ts;
+    quantity = float_d "tradeQuantity";
+    price = float_d "price";
+    fee = Decimal.zero;
+  }
 
 (** POST /trade-api-bff-trade-details/api/v1/trades/search —
     paginated account-wide executions ("deals" in Russian broker
@@ -462,7 +494,7 @@ let bcs_trade_of_json (j : Yojson.Safe.t) : string * Order.trade =
 
     Default window = 30 days ending "now", same rationale as
     [get_orders]. *)
-let get_deals ?from_ts ?to_ts t : (string * Order.trade) list =
+let get_deals ?from_ts ?to_ts t : External_execution.t list =
   let base = t.cfg.Config.rest_base in
   let path = "/trade-api-bff-trade-details/api/v1/trades/search" in
   let url = Uri.with_path base (Uri.path base ^ path) in

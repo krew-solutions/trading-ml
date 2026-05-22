@@ -136,21 +136,19 @@ single shared `dedup_accept` closure means:
 
 The discriminator the dedup uses must be **stable across both
 transports**. For bars this is trivially the candle's
-structural equality (`Candle.equal`). For fills the picture
-differs by adapter:
+structural equality (`Candle.equal`). For fills both adapters
+dedup on `trade_id`:
 
-- **Finam**: dedups on `trade_id`. The Finam REST
-  `AccountTrade` payload exposes the same per-leg id as the
-  WS `Trade.update`, so both branches produce structurally
-  identical events and the dedup is exact.
-- **BCS**: dedups on `(fill_quantity, fill_price)` at the
-  same ts under the same `placement_id`. BCS REST
-  `get_deals` does not surface a per-leg id, so the
-  cross-transport discriminator is necessarily partial. Two
-  legs with identical qty + price at identical ts on the
-  same placement could be collapsed; this is improbable
-  enough in practice to accept until BCS extends the REST
-  payload.
+- **Finam**: the REST `AccountTrade.trade_id` matches the WS
+  `Trade.update.trade_id`.
+- **BCS**: the REST `tradeNum` matches the WS `executionId`.
+
+Both broker REST surfaces expose the venue-side per-leg id, so
+the supervisor seam can rely on exact `String.equal` rather
+than a partial `(qty, price)` discriminator. (Earlier
+revisions of these adapters compromised on partial dedup
+because their wire DTOs were under-parsed; the fix in both
+cases was extending the parser, not the dedup logic.)
 
 ## Wiring under two socket models
 
@@ -243,18 +241,6 @@ broker-specific compromise into the shape of the abstraction.
 
 ## Known limitations
 
-- **BCS REST-branch fills carry placeholder instrument /
-  side.** `Bcs.Rest.get_deals` surfaces only `(order_num, ts,
-  qty, price)`; the REST branch fills in
-  `Instrument.make "UNKNOWN" "MISX"` and `Side.Buy`. Dedup
-  keys on `(qty, price)`, so this does not cause double
-  emission — but if a REST-branch fill wins the race against
-  the WS one, downstream sees the placeholder. The fix is to
-  store the domain `Instrument.t` and `Side.t` on
-  `Placement_handle_store` at submit time; deferred.
-  (Finam's REST exposes `symbol` and `side` per the
-  `AccountTrade` proto, so its REST branch carries real
-  values and this limitation does not apply.)
 - **`ws_came_up` fires after the SUBSCRIBE message, not after
   the server's ack.** If a subscription is silently rejected
   by the broker (auth scope, unknown symbol), the supervisor

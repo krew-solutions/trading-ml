@@ -146,8 +146,8 @@ let test_limit_order_lifecycle () =
           if fetched.exec_id = "" then []
           else
             Bcs.Rest.get_deals rest
-            |> List.filter_map (fun (order_num, exec) ->
-                if order_num = fetched.exec_id then Some exec else None)
+            |> List.filter (fun (e : Bcs.External_execution.t) ->
+                e.order_num = fetched.exec_id)
         in
         Alcotest.(check int)
           "no executions on far-from-market limit" 0 (List.length our_deals))

@@ -1,13 +1,21 @@
 (** Finam WebSocket bridge — thin wrapper over {!Websocket.Resilient}.
 
-    One multiplexed socket for all subscriptions. On reconnect,
-    resubscribes all active keys. Heartbeat and backoff are handled
-    by the resilient layer. *)
+    One multiplexed socket carries bars + trades. On reconnect,
+    the bridge resubscribes all known keys (its own concern); a
+    parallel listener registry lets external supervisors react to
+    the same WS health transitions — the supervisor pattern for
+    the multiplexed-socket case where one disconnect must fan
+    across many subscription-level supervisors.
+
+    Listener IDs returned by {!register_lifecycle} are opaque
+    integers; callers store them to call {!unregister_lifecycle}
+    on tear-down. *)
 
 open Core
 
 module SubKey = struct
   type t = Instrument.t * Timeframe.t
+
   let compare (i1, t1) (i2, t2) =
     let c = Instrument.compare i1 i2 in
     if c <> 0 then c else compare t1 t2
@@ -15,6 +23,8 @@ end
 
 module SubMap = Map.Make (SubKey)
 module StringSet = Set.Make (String)
+
+type listener_id = int
 
 type bridge = {
   auth : Auth.t;
@@ -26,8 +36,18 @@ type bridge = {
       (** Account ids currently subscribed for trade-execution
           updates. Tracked so reconnect can re-issue subscribe
           messages for every previously-active account. *)
-  make_conn : on_reconnect:(unit -> unit) -> Websocket.Resilient.t;
+  mutable next_listener_id : listener_id;
+  mutable disconnect_listeners : (listener_id * (unit -> unit)) list;
+  mutable reconnect_listeners : (listener_id * (unit -> unit)) list;
+  make_conn : unit -> Websocket.Resilient.t;
 }
+
+let fire_listeners (listeners : (listener_id * (unit -> unit)) list) : unit =
+  List.iter
+    (fun (_, f) ->
+      try f ()
+      with e -> Log.warn "[finam ws] listener raised: %s" (Printexc.to_string e))
+    listeners
 
 let make ~env ~sw ~cfg ~auth ~on_event : bridge =
   let authenticator =
@@ -38,7 +58,27 @@ let make ~env ~sw ~cfg ~auth ~on_event : bridge =
         None
   in
   let t_ref = ref None in
-  let make_conn ~on_reconnect =
+  let resubscribe_all (t : bridge) () =
+    let bar_subs, trade_subs =
+      Eio.Mutex.use_ro t.mutex (fun () -> (t.bar_subs, t.trade_subs))
+    in
+    let token = Auth.current t.auth in
+    let send_bars (instrument, timeframe) =
+      let j = Ws.Requests.Bars.subscribe ~token ~instrument ~timeframe in
+      match t.conn with
+      | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
+      | None -> ()
+    in
+    let send_trades account_id =
+      let j = Ws.Requests.Trades.subscribe ~token ~account_id in
+      match t.conn with
+      | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
+      | None -> ()
+    in
+    SubMap.iter (fun key _ -> send_bars key) bar_subs;
+    StringSet.iter send_trades trade_subs
+  in
+  let make_conn () =
     let config : Websocket.Resilient.config =
       {
         label = "finam ws";
@@ -56,8 +96,25 @@ let make ~env ~sw ~cfg ~auth ~on_event : bridge =
                 with e ->
                   Log.warn "[finam ws] decode failed: %s raw: %s" (Printexc.to_string e)
                     payload));
-        on_disconnect = (fun () -> ());
-        on_reconnect;
+        on_disconnect =
+          (fun () ->
+            match !t_ref with
+            | None -> ()
+            | Some t ->
+                let listeners =
+                  Eio.Mutex.use_ro t.mutex (fun () -> t.disconnect_listeners)
+                in
+                fire_listeners listeners);
+        on_reconnect =
+          (fun () ->
+            match !t_ref with
+            | None -> ()
+            | Some t ->
+                resubscribe_all t ();
+                let listeners =
+                  Eio.Mutex.use_ro t.mutex (fun () -> t.reconnect_listeners)
+                in
+                fire_listeners listeners);
       }
     in
     Websocket.Resilient.create ~env ~sw ~config
@@ -70,11 +127,27 @@ let make ~env ~sw ~cfg ~auth ~on_event : bridge =
       conn = None;
       bar_subs = SubMap.empty;
       trade_subs = StringSet.empty;
+      next_listener_id = 0;
+      disconnect_listeners = [];
+      reconnect_listeners = [];
       make_conn;
     }
   in
   t_ref := Some t;
   t
+
+let register_lifecycle (t : bridge) ~on_disconnect ~on_reconnect : listener_id =
+  Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+      let id = t.next_listener_id in
+      t.next_listener_id <- id + 1;
+      t.disconnect_listeners <- (id, on_disconnect) :: t.disconnect_listeners;
+      t.reconnect_listeners <- (id, on_reconnect) :: t.reconnect_listeners;
+      id)
+
+let unregister_lifecycle (t : bridge) (id : listener_id) : unit =
+  Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+      t.disconnect_listeners <- List.filter (fun (i, _) -> i <> id) t.disconnect_listeners;
+      t.reconnect_listeners <- List.filter (fun (i, _) -> i <> id) t.reconnect_listeners)
 
 let send_subscribe t ~instrument ~timeframe =
   let token = Auth.current t.auth in
@@ -90,20 +163,11 @@ let send_subscribe_trades t ~account_id =
   | Some c -> Websocket.Resilient.send c (Yojson.Safe.to_string j)
   | None -> ()
 
-let resubscribe_all t () =
-  let bar_subs, trade_subs =
-    Eio.Mutex.use_ro t.mutex (fun () -> (t.bar_subs, t.trade_subs))
-  in
-  SubMap.iter
-    (fun (instrument, timeframe) _ -> send_subscribe t ~instrument ~timeframe)
-    bar_subs;
-  StringSet.iter (fun account_id -> send_subscribe_trades t ~account_id) trade_subs
-
 let ensure_conn t =
   match t.conn with
   | Some c -> c
   | None ->
-      let c = t.make_conn ~on_reconnect:(resubscribe_all t) in
+      let c = t.make_conn () in
       t.conn <- Some c;
       c
 
@@ -119,7 +183,7 @@ let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
   let should_close =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
         t.bar_subs <- SubMap.remove (instrument, timeframe) t.bar_subs;
-        SubMap.is_empty t.bar_subs)
+        SubMap.is_empty t.bar_subs && StringSet.is_empty t.trade_subs)
   in
   match t.conn with
   | Some c ->

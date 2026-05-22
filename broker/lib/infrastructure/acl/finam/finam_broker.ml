@@ -61,15 +61,56 @@ type t = {
           recognizer because duplicate suppression is part of
           fact recognition — a second observation of the same
           fact at the same ts is not a new fact. *)
+  fill_dedup :
+    (int, Broker_domain.Remote_broker.Events.Order_leg_filled.t) Acl_common.Stream_dedup.t;
+      (** Per-placement fill-stream deduplicator. Shared
+          between the WS [Trades] branch and the REST
+          [Rest.get_trades] fallback branch so the same fill
+          never crosses the ACL boundary twice. Keyed by
+          [placement_id]; [equal_value] compares
+          [(fill_quantity, fill_price)] because Finam's REST
+          [account_trade] DTO currently strips the wire
+          [trade_id] (a separate cleanup), so the available
+          cross-transport discriminator is the (qty, price)
+          pair. Mirrors BCS's [fill_dedup]. *)
   mutex : Eio.Mutex.t;
   mutable bridge : Ws_bridge.bridge option;
   mutable on_event : (Broker.event -> unit) option;
   mutable bar_refcount : int SubMap.t;
+  mutable bar_supervisors : Candle.t Acl_common.Transport_supervisor.t SubMap.t;
+      (** Per-(instrument, timeframe) bar supervisor. One
+          {!Acl_common.Transport_supervisor} per active bar
+          subscription, each wired into the multiplexed WS
+          bridge via [Ws_bridge.register_lifecycle] so a
+          single WS disconnect fans across all of them. *)
+  mutable bar_supervisor_listeners : (SubKey.t * Ws_bridge.listener_id) list;
+      (** Tracks lifecycle-listener IDs so [unsubscribe] can
+          [Ws_bridge.unregister_lifecycle] in addition to
+          stopping the supervisor. *)
+  mutable fill_supervisor :
+    Broker_domain.Remote_broker.Events.Order_leg_filled.t
+    Acl_common.Transport_supervisor.t
+    option;
+      (** Account-wide fill supervisor — one per adapter
+          instance. Created in {!start_live_feed} and bound to
+          the adapter's lifetime; no explicit stop. *)
+  mutable live_feed_ctx : (Eio.Switch.t * Eio_unix.Stdenv.base) option;
+      (** [sw, env] captured at {!start_live_feed} so per-key
+          bar supervisors created later by {!subscribe} run
+          under the same switch as the bridge. None until
+          start_live_feed has fired; subscribe before that is
+          a programmer error (the broker is not live yet). *)
 }
 
 let name = "finam"
 
 let make ~account_id (rest : Rest.t) : t =
+  let fill_equal
+      (a : Broker_domain.Remote_broker.Events.Order_leg_filled.t)
+      (b : Broker_domain.Remote_broker.Events.Order_leg_filled.t) : bool =
+    Decimal.equal a.fill_quantity b.fill_quantity
+    && Decimal.equal a.fill_price b.fill_price
+  in
   {
     rest;
     account_id;
@@ -77,10 +118,15 @@ let make ~account_id (rest : Rest.t) : t =
     order_id_by_cid = Hashtbl.create 16;
     total_filled = Acl_common.Cumulative_sum.create ~zero:Decimal.zero ~add:Decimal.add;
     bar_dedup = Acl_common.Stream_dedup.create ~equal_value:Candle.equal;
+    fill_dedup = Acl_common.Stream_dedup.create ~equal_value:fill_equal;
     mutex = Eio.Mutex.create ();
     bridge = None;
     on_event = None;
     bar_refcount = SubMap.empty;
+    bar_supervisors = SubMap.empty;
+    bar_supervisor_listeners = [];
+    fill_supervisor = None;
+    live_feed_ctx = None;
   }
 
 let bars t ~n ~instrument ~timeframe = Rest.bars t.rest ~n ~instrument ~timeframe
@@ -208,61 +254,203 @@ let dispatch t (event : Broker.event) : unit =
       with e -> Log.warn "[finam] on_event raised: %s" (Printexc.to_string e))
   | None -> ()
 
+(** Funnel one inbound WS trade into the fill supervisor.
+    Returns a raw [Order_leg_filled.t] with [new_total_filled =
+    zero] — the supervisor's [emit] closure
+    ({!finalize_and_dispatch_fill}) does the cumulative-bump
+    post-dedup. Returns [None] when we don't recognise the
+    [order_id] (a fill against some other client's order, or a
+    fill that raced ahead of the [remember] write). *)
+let order_leg_filled_of_ws_trade t (tu : Ws.Events.Trade.update) :
+    Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
+  match placement_id_by_order_id t ~order_id:tu.order_id with
+  | None ->
+      Log.warn "[finam ws] trade for unknown order_id=%s — skipping" tu.order_id;
+      None
+  | Some placement_id ->
+      Some (Ws.Events.Trade.to_domain ~placement_id ~new_total_filled:Decimal.zero tu)
+
+(** Common seam between WS and REST branches of the fill
+    supervisor: dedup happened upstream in the supervisor; here
+    we bump the cumulative and dispatch. Mirrors BCS's
+    [finalize_and_dispatch]. *)
+let finalize_and_dispatch_fill
+    t
+    (raw : Broker_domain.Remote_broker.Events.Order_leg_filled.t) : unit =
+  let new_total_filled =
+    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+        Acl_common.Cumulative_sum.bump t.total_filled ~key:raw.placement_id
+          ~delta:raw.fill_quantity)
+  in
+  dispatch t (Broker.Order_leg_filled { raw with new_total_filled })
+
 (** Translate a parsed [Ws.event] into zero or more {!Broker.event}s
-    and hand each to the registered [on_event] callback. Bars carry
-    their own (instrument, timeframe) — Finam's BARS envelope sets
-    [subscription_key = "<sym>:<tf>"] server-side on every frame
-    (verified live 2026-05-22), so the ACL parser resolves both
-    fields and we route exactly. Trades are resolved to their owning
-    placement here; fills against unknown orders are dropped with a
-    warn. *)
+    by routing them to the matching supervisor. Dedup is the
+    supervisor's responsibility (it shares the same [Stream_dedup]
+    instance as the REST-fallback poll branch). For fills, the
+    cumulative bookkeeping happens inside the supervisor's [emit]
+    via {!finalize_and_dispatch_fill}. *)
 let dispatch_ws_event t (ev : Ws.event) : unit =
   match ev with
-  | Bars b ->
-      Ws.Events.Bars.to_domain b
-      |> List.iter (fun (ev : Broker_domain.Remote_broker.Events.Remote_bar_updated.t) ->
-          if
-            Acl_common.Stream_dedup.should_accept t.bar_dedup
-              ~key:(ev.instrument, ev.timeframe) ~ts:ev.candle.ts ~value:ev.candle
-          then dispatch t (Broker.Remote_bar_updated ev))
-  | Trades trades ->
-      List.iter
-        (fun (tu : Ws.Events.Trade.update) ->
-          match placement_id_by_order_id t ~order_id:tu.order_id with
-          | None ->
-              Log.warn "[finam ws] trade for unknown order_id=%s — skipping" tu.order_id
-          | Some placement_id ->
-              let new_total_filled =
-                Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-                    Acl_common.Cumulative_sum.bump t.total_filled ~key:placement_id
-                      ~delta:tu.quantity)
-              in
-              let domain_ev =
-                Ws.Events.Trade.to_domain ~placement_id ~new_total_filled tu
-              in
-              dispatch t (Broker.Order_leg_filled domain_ev))
-        trades
+  | Bars b -> (
+      let key = (b.instrument, b.timeframe) in
+      match
+        Eio.Mutex.use_ro t.mutex (fun () -> SubMap.find_opt key t.bar_supervisors)
+      with
+      | Some sup ->
+          List.iter
+            (fun candle -> Acl_common.Transport_supervisor.feed_ws sup candle)
+            b.bars
+      | None ->
+          Log.info "[finam ws] bars for unregistered key %s/%s — dropping"
+            (Instrument.to_qualified b.instrument)
+            (Timeframe.to_string b.timeframe))
+  | Trades trades -> (
+      match t.fill_supervisor with
+      | None -> Log.warn "[finam ws] trades arrived before fill_supervisor — dropping"
+      | Some sup ->
+          List.iter
+            (fun tu ->
+              match order_leg_filled_of_ws_trade t tu with
+              | Some raw -> Acl_common.Transport_supervisor.feed_ws sup raw
+              | None -> ())
+            trades)
   | Error_ev e -> Log.warn "[finam ws] error %d %s: %s" e.code e.type_ e.message
   | Lifecycle ev -> Log.info "[finam ws] %s (%d) %s" ev.event ev.code ev.reason
   | Quote _ | Other _ -> ()
 
+(** REST-side branch of the fill supervisor's [poll_window].
+    Pulls [account_trade]s for [(since_ts, to_ts)] and lifts
+    each to a raw [Order_leg_filled.t]. The same UNKNOWN-
+    instrument limitation as BCS REST applies: Finam's REST
+    [account_trade] DTO doesn't surface instrument/side either,
+    so the REST-branch event carries placeholders. WS-branch
+    events carry the real ones. Dedup is keyed by [placement_id]
+    + (qty, price) so the two branches reconcile despite the
+    metadata gap. *)
+let order_leg_filled_of_rest_trade t (at : Dto.account_trade) :
+    Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
+  match placement_id_by_order_id t ~order_id:at.order_id with
+  | None -> None
+  | Some placement_id ->
+      let instrument =
+        Instrument.make ~ticker:(Ticker.of_string "UNKNOWN") ~venue:(Mic.of_string "MISX")
+          ()
+      in
+      let trade_id =
+        Printf.sprintf "%s:%Ld:%s" at.order_id at.trade.ts
+          (Decimal.to_string at.trade.quantity)
+      in
+      Some
+        {
+          placement_id;
+          trade_id;
+          instrument;
+          side = Side.Buy;
+          fill_quantity = at.trade.quantity;
+          fill_price = at.trade.price;
+          fee = at.trade.fee;
+          fill_ts = at.trade.ts;
+          new_total_filled = Decimal.zero;
+        }
+
+let fill_poll_window t ~since_ts ~to_ts :
+    Broker_domain.Remote_broker.Events.Order_leg_filled.t list =
+  try
+    Rest.get_trades ~from_ts:since_ts ~to_ts t.rest ~account_id:t.account_id
+    |> List.filter_map (order_leg_filled_of_rest_trade t)
+  with e ->
+    Log.warn "[finam] fill poll failed: %s" (Printexc.to_string e);
+    []
+
 let start_live_feed t ~sw ~env ~on_event : unit =
   t.on_event <- Some on_event;
+  t.live_feed_ctx <- Some (sw, env);
   let cfg = Rest.cfg t.rest in
   let auth = Rest.auth t.rest in
   let bridge = Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event:(dispatch_ws_event t) in
   t.bridge <- Some bridge;
+  let ts_now () = Int64.of_float (Unix.gettimeofday ()) in
+  let dedup_accept (ev : Broker_domain.Remote_broker.Events.Order_leg_filled.t) =
+    Acl_common.Stream_dedup.should_accept t.fill_dedup ~key:ev.placement_id ~ts:ev.fill_ts
+      ~value:ev
+  in
+  let sup =
+    Acl_common.Transport_supervisor.start ~env ~sw ~label:"finam fills" ~poll_interval:5.0
+      ~ts_now
+      ~poll_window:(fun ~since_ts ~to_ts -> fill_poll_window t ~since_ts ~to_ts)
+      ~ts_of_event:(fun ev ->
+        ev.Broker_domain.Remote_broker.Events.Order_leg_filled.fill_ts)
+      ~dedup_accept
+      ~emit:(finalize_and_dispatch_fill t)
+      ~initial_since_ts:(ts_now ())
+  in
+  t.fill_supervisor <- Some sup;
+  let _ : Ws_bridge.listener_id =
+    Ws_bridge.register_lifecycle bridge
+      ~on_disconnect:(fun () -> Acl_common.Transport_supervisor.ws_went_down sup)
+      ~on_reconnect:(fun () -> Acl_common.Transport_supervisor.ws_reconnected sup)
+  in
   (* Always-on personal-account trades subscription. Finam
      multiplexes it on the same socket as bars; we subscribe at
      init regardless of whether anyone has requested per-key
-     bars yet. *)
-  try Ws_bridge.subscribe_trades bridge ~account_id:t.account_id
+     bars yet. WS-success is signalled to the supervisor only
+     when subscribe_trades returns without raising. *)
+  try
+    Ws_bridge.subscribe_trades bridge ~account_id:t.account_id;
+    Acl_common.Transport_supervisor.ws_came_up sup
   with e -> Log.warn "[finam ws] subscribe_trades failed: %s" (Printexc.to_string e)
 
 let with_bridge t f =
   match t.bridge with
   | None -> Log.warn "[finam] subscribe/unsubscribe before start_live_feed — ignored"
   | Some bridge -> f bridge
+
+(** Build the per-(instrument, timeframe) bar supervisor and wire
+    it into the bridge's lifecycle-listener registry, returning
+    the supervisor + the listener id for later teardown. *)
+let make_bar_supervisor t bridge ~sw ~env ~instrument ~timeframe :
+    Candle.t Acl_common.Transport_supervisor.t * Ws_bridge.listener_id =
+  let ts_now () = Int64.of_float (Unix.gettimeofday ()) in
+  let dedup_accept (candle : Candle.t) =
+    Acl_common.Stream_dedup.should_accept t.bar_dedup ~key:(instrument, timeframe)
+      ~ts:candle.ts ~value:candle
+  in
+  let poll_window ~since_ts ~to_ts =
+    try Rest.bars ~from_ts:since_ts ~to_ts ~n:500 t.rest ~instrument ~timeframe
+    with e ->
+      Log.warn "[finam] bars poll %s/%s failed: %s"
+        (Instrument.to_qualified instrument)
+        (Timeframe.to_string timeframe)
+        (Printexc.to_string e);
+      []
+  in
+  let emit (candle : Candle.t) =
+    dispatch t
+      (Broker.Remote_bar_updated
+         {
+           Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument;
+           timeframe;
+           candle;
+         })
+  in
+  let label =
+    Printf.sprintf "finam bars %s/%s"
+      (Instrument.to_qualified instrument)
+      (Timeframe.to_string timeframe)
+  in
+  let sup =
+    Acl_common.Transport_supervisor.start ~env ~sw ~label ~poll_interval:60.0 ~ts_now
+      ~poll_window
+      ~ts_of_event:(fun (c : Candle.t) -> c.ts)
+      ~dedup_accept ~emit ~initial_since_ts:(ts_now ())
+  in
+  let listener_id =
+    Ws_bridge.register_lifecycle bridge
+      ~on_disconnect:(fun () -> Acl_common.Transport_supervisor.ws_went_down sup)
+      ~on_reconnect:(fun () -> Acl_common.Transport_supervisor.ws_reconnected sup)
+  in
+  (sup, listener_id)
 
 let subscribe t (request : Broker.request) : unit =
   match request with
@@ -280,9 +468,22 @@ let subscribe t (request : Broker.request) : unit =
       in
       if should_send_upstream then
         with_bridge t (fun bridge ->
-            try Ws_bridge.subscribe_bars bridge ~instrument ~timeframe
-            with e ->
-              Log.warn "[finam ws] subscribe_bars failed: %s" (Printexc.to_string e))
+            match t.live_feed_ctx with
+            | None ->
+                Log.warn "[finam] subscribe_bars before start_live_feed ctx — ignored"
+            | Some (sw, env) -> (
+                let sup, listener_id =
+                  make_bar_supervisor t bridge ~sw ~env ~instrument ~timeframe
+                in
+                Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+                    t.bar_supervisors <- SubMap.add key sup t.bar_supervisors;
+                    t.bar_supervisor_listeners <-
+                      (key, listener_id) :: t.bar_supervisor_listeners);
+                try
+                  Ws_bridge.subscribe_bars bridge ~instrument ~timeframe;
+                  Acl_common.Transport_supervisor.ws_came_up sup
+                with e ->
+                  Log.warn "[finam ws] subscribe_bars failed: %s" (Printexc.to_string e)))
 
 let unsubscribe t (request : Broker.request) : unit =
   match request with
@@ -301,6 +502,19 @@ let unsubscribe t (request : Broker.request) : unit =
       in
       if should_send_upstream then
         with_bridge t (fun bridge ->
+            let sup_opt, listener_opt =
+              Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+                  let sup = SubMap.find_opt key t.bar_supervisors in
+                  let listener = List.assoc_opt key t.bar_supervisor_listeners in
+                  t.bar_supervisors <- SubMap.remove key t.bar_supervisors;
+                  t.bar_supervisor_listeners <-
+                    List.filter
+                      (fun (k, _) -> SubKey.compare k key <> 0)
+                      t.bar_supervisor_listeners;
+                  (sup, listener))
+            in
+            Option.iter (Ws_bridge.unregister_lifecycle bridge) listener_opt;
+            Option.iter Acl_common.Transport_supervisor.stop sup_opt;
             try Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
             with e ->
               Log.warn "[finam ws] unsubscribe_bars failed: %s" (Printexc.to_string e))

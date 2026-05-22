@@ -67,12 +67,11 @@ type t = {
           between the WS [Trades] branch and the REST
           [Rest.get_trades] fallback branch so the same fill
           never crosses the ACL boundary twice. Keyed by
-          [placement_id]; [equal_value] compares
-          [(fill_quantity, fill_price)] because Finam's REST
-          [account_trade] DTO currently strips the wire
-          [trade_id] (a separate cleanup), so the available
-          cross-transport discriminator is the (qty, price)
-          pair. Mirrors BCS's [fill_dedup]. *)
+          [placement_id]; [equal_value] compares [trade_id]
+          since Finam exposes the per-leg id on both wire
+          paths (BCS has to compromise on a partial
+          discriminator because BCS REST has no equivalent
+          field). *)
   mutex : Eio.Mutex.t;
   mutable bridge : Ws_bridge.bridge option;
   mutable on_event : (Broker.event -> unit) option;
@@ -108,8 +107,7 @@ let make ~account_id (rest : Rest.t) : t =
   let fill_equal
       (a : Broker_domain.Remote_broker.Events.Order_leg_filled.t)
       (b : Broker_domain.Remote_broker.Events.Order_leg_filled.t) : bool =
-    Decimal.equal a.fill_quantity b.fill_quantity
-    && Decimal.equal a.fill_price b.fill_price
+    String.equal a.trade_id b.trade_id
   in
   {
     rest;
@@ -321,32 +319,23 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
 
 (** REST-side branch of the fill supervisor's [poll_window].
     Pulls [account_trade]s for [(since_ts, to_ts)] and lifts
-    each to a raw [Order_leg_filled.t]. The same UNKNOWN-
-    instrument limitation as BCS REST applies: Finam's REST
-    [account_trade] DTO doesn't surface instrument/side either,
-    so the REST-branch event carries placeholders. WS-branch
-    events carry the real ones. Dedup is keyed by [placement_id]
-    + (qty, price) so the two branches reconcile despite the
-    metadata gap. *)
+    each to a raw [Order_leg_filled.t]. All discriminators —
+    [trade_id], [instrument], [side] — come straight from the
+    Finam wire payload (per the AccountTrade proto: symbol +
+    side fields), so the REST branch produces structurally
+    identical events to the WS branch and dedup on [trade_id]
+    is exact. *)
 let order_leg_filled_of_rest_trade t (at : Dto.account_trade) :
     Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
   match placement_id_by_order_id t ~order_id:at.order_id with
   | None -> None
   | Some placement_id ->
-      let instrument =
-        Instrument.make ~ticker:(Ticker.of_string "UNKNOWN") ~venue:(Mic.of_string "MISX")
-          ()
-      in
-      let trade_id =
-        Printf.sprintf "%s:%Ld:%s" at.order_id at.trade.ts
-          (Decimal.to_string at.trade.quantity)
-      in
       Some
         {
           placement_id;
-          trade_id;
-          instrument;
-          side = Side.Buy;
+          trade_id = at.trade_id;
+          instrument = at.instrument;
+          side = at.side;
           fill_quantity = at.trade.quantity;
           fill_price = at.trade.price;
           fee = at.trade.fee;

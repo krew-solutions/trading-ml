@@ -86,21 +86,23 @@ let test_asset_drops_invalid_isin () =
     (Option.map Isin.to_string (Instrument.isin i))
 
 (** Sample [accountsTradesResponse] payload:
-    list of [v1AccountTrade] records. *)
+    list of [v1AccountTrade] records. Shape per the Finam REST
+    docs and the canonical [AccountTrade] proto (symbol + side
+    are required wire fields). *)
 let test_account_trades_parse () =
   let j =
     Yojson.Safe.from_string
       {|
     { "trades": [
-        { "trade_id": "T1", "order_id": "O1",
+        { "trade_id": "T1", "symbol": "SBER@MISX", "order_id": "O1",
           "price": {"value": "101.5"}, "size": {"value": "10"},
           "side": "SIDE_BUY",
           "timestamp": "2024-01-02T10:30:00Z" },
-        { "trade_id": "T2", "order_id": "O1",
+        { "trade_id": "T2", "symbol": "SBER@MISX", "order_id": "O1",
           "price": {"value": "101.7"}, "size": {"value": "5"},
           "side": "SIDE_BUY",
           "timestamp": "2024-01-02T10:31:00Z" },
-        { "trade_id": "T3", "order_id": "O2",
+        { "trade_id": "T3", "symbol": "GAZP@MISX", "order_id": "O2",
           "price": {"value": "99.0"}, "size": {"value": "20"},
           "side": "SIDE_SELL",
           "timestamp": "2024-01-02T10:32:00Z" }
@@ -109,13 +111,26 @@ let test_account_trades_parse () =
   let trades = Finam.Dto.account_trades_of_json j in
   Alcotest.(check int) "three trades" 3 (List.length trades);
   let (first : Finam.Dto.account_trade) = List.nth trades 0 in
+  Alcotest.(check string) "trade_id round-trips" "T1" first.trade_id;
   Alcotest.(check string) "order_id" "O1" first.order_id;
+  Alcotest.(check string)
+    "instrument ticker" "SBER"
+    (Ticker.to_string (Instrument.ticker first.instrument));
+  Alcotest.(check string)
+    "instrument venue" "MISX"
+    (Mic.to_string (Instrument.venue first.instrument));
+  Alcotest.(check bool) "side parsed as Buy" true (first.side = Side.Buy);
   Alcotest.(check (float 1e-6)) "price" 101.5 (Decimal.to_float first.trade.price);
   Alcotest.(check (float 1e-6)) "size" 10.0 (Decimal.to_float first.trade.quantity);
   Alcotest.(check bool) "ts > 0" true (Int64.compare first.trade.ts 0L > 0);
   Alcotest.(check (float 1e-6))
     "fee defaults to zero (no field in payload)" 0.0
-    (Decimal.to_float first.trade.fee)
+    (Decimal.to_float first.trade.fee);
+  let (third : Finam.Dto.account_trade) = List.nth trades 2 in
+  Alcotest.(check bool) "third trade Sell side" true (third.side = Side.Sell);
+  Alcotest.(check string)
+    "third trade ticker" "GAZP"
+    (Ticker.to_string (Instrument.ticker third.instrument))
 
 let test_account_trades_empty () =
   let j = Yojson.Safe.from_string {| { "trades": [] } |} in

@@ -136,15 +136,21 @@ single shared `dedup_accept` closure means:
 
 The discriminator the dedup uses must be **stable across both
 transports**. For bars this is trivially the candle's
-structural equality (`Candle.equal`). For fills the situation
-is messier because BCS REST `get_deals` does not surface a
-per-leg `tradeId` and Finam REST `account_trade` strips
-`trade_id` from the wire payload. Both adapters compromise by
-keying on `placement_id` and comparing values on
-`(fill_quantity, fill_price)` — the only fields both
-transports always agree on. The comment on `fill_dedup` in
-each adapter calls this out as a soft limitation; surfacing
-`trade_id` from REST is a follow-up cleanup.
+structural equality (`Candle.equal`). For fills the picture
+differs by adapter:
+
+- **Finam**: dedups on `trade_id`. The Finam REST
+  `AccountTrade` payload exposes the same per-leg id as the
+  WS `Trade.update`, so both branches produce structurally
+  identical events and the dedup is exact.
+- **BCS**: dedups on `(fill_quantity, fill_price)` at the
+  same ts under the same `placement_id`. BCS REST
+  `get_deals` does not surface a per-leg id, so the
+  cross-transport discriminator is necessarily partial. Two
+  legs with identical qty + price at identical ts on the
+  same placement could be collapsed; this is improbable
+  enough in practice to accept until BCS extends the REST
+  payload.
 
 ## Wiring under two socket models
 
@@ -237,16 +243,18 @@ broker-specific compromise into the shape of the abstraction.
 
 ## Known limitations
 
-- **REST-branch fills carry placeholder instrument / side.**
-  Both `Bcs.Rest.get_deals` and `Finam.Dto.account_trade`
-  return only `(order_num, ts, qty, price, fee)`; instrument
-  and side are not surfaced. The REST branch fills in
+- **BCS REST-branch fills carry placeholder instrument /
+  side.** `Bcs.Rest.get_deals` surfaces only `(order_num, ts,
+  qty, price)`; the REST branch fills in
   `Instrument.make "UNKNOWN" "MISX"` and `Side.Buy`. Dedup
-  keys on `(qty, price)` only, so this does not cause double
+  keys on `(qty, price)`, so this does not cause double
   emission — but if a REST-branch fill wins the race against
   the WS one, downstream sees the placeholder. The fix is to
   store the domain `Instrument.t` and `Side.t` on
   `Placement_handle_store` at submit time; deferred.
+  (Finam's REST exposes `symbol` and `side` per the
+  `AccountTrade` proto, so its REST branch carries real
+  values and this limitation does not apply.)
 - **`ws_came_up` fires after the SUBSCRIBE message, not after
   the server's ack.** If a subscription is silently rejected
   by the broker (auth scope, unknown symbol), the supervisor

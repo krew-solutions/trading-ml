@@ -277,23 +277,34 @@ let orders_of_json (j : Yojson.Safe.t) : External_order.t list =
   | `List items -> List.map order_of_json items
   | _ -> []
 
-type account_trade = { order_id : string; trade : Order.trade }
+type account_trade = {
+  trade_id : string;
+  order_id : string;
+  instrument : Instrument.t;
+  side : Side.t;
+  trade : Order.trade;
+}
 (** Per-trade record from [GET /v1/accounts/{account_id}/trades].
-    Shape (from the Finam swagger's [v1AccountTrade]):
+    Shape per the Finam REST docs
+    (tradeapi.finam.ru/docs/rest/accountsservice_trades.md) and
+    the canonical AccountTrade proto message:
     {v
-    { "trade_id": "...",
-      "order_id": "...",
-      "price": typeDecimal,
-      "size": typeDecimal,
-      "side": "SIDE_BUY" | "SIDE_SELL",
-      "timestamp": "2026-04-18T10:00:00Z" }
+    { "trade_id":   "...",
+      "symbol":     "SBER@MISX",
+      "price":      {"value": "..."},
+      "size":       {"value": "..."},
+      "side":       "SIDE_BUY" | "SIDE_SELL",
+      "timestamp":  "2026-04-18T10:00:00Z",
+      "order_id":   "...",
+      "account_id": "...",
+      "comment":    "..." }
     v}
     Finam's trade payload does not currently carry a per-trade
     fee field; we default to zero. If commission becomes needed
     for accurate reconcile P&L, fetch from the order state and
-    prorate by fill quantity. Returns the parent [order_id] so
-    the caller can filter to the trades relevant to their
-    [client_order_id]. *)
+    prorate by fill quantity. [account_id] and [comment] are
+    dropped — neither is consumed downstream and both would
+    leak Finam concerns into the broker port. *)
 
 let account_trade_of_json (j : Yojson.Safe.t) : account_trade =
   let open Yojson.Safe.Util in
@@ -309,7 +320,10 @@ let account_trade_of_json (j : Yojson.Safe.t) : account_trade =
     | _ -> 0L
   in
   {
+    trade_id = str "trade_id";
     order_id = str "order_id";
+    instrument = Instrument.of_qualified (str "symbol");
+    side = finam_side_of_wire (str "side");
     trade = { ts; quantity = dec "size"; price = dec "price"; fee = Decimal.zero };
   }
 

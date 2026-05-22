@@ -242,8 +242,8 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
               in
               dispatch t (Broker.Order_leg_filled domain_ev))
         trades
-  | Error_ev e -> Ws.Events.Error_handler.handle e
-  | Lifecycle ev -> Ws.Events.Lifecycle_handler.handle ev
+  | Error_ev e -> Log.warn "[finam ws] error %d %s: %s" e.code e.type_ e.message
+  | Lifecycle ev -> Log.info "[finam ws] %s (%d) %s" ev.event ev.code ev.reason
   | Quote _ | Other _ -> ()
 
 let start_live_feed t ~sw ~env ~on_event : unit =

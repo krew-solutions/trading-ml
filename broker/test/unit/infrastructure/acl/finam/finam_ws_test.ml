@@ -75,17 +75,20 @@ let test_decode_bars_data () =
         "venue round-trips" "MISX"
         (Mic.to_string (Instrument.venue instrument));
       Alcotest.(check bool)
-        "timeframe from subscription_key" true
-        (timeframe = Some Timeframe.M1);
+        "timeframe from subscription_key" true (timeframe = Timeframe.M1);
       Alcotest.(check int) "1 bar" 1 (List.length bars);
       let c = List.hd bars in
       Alcotest.(check (float 1e-6)) "close" 301.0 (Decimal.to_float c.Candle.close)
   | _ -> Alcotest.fail "expected Bars event"
 
-(** Fallback path: when [subscription_key] is missing or malformed,
-    the decoder still recovers the instrument from [payload.symbol]
-    but leaves [timeframe] as [None] for the caller to fill in. *)
-let test_decode_bars_without_subscription_key () =
+(** Contract drift guard: a BARS envelope without [subscription_key]
+    is not part of Finam's observed behaviour (probe 2026-05-22
+    against [api.finam.ru/ws] showed it present on 100% of frames
+    across multiple subscriptions, even when the client tries to
+    suppress or override it). If it ever appears, the decoder must
+    fail loudly rather than silently fabricate a timeframe, so the
+    breakage is caught at the ACL boundary. *)
+let test_decode_bars_without_subscription_key_raises () =
   let j =
     Yojson.Safe.from_string
       {|
@@ -94,13 +97,11 @@ let test_decode_bars_without_subscription_key () =
       "payload": "{\"symbol\":\"GAZP@MISX\",\"bars\":[]}" }
   |}
   in
-  match Finam.Ws.event_of_json j with
-  | Bars { instrument; timeframe; bars = _ } ->
-      Alcotest.(check string)
-        "ticker recovered from payload" "GAZP"
-        (Ticker.to_string (Instrument.ticker instrument));
-      Alcotest.(check bool) "timeframe None without sub-key" true (timeframe = None)
-  | _ -> Alcotest.fail "expected Bars event"
+  Alcotest.check_raises "missing subscription_key must raise"
+    (Invalid_argument
+       "Finam BARS: envelope missing subscription_key (spec allows it, but Finam \
+        empirically always emits it — investigate broker-side contract drift)") (fun () ->
+      ignore (Finam.Ws.event_of_json j))
 
 (** Spec-compliant form (asyncapi [SubscribeBarsResponse]): [payload]
     is a plain object and each bar's OHLCV fields are plain Decimal
@@ -130,7 +131,7 @@ let test_decode_bars_spec_format () =
       Alcotest.(check string)
         "ticker" "SBER"
         (Ticker.to_string (Instrument.ticker instrument));
-      Alcotest.(check bool) "timeframe M5" true (timeframe = Some Timeframe.M5);
+      Alcotest.(check bool) "timeframe M5" true (timeframe = Timeframe.M5);
       Alcotest.(check int) "1 bar" 1 (List.length bars);
       let c = List.hd bars in
       Alcotest.(check (float 1e-6)) "close" 301.0 (Decimal.to_float c.Candle.close);
@@ -258,7 +259,9 @@ let tests =
     ("subscribe QUOTES envelope", `Quick, test_subscribe_quotes_envelope);
     ("subscribe ACCOUNT envelope", `Quick, test_subscribe_account_envelope);
     ("decode BARS data (sub-key + wrapped)", `Quick, test_decode_bars_data);
-    ("decode BARS without sub-key", `Quick, test_decode_bars_without_subscription_key);
+    ( "decode BARS without sub-key must raise",
+      `Quick,
+      test_decode_bars_without_subscription_key_raises );
     ("decode BARS spec format", `Quick, test_decode_bars_spec_format);
     ("decode ERROR event", `Quick, test_decode_error);
     ("decode EVENT lifecycle", `Quick, test_decode_lifecycle);

@@ -45,3 +45,17 @@ let parse (j : Yojson.Safe.t) : update list =
   match member "trades" payload with
   | `List items -> List.filter_map parse_one items
   | _ -> []
+
+let to_domain ~(placement_id : int) ~(new_total_filled : Decimal.t) (tu : update) :
+    Broker_domain.Remote_broker.Events.Order_leg_filled.t =
+  {
+    placement_id;
+    trade_id = tu.trade_id;
+    instrument = tu.instrument;
+    side = tu.side;
+    fill_quantity = tu.quantity;
+    fill_price = tu.price;
+    fee = Decimal.zero;
+    fill_ts = tu.ts;
+    new_total_filled;
+  }

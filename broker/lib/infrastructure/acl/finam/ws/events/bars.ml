@@ -1,15 +1,11 @@
 open Core
 
-type t = {
-  instrument : Instrument.t;
-  timeframe : Timeframe.t option;
-  bars : Candle.t list;
-}
+type t = { instrument : Instrument.t; timeframe : Timeframe.t; bars : Candle.t list }
 
 (* [subscription_key] = "<TICKER>@<MIC>:<TIMEFRAME>", e.g.
-   "SBER@MISX:TIME_FRAME_M1". Extract instrument + timeframe so
-   downstream dispatch is exact (no fallback to "current
-   bridge subscription"). *)
+   "SBER@MISX:TIME_FRAME_M1". Server-synthesised by Finam; verified
+   live on 2026-05-22 — present on every BARS DATA, ignored if a
+   client tries to set it in SUBSCRIBE. *)
 let parse_subscription_key (k : string) : (Instrument.t * Timeframe.t) option =
   match String.index_opt k ':' with
   | None -> None
@@ -36,22 +32,31 @@ let parse_subscription_key (k : string) : (Instrument.t * Timeframe.t) option =
 
 let parse (j : Yojson.Safe.t) : t =
   let open Yojson.Safe.Util in
-  let sub_key =
+  let instrument, timeframe =
     match member "subscription_key" j with
-    | `String s -> parse_subscription_key s
-    | _ -> None
+    | `String s -> (
+        match parse_subscription_key s with
+        | Some pair -> pair
+        | None -> invalid_arg ("Finam BARS: unparseable subscription_key " ^ s))
+    | _ ->
+        invalid_arg
+          "Finam BARS: envelope missing subscription_key (spec allows it, but Finam \
+           empirically always emits it — investigate broker-side contract drift)"
   in
   let payload = Payload.unwrap (member "payload" j) in
-  let instrument, timeframe =
-    match sub_key with
-    | Some (i, tf) -> (i, Some tf)
-    | None ->
-        let i = Instrument.of_qualified (member "symbol" payload |> to_string) in
-        (i, None)
-  in
   let bars =
     match member "bars" payload with
     | `List items -> List.map Dto.candle_of_json items
     | _ -> []
   in
   { instrument; timeframe; bars }
+
+let to_domain (t : t) : Broker_domain.Remote_broker.Events.Remote_bar_updated.t list =
+  List.map
+    (fun (candle : Candle.t) ->
+      {
+        Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument = t.instrument;
+        timeframe = t.timeframe;
+        candle;
+      })
+    t.bars

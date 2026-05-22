@@ -4,9 +4,10 @@
 ; regressions. The test binaries themselves skip cleanly when
 ; credentials are absent from the environment.
 
-(executable
- (name live_smoke_runner)
+(executables
+ (names live_smoke_runner finam_ws_subscription_key_probe)
  (libraries core broker_domain decimal finam bcs broker http_transport
+            websocket
             eio eio_main mirage-crypto-rng.unix
             str alcotest)
  (flags (:standard -open Broker_domain)))

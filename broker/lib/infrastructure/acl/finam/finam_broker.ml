@@ -201,12 +201,6 @@ let get_executions t ~placement_id : Execution_view_model.t list =
           if at.order_id = order_id then Some (Execution_view_model.of_domain at.trade)
           else None)
 
-let timeframes_for_instrument t instrument : Timeframe.t list =
-  Eio.Mutex.use_ro t.mutex (fun () ->
-      SubMap.fold
-        (fun (i, tf) _ acc -> if Instrument.equal i instrument then tf :: acc else acc)
-        t.bar_refcount [])
-
 let dispatch t (event : Broker.event) : unit =
   match t.on_event with
   | Some f -> (
@@ -215,37 +209,22 @@ let dispatch t (event : Broker.event) : unit =
   | None -> ()
 
 (** Translate a parsed [Ws.event] into zero or more {!Broker.event}s
-    and hand each to the registered [on_event] callback. Bars are
-    fanned out across configured timeframes (when the wire payload
-    lacks the timeframe — Finam's gRPC bridge sometimes drops it).
-    Trades are resolved to their owning placement here; fills
-    against unknown orders are dropped with a warn. *)
+    and hand each to the registered [on_event] callback. Bars carry
+    their own (instrument, timeframe) — Finam's BARS envelope sets
+    [subscription_key = "<sym>:<tf>"] server-side on every frame
+    (verified live 2026-05-22), so the ACL parser resolves both
+    fields and we route exactly. Trades are resolved to their owning
+    placement here; fills against unknown orders are dropped with a
+    warn. *)
 let dispatch_ws_event t (ev : Ws.event) : unit =
   match ev with
   | Bars b ->
-      let tfs : Timeframe.t list =
-        match b.timeframe with
-        | Some tf -> [ tf ]
-        | None -> timeframes_for_instrument t b.instrument
-      in
-      List.iter
-        (fun (tf : Timeframe.t) ->
-          List.iter
-            (fun (candle : Candle.t) ->
-              if
-                Acl_common.Stream_dedup.should_accept t.bar_dedup ~key:(b.instrument, tf)
-                  ~ts:candle.ts ~value:candle
-              then
-                dispatch t
-                  (Broker.Remote_bar_updated
-                     {
-                       Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument =
-                         b.instrument;
-                       timeframe = tf;
-                       candle;
-                     }))
-            b.bars)
-        tfs
+      Ws.Events.Bars.to_domain b
+      |> List.iter (fun (ev : Broker_domain.Remote_broker.Events.Remote_bar_updated.t) ->
+          if
+            Acl_common.Stream_dedup.should_accept t.bar_dedup
+              ~key:(ev.instrument, ev.timeframe) ~ts:ev.candle.ts ~value:ev.candle
+          then dispatch t (Broker.Remote_bar_updated ev))
   | Trades trades ->
       List.iter
         (fun (tu : Ws.Events.Trade.update) ->
@@ -253,23 +232,13 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
           | None ->
               Log.warn "[finam ws] trade for unknown order_id=%s — skipping" tu.order_id
           | Some placement_id ->
-              let new_total =
+              let new_total_filled =
                 Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
                     Acl_common.Cumulative_sum.bump t.total_filled ~key:placement_id
                       ~delta:tu.quantity)
               in
-              let domain_ev : Broker_domain.Remote_broker.Events.Order_leg_filled.t =
-                {
-                  placement_id;
-                  trade_id = tu.trade_id;
-                  instrument = tu.instrument;
-                  side = tu.side;
-                  fill_quantity = tu.quantity;
-                  fill_price = tu.price;
-                  fee = Decimal.zero;
-                  fill_ts = tu.ts;
-                  new_total_filled = new_total;
-                }
+              let domain_ev =
+                Ws.Events.Trade.to_domain ~placement_id ~new_total_filled tu
               in
               dispatch t (Broker.Order_leg_filled domain_ev))
         trades

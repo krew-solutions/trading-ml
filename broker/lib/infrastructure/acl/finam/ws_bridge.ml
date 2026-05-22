@@ -129,12 +129,6 @@ let unsubscribe_bars (t : bridge) ~instrument ~timeframe : unit =
       end
   | None -> ()
 
-let timeframes_for_instrument (t : bridge) instrument : Timeframe.t list =
-  Eio.Mutex.use_ro t.mutex (fun () ->
-      SubMap.fold
-        (fun (i, tf) _ acc -> if Instrument.equal i instrument then tf :: acc else acc)
-        t.bar_subs [])
-
 let subscribe_trades (t : bridge) ~(account_id : string) : unit =
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
       ignore (ensure_conn t);

@@ -237,9 +237,12 @@ the asymmetry: a brokerage covers one or more venues; the BC is
 *not* a venue itself. Adapters: Finam REST + WS, BCS
 REST + WS, Synthetic (deterministic random walk for demos and
 backtest). The WS bridges fan inbound bars into
-`broker.bar-updated`. Order matching against the bar stream is
-not this BC's responsibility; see `paper_broker` below for the
-simulated-execution side.
+`broker.bar-updated`; bars and fills run through a per-stream
+[transport supervisor](transport-supervisor.md) so a WS
+disconnect transparently engages REST polling and reconnect
+runs a synchronous catch-up. Order matching against the bar
+stream is not this BC's responsibility; see `paper_broker`
+below for the simulated-execution side.
 
 **Inbound** ← `broker.submit-order-command` (saga-driven,
 ADR 0011 §7) — gated off in paper deployments where the

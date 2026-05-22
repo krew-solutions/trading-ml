@@ -199,5 +199,8 @@ build would fail.
 - [Reservations](reservations.md) — how intents become ledger
   entries.
 - [Live engine](live-engine.md) — the orchestration layer.
+- [Transport supervisor](transport-supervisor.md) — how broker
+  ACL adapters keep `Broker.event` flowing across WS
+  disconnects by falling back to REST polling transparently.
 - [Hexagonal ADR](../adr/0001-hexagonal-architecture.md) — why
   this layering over alternatives.

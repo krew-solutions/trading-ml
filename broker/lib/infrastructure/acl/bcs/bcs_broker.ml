@@ -337,23 +337,34 @@ let subscribe t (request : Broker.request) : unit =
       in
       if should_open then
         with_bridge t (fun bridge ->
+            let dedup_accept (candle : Candle.t) =
+              Acl_common.Stream_dedup.should_accept t.bar_dedup
+                ~key:(instrument, timeframe) ~ts:candle.ts ~value:candle
+            in
+            let poll_window ~since_ts:_ ~to_ts:_ =
+              try Rest.bars t.rest ~n:20 ~instrument ~timeframe
+              with e ->
+                Log.warn "[bcs] bars poll %s/%s failed: %s"
+                  (Instrument.to_qualified instrument)
+                  (Timeframe.to_string timeframe)
+                  (Printexc.to_string e);
+                []
+            in
             let on_candle
                 (instrument : Instrument.t)
                 (timeframe : Timeframe.t)
                 (candle : Candle.t) =
-              if
-                Acl_common.Stream_dedup.should_accept t.bar_dedup
-                  ~key:(instrument, timeframe) ~ts:candle.ts ~value:candle
-              then
-                dispatch t
-                  (Broker.Remote_bar_updated
-                     {
-                       Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument;
-                       timeframe;
-                       candle;
-                     })
+              dispatch t
+                (Broker.Remote_bar_updated
+                   {
+                     Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument;
+                     timeframe;
+                     candle;
+                   })
             in
-            try Ws_bridge.subscribe_bars bridge ~instrument ~timeframe ~on_candle
+            try
+              Ws_bridge.subscribe_bars bridge ~instrument ~timeframe ~poll_window
+                ~dedup_accept ~on_candle
             with e ->
               Log.warn "[bcs ws] subscribe_bars failed: %s" (Printexc.to_string e))
 

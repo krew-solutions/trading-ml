@@ -8,6 +8,7 @@ type 'event t = {
   state_mutex : Eio.Mutex.t;
   mutable poll_active : bool;
   mutable last_ts : int64;
+  mutable stopped : bool;
 }
 
 (** Funnel one event through dedup and (on accept) advance the
@@ -15,7 +16,7 @@ type 'event t = {
     The cursor update + emit happen under the state mutex so a
     concurrent ws_reconnected catch-up sees a coherent [last_ts]. *)
 let absorb (t : _ t) (ev : _) : unit =
-  if t.dedup_accept ev then begin
+  if (not t.stopped) && t.dedup_accept ev then begin
     let ts = t.ts_of_event ev in
     Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () ->
         if Int64.compare ts t.last_ts > 0 then t.last_ts <- ts);
@@ -37,26 +38,39 @@ let run_poll_window (t : _ t) ~since_ts ~to_ts : unit =
   List.iter (absorb t) events
 
 let ws_came_up (t : _ t) : unit =
-  Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () ->
-      if t.poll_active then begin
-        Log.info "[%s] supervisor: ws healthy, poll dormant" t.label;
-        t.poll_active <- false
-      end)
+  if t.stopped then ()
+  else
+    Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () ->
+        if t.poll_active then begin
+          Log.info "[%s] supervisor: ws healthy, poll dormant" t.label;
+          t.poll_active <- false
+        end)
 
 let ws_went_down (t : _ t) : unit =
-  Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () ->
-      if not t.poll_active then begin
-        Log.warn "[%s] supervisor: ws down, poll active" t.label;
-        t.poll_active <- true
-      end)
+  if t.stopped then ()
+  else
+    Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () ->
+        if not t.poll_active then begin
+          Log.warn "[%s] supervisor: ws down, poll active" t.label;
+          t.poll_active <- true
+        end)
 
 let ws_reconnected (t : _ t) : unit =
-  let since_ts = Eio.Mutex.use_ro t.state_mutex (fun () -> t.last_ts) in
-  let to_ts = t.ts_now () in
-  Log.info "[%s] supervisor: ws reconnected, catch-up poll [%Ld..%Ld]" t.label since_ts
-    to_ts;
-  run_poll_window t ~since_ts ~to_ts;
-  Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () -> t.poll_active <- false)
+  if t.stopped then ()
+  else begin
+    let since_ts = Eio.Mutex.use_ro t.state_mutex (fun () -> t.last_ts) in
+    let to_ts = t.ts_now () in
+    Log.info "[%s] supervisor: ws reconnected, catch-up poll [%Ld..%Ld]" t.label since_ts
+      to_ts;
+    run_poll_window t ~since_ts ~to_ts;
+    Eio.Mutex.use_rw ~protect:true t.state_mutex (fun () -> t.poll_active <- false)
+  end
+
+let stop (t : _ t) : unit =
+  if not t.stopped then begin
+    Log.info "[%s] supervisor: stopping" t.label;
+    t.stopped <- true
+  end
 
 let start
     ~env
@@ -80,15 +94,19 @@ let start
       state_mutex = Eio.Mutex.create ();
       poll_active = true;
       last_ts = initial_since_ts;
+      stopped = false;
     }
   in
   let clock = Eio.Stdenv.clock env in
   Eio.Fiber.fork ~sw (fun () ->
-      while true do
+      while not t.stopped do
         Eio.Time.sleep clock poll_interval;
-        let active, since_ts =
-          Eio.Mutex.use_ro t.state_mutex (fun () -> (t.poll_active, t.last_ts))
-        in
-        if active then run_poll_window t ~since_ts ~to_ts:(t.ts_now ())
+        if t.stopped then ()
+        else begin
+          let active, since_ts =
+            Eio.Mutex.use_ro t.state_mutex (fun () -> (t.poll_active, t.last_ts))
+          in
+          if active then run_poll_window t ~since_ts ~to_ts:(t.ts_now ())
+        end
       done);
   t

@@ -105,3 +105,16 @@ val ws_reconnected : 'event t -> unit
     one synchronous catch-up poll over [(last_ts, now)], then
     flips poll dormant. Wire from
     {!Websocket.Resilient.config.on_reconnect}. *)
+
+val stop : 'event t -> unit
+(** Halt the supervisor. The poll fiber exits on its next
+    wake-up; subsequent {!feed_ws} / {!ws_came_up} /
+    {!ws_went_down} / {!ws_reconnected} calls are no-ops.
+    Idempotent.
+
+    Use case: per-subscription supervisors (e.g. BCS bars,
+    where one supervisor is created per [(instrument,
+    timeframe)] pair) need a tear-down hook when the
+    subscription is dropped. Account-wide supervisors (e.g.
+    BCS execution-status) are bound to the parent switch and
+    rarely need explicit stopping. *)

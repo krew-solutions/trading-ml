@@ -97,11 +97,13 @@ Credentials may come from the `--secret` / `--account` flags or
 from per-broker env vars (`<BROKER>_SECRET` / `<BROKER>_ACCOUNT_ID`).
 `--broker synthetic` ignores credentials.
 
-Live brokers also attach a WebSocket bridge — `/api/stream` SSE
-subscribers are multiplexed onto an upstream WS subscription, so UI
-updates arrive instantly rather than on the polling cadence.
-Synthetic has no WS path; its random-walk adapter wobbles the
-trailing bar on each poll and the SSE stream emits the diff.
+Live brokers also attach a WebSocket bridge that publishes every
+candle on the `broker.bar-updated` bus topic; `/api/stream` SSE
+subscribers consume the same topic, so UI updates arrive without
+any UI-driven polling. Synthetic has no WS path — its random-walk
+adapter wobbles the trailing bar each time `/api/candles` is
+queried, and a watchlist entry in the trading config is required
+to keep its feed live without a chart open.
 
 ## Run the UI
 
@@ -315,7 +317,8 @@ A fake broker adapter at `lib/infrastructure/acl/synthetic/` — used
 whenever you start the server without a real broker. Implements
 `Broker.S` by running a deterministic random walk
 (`Generator.generate`) and wobbling the trailing bar on each `bars`
-call so the polling stream emits visible intrabar updates.
+call, so successive `/api/candles` snapshots show visible intrabar
+movement.
 
     let syn = Synthetic.Synthetic_broker.make () in
     let client = Synthetic.Synthetic_broker.as_broker syn in

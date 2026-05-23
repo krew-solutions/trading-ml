@@ -1,0 +1,59 @@
+(library
+ (name server_external_integration_events)
+ (public_name trading.server.acl.external_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  atdgen-runtime
+  server_external_view_models
+  core
+  log)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Server_external_view_models)))
+
+; Regenerated from the producer's .atd (broker BC) — same source
+; of truth as the outbound emitter, byte-for-byte wire shape match.
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/bar_updated_integration_event.atd))
+ (targets bar_updated_integration_event_t.ml bar_updated_integration_event_t.mli
+          bar_updated_integration_event_j.ml bar_updated_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o bar_updated_integration_event %{atd})
+   (run atdgen -j -o bar_updated_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_accepted_integration_event.atd))
+ (targets order_accepted_integration_event_t.ml order_accepted_integration_event_t.mli
+          order_accepted_integration_event_j.ml order_accepted_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_accepted_integration_event %{atd})
+   (run atdgen -j -o order_accepted_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_rejected_integration_event.atd))
+ (targets order_rejected_integration_event_t.ml order_rejected_integration_event_t.mli
+          order_rejected_integration_event_j.ml order_rejected_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_rejected_integration_event %{atd})
+   (run atdgen -j -o order_rejected_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/order_unreachable_integration_event.atd))
+ (targets order_unreachable_integration_event_t.ml order_unreachable_integration_event_t.mli
+          order_unreachable_integration_event_j.ml order_unreachable_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o order_unreachable_integration_event %{atd})
+   (run atdgen -j -o order_unreachable_integration_event %{atd}))))

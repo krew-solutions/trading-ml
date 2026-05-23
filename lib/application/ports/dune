@@ -1,0 +1,4 @@
+(library
+ (name server_application_ports)
+ (public_name trading.server.application.ports)
+ (libraries core))

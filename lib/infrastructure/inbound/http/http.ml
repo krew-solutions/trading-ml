@@ -202,40 +202,22 @@ let handler ~broker ~bc_handlers ~registry _conn request body =
   | `Response _ -> Log.info "%s %s → %d (%.1fms)" meth_str line status dt_ms);
   action
 
-type live_setup = {
-  on_first : Stream.lifecycle_hook;
-  on_last : Stream.lifecycle_hook;
-  bind : Stream.t -> unit;
-}
-(** Live-data wiring extension point. The caller (e.g. {!Bin.Main})
-    decides whether to attach a WS upstream: it gets the [sw] for
-    spawning fibers, returns lifecycle hooks for [Stream.create], and
-    receives the freshly-built [Stream.t] via [bind] to wire the
-    inbound event flow back into [push_from_upstream]. *)
-
-let no_live_setup : live_setup =
-  {
-    on_first = (fun ~instrument:_ ~timeframe:_ -> ());
-    on_last = (fun ~instrument:_ ~timeframe:_ -> ());
-    bind = (fun _ -> ());
-  }
+module Bar_subscription = Server_application_ports.Bar_subscription
 
 let run
-    ?(setup = fun ~sw:_ -> no_live_setup)
+    ?(bar_subscription = Bar_subscription.noop)
     ?(bc_handlers = [])
     ~sw
     ~env
     ~port
+    ~bus
     ~broker
     ~(register_publisher : Stream.t -> unit)
     () =
-  let s = setup ~sw in
-  let fetch ~instrument ~n ~timeframe = fetch_candles broker ~instrument ~n ~timeframe in
   let registry =
-    Stream.create ~on_first_subscriber:s.on_first ~on_last_unsubscriber:s.on_last ~env ~sw
-      ~fetch ()
+    Stream.create ~on_first_subscriber:bar_subscription.watch
+      ~on_last_unsubscriber:bar_subscription.unwatch ~bus ()
   in
-  s.bind registry;
   register_publisher registry;
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw (Eio.Stdenv.net env)

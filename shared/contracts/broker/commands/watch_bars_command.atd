@@ -1,0 +1,19 @@
+(* Wire contract: broker/lib/application/commands/watch_bars_command.ml
+
+   Async, fire-and-forget. The sender expresses "I am interested
+   in this (instrument, timeframe) bar feed; keep it open while
+   I (or any other caller) say so." The broker BC's handler
+   forwards the request to {!Broker.S.subscribe}, whose refcount
+   merges callers at the adapter — many concurrent watchers on
+   the same key share one upstream feed. There is no correlation
+   id and no response IE: the only observable effect is bars
+   appearing on [broker.bar-updated] for the key while interest
+   is held; loss of a single command produces a silent gap that
+   the sender is expected to recover by re-watching on its own
+   schedule (today: on every fresh SSE subscription). *)
+
+type t = {
+  symbol <doc text="Qualified instrument: TICKER@MIC[/BOARD] — Core.Instrument.of_qualified round-trips it."> : string;
+
+  timeframe <doc text="Bar timeframe code understood by Core.Timeframe.of_string ('M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'D1', etc.)."> : string;
+}

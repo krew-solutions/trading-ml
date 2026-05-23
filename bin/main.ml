@@ -204,7 +204,9 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
         | _ -> ())
   in
   let opened = Broker_factory.Factory.Opened.open_synthetic () in
-  let broker = Broker_factory.Factory.build ~bus ~env ~now ~opened ~paper_mode:true in
+  let broker =
+    Broker_factory.Factory.build ~bus ~env ~sw ~now ~opened ~paper_mode:true ~watchlist:[]
+  in
   let _paper_broker =
     Paper_broker_factory.Factory.build ~bus ~now
       ~slippage_bps:Paper_broker.Slippage.Values.Slippage_bps.zero
@@ -637,38 +639,37 @@ let cmd_serve args =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
         t_of_yojson (Yojson.Safe.from_string s))
   in
-  let broker = Broker_factory.Factory.build ~bus ~env ~now ~opened ~paper_mode in
-  (* Open watchlist subscriptions. Headless mode: the operator
-     declares the set of (instrument, timeframe) feeds the host
-     needs; we forward each to [Broker.subscribe] right after
-     [start_live_feed] (issued inside [Broker_factory.Factory.build]).
-     The broker adapter's internal refcount means HTTP / SSE clients
-     can later subscribe to the same key without conflict; unsubscribe
-     decrements the count but never reaches zero while the watchlist
-     entry is still in play. *)
+  (* Parse the operator-declared watchlist from config strings into
+     domain types here at the composition root; the broker factory
+     consumes already-typed (instrument, timeframe) pairs and is the
+     one that calls Broker.subscribe. Unparseable entries are warned
+     and dropped — a typo must not block the host from starting. *)
   let watchlist_bars =
-    match cfg.watchlist with
-    | Some { bars = Some xs } -> xs
-    | _ -> []
+    let raw =
+      match cfg.watchlist with
+      | Some { bars = Some xs } -> xs
+      | _ -> []
+    in
+    List.filter_map
+      (fun (b : Trading_config.bar_subscription) ->
+        match
+          ( (try Some (Instrument.of_qualified b.symbol) with _ -> None),
+            try Some (Timeframe.of_string b.timeframe) with _ -> None )
+        with
+        | None, _ ->
+            Log.warn "watchlist: unparseable symbol %S — skipping" b.symbol;
+            None
+        | _, None ->
+            Log.warn "watchlist: unknown timeframe %S for %s — skipping" b.timeframe
+              b.symbol;
+            None
+        | Some instrument, Some timeframe -> Some (instrument, timeframe))
+      raw
   in
-  List.iter
-    (fun (b : Trading_config.bar_subscription) ->
-      match
-        ( (try Some (Instrument.of_qualified b.symbol) with _ -> None),
-          try Some (Timeframe.of_string b.timeframe) with _ -> None )
-      with
-      | None, _ -> Log.warn "watchlist: unparseable symbol %S — skipping" b.symbol
-      | _, None ->
-          Log.warn "watchlist: unknown timeframe %S for %s — skipping" b.timeframe
-            b.symbol
-      | Some instrument, Some timeframe -> (
-          try
-            Broker.subscribe broker.client (Subscribe_bars { instrument; timeframe });
-            Log.info "watchlist: subscribed %s/%s" b.symbol b.timeframe
-          with e ->
-            Log.warn "watchlist: %s/%s failed: %s" b.symbol b.timeframe
-              (Printexc.to_string e)))
-    watchlist_bars;
+  let broker =
+    Broker_factory.Factory.build ~bus ~env ~sw ~now ~opened ~paper_mode
+      ~watchlist:watchlist_bars
+  in
   let _paper_broker =
     if paper_mode then
       Some
@@ -751,27 +752,41 @@ let cmd_serve args =
       Bus.subscribe
         (consumer ~uri:"in-memory://broker.order-accepted" ~group:"sse-publisher"
            ~t_of_yojson:
-             Broker_integration_events.Order_accepted_integration_event.t_of_yojson)
+             Server_external_integration_events.Order_accepted_integration_event
+             .t_of_yojson)
         (Server.Publish_order_events.handle_order_accepted ~registry)
     in
     let _ : Bus.subscription =
       Bus.subscribe
         (consumer ~uri:"in-memory://broker.order-rejected" ~group:"sse-publisher"
            ~t_of_yojson:
-             Broker_integration_events.Order_rejected_integration_event.t_of_yojson)
+             Server_external_integration_events.Order_rejected_integration_event
+             .t_of_yojson)
         (Server.Publish_order_events.handle_order_rejected ~registry)
     in
     let _ : Bus.subscription =
       Bus.subscribe
         (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"sse-publisher"
            ~t_of_yojson:
-             Broker_integration_events.Order_unreachable_integration_event.t_of_yojson)
+             Server_external_integration_events.Order_unreachable_integration_event
+             .t_of_yojson)
         (Server.Publish_order_events.handle_order_unreachable ~registry)
     in
     ()
   in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name broker.client);
-  Server.Http.run ?setup:broker.ws_setup ~bc_handlers ~sw ~env ~port ~broker:broker.client
+  (* Bar-subscription port: SSE clients arriving / leaving
+     publish [Watch_bars_command] / [Unwatch_bars_command] on
+     the bus; the broker BC subscribes to those topics and
+     forwards them to its refcounted port. No direct call from
+     ./lib into broker BC. *)
+  let bar_subscription : Server_application_ports.Bar_subscription.t =
+    {
+      watch = Server_external_commands.Watch_bars_command_sender.make ~bus;
+      unwatch = Server_external_commands.Unwatch_bars_command_sender.make ~bus;
+    }
+  in
+  Server.Http.run ~bar_subscription ~bc_handlers ~sw ~env ~port ~bus ~broker:broker.client
     ~register_publisher ()
 
 let cmd_backtest args =

@@ -15,6 +15,9 @@
             account_commands account_integration_events
             account_inbound_http broker_inbound_http
             broker_commands broker_integration_events
+            server_application_ports
+            server_external_commands
+            server_external_integration_events
             strategy_external_integration_events strategy_external_view_models
             bus in_memory
             logistic_regression triple_barrier

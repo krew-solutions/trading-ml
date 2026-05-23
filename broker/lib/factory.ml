@@ -100,11 +100,10 @@ end
 type t = {
   client : Broker.client;
   market_price : instrument:Instrument.t -> Decimal.t;
-  ws_setup : (sw:Eio.Switch.t -> Server.Http.live_setup) option;
   http_handler : Inbound_http.Route.handler;
 }
 
-let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
+let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
   let client = Opened.client opened in
   let now_ts : unit -> int64 = now in
   let market_price ~instrument =
@@ -233,61 +232,85 @@ let build ~bus ~env ~now ~(opened : Opened.t) ~paper_mode : t =
          now_ts )
      in
      ());
+  (* Bar-subscription commands. These are always wired — paper_mode
+     gates only the order-routing subscriptions; bar feeds flow
+     through this BC unconditionally (paper consumes the same
+     [broker.bar-updated] topic for its fill simulation). *)
+  let consume_command (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) :
+      a Bus.consumer =
+    Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
+        t_of_yojson (Yojson.Safe.from_string s))
+  in
+  let dispatch_watch_bars (cmd : Broker_commands.Watch_bars_command.t) =
+    match Broker_commands.Watch_bars_command_workflow.execute ~broker:client cmd with
+    | Ok () | Error _ -> ()
+  in
+  let dispatch_unwatch_bars (cmd : Broker_commands.Unwatch_bars_command.t) =
+    match Broker_commands.Unwatch_bars_command_workflow.execute ~broker:client cmd with
+    | Ok () | Error _ -> ()
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume_command ~uri:"in-memory://broker.watch-bars-command"
+         ~group:"broker-bar-subscription"
+         ~t_of_yojson:Broker_commands.Watch_bars_command.t_of_yojson)
+      dispatch_watch_bars
+  in
+  let _ : Bus.subscription =
+    Bus.subscribe
+      (consume_command ~uri:"in-memory://broker.unwatch-bars-command"
+         ~group:"broker-bar-subscription"
+         ~t_of_yojson:Broker_commands.Unwatch_bars_command.t_of_yojson)
+      dispatch_unwatch_bars
+  in
   let origin_correlation_id ~placement_id =
     let module CL = (val command_log_module) in
     CL.origin_correlation_id command_log ~placement_id
   in
-  (* Construct [Server.Http.live_setup] for live adapters; the
-     setup closure spawns the adapter's WS / poll machinery on
-     the server's switch and exposes per-key lifecycle hooks
-     [on_first] / [on_last] for SSE-driven subscriptions.
+  (* Spin up the live adapter's WS / poll machinery for Finam /
+     BCS on the host switch. Synthetic has no live feed.
 
-     [on_event] is the single seam through which all events
-     flow from adapter to application. Bars route to the OHS
-     publisher (monotonicity + intra-bar dedup → bus) and to
-     the SSE Stream registry (UI live ticks). [Order_filled]
-     events get correlation-id stamping, cumulative-fill
-     accumulation, and IE construction here, then publish on
+     [on_event] is the single seam through which all events flow
+     from adapter to application. Bars route to the OHS publisher
+     (the bus is the sole live-bar surface — SSE, strategy, paper,
+     etc. all consume from there). [Order_filled] events get
+     correlation-id stamping, cumulative-fill accumulation, and IE
+     construction here, then publish on
      [broker.order-leg-filled]. *)
-  let ws_setup =
-    match opened with
-    | Opened.Synthetic _ -> None
-    | Opened.Finam _ | Opened.Bcs _ ->
-        Some
-          (fun ~sw ->
-            let registry_ref : Server.Stream.t option ref = ref None in
-            let on_event (event : Broker.event) =
-              match event with
-              | Remote_bar_updated ev -> (
-                  Broker_domain_event_handlers.Publish_integration_event_on_bar_updated
-                  .handle ~publish_bar_updated ev;
-                  match !registry_ref with
-                  | Some r ->
-                      Server.Stream.push_from_upstream r ~instrument:ev.instrument
-                        ~timeframe:ev.timeframe ev.candle
-                  | None -> ())
-              | Order_leg_filled domain_ev ->
-                  Broker_domain_event_handlers
-                  .Publish_integration_event_on_order_leg_filled
-                  .handle ~publish_order_leg_filled:publish_order_filled
-                    ~origin_correlation_id domain_ev
-            in
-            Broker.start_live_feed client ~sw ~env ~on_event;
-            Server.Http.
-              {
-                on_first =
-                  (fun ~instrument ~timeframe ->
-                    try Broker.subscribe client (Subscribe_bars { instrument; timeframe })
-                    with e ->
-                      Log.warn "[broker] subscribe failed: %s" (Printexc.to_string e));
-                on_last =
-                  (fun ~instrument ~timeframe ->
-                    try
-                      Broker.unsubscribe client (Subscribe_bars { instrument; timeframe })
-                    with e ->
-                      Log.warn "[broker] unsubscribe failed: %s" (Printexc.to_string e));
-                bind = (fun r -> registry_ref := Some r);
-              })
-  in
+  (match opened with
+  | Opened.Synthetic _ -> ()
+  | Opened.Finam _ | Opened.Bcs _ ->
+      let on_event (event : Broker.event) =
+        match event with
+        | Remote_bar_updated ev ->
+            Broker_domain_event_handlers.Publish_integration_event_on_bar_updated.handle
+              ~publish_bar_updated ev
+        | Order_leg_filled domain_ev ->
+            Broker_domain_event_handlers.Publish_integration_event_on_order_leg_filled
+            .handle ~publish_order_leg_filled:publish_order_filled ~origin_correlation_id
+              domain_ev
+      in
+      Broker.start_live_feed client ~sw ~env ~on_event);
+  (* Apply the operator-declared watchlist: each entry opens an
+     always-on bar subscription on the upstream adapter. The
+     adapter's per-key refcount means a later SSE subscriber
+     declaring interest in the same key coexists with the
+     watchlist; only when both release does the upstream feed
+     close. Errors per-entry are warned and skipped rather than
+     fatal — a typo in one symbol must not block the host
+     from starting. *)
+  List.iter
+    (fun (instrument, timeframe) ->
+      try
+        Broker.subscribe client (Subscribe_bars { instrument; timeframe });
+        Log.info "watchlist: subscribed %s/%s"
+          (Instrument.to_qualified instrument)
+          (Timeframe.to_string timeframe)
+      with e ->
+        Log.warn "watchlist: %s/%s failed: %s"
+          (Instrument.to_qualified instrument)
+          (Timeframe.to_string timeframe)
+          (Printexc.to_string e))
+    watchlist;
   let http_handler = Broker_inbound_http.Http.make_handler ~broker:client in
-  { client; market_price; ws_setup; http_handler }
+  { client; market_price; http_handler }

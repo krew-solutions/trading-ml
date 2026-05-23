@@ -86,9 +86,6 @@ type t = {
       (** Closure over [Broker.bars client]; latest mark for the
           requested instrument. Account factory consumes this for
           cash-impact reference at reservation time. *)
-  ws_setup : (sw:Eio.Switch.t -> Server.Http.live_setup) option;
-      (** WS-bridge factory for live brokers. [None] for synthetic
-          (no WS upstream). Passed to {!Server.Http.run} as [?setup]. *)
   http_handler : Inbound_http.Route.handler;
       (** Broker-side HTTP routes (orders list/get/cancel,
           /api/exchanges). See {!Broker_inbound_http.Http}. *)
@@ -97,19 +94,29 @@ type t = {
 val build :
   bus:Bus.bus ->
   env:Eio_unix.Stdenv.base ->
+  sw:Eio.Switch.t ->
   now:(unit -> int64) ->
   opened:Opened.t ->
   paper_mode:bool ->
+  watchlist:(Instrument.t * Timeframe.t) list ->
   t
 (** Construct the Broker runtime.
 
     [bus] must already have an adapter registered for the
     [in-memory://] scheme used by Broker's outbound URIs
     ([broker.order-{accepted,rejected,cancelled,unreachable}],
-    [broker.bar-updated]).
+    [broker.bar-updated]) and inbound command URIs
+    ([broker.watch-bars-command], [broker.unwatch-bars-command],
+    and in non-paper mode [broker.submit-order-command],
+    [broker.cancel-pending-order-command]).
 
     [env] is used inside the WS bridges (clock, network, fiber
     spawning).
+
+    [sw] is the host switch under which the live broker's WS /
+    poll fibers (Finam multiplex socket, BCS per-key WS) are
+    spawned. Their lifetime is bound to it; cancelling [sw]
+    tears down the live feed.
 
     [now] is broker's injected clock — UnixClock in live mode,
     VirtualClock in backtest. Used today to stamp
@@ -125,4 +132,14 @@ val build :
     [paper_mode] gates the saga's submit-order and
     cancel-pending-order subscriptions symmetrically: when [true],
     paper_broker BC owns those channels and broker BC does not
-    subscribe. *)
+    subscribe. Bar-subscription commands ([Watch_bars] /
+    [Unwatch_bars]) are wired in both modes — bars flow through
+    this BC regardless.
+
+    [watchlist] is the operator-declared list of always-on bar
+    subscriptions to open through {!Broker.subscribe} during
+    construction — typically the {b watchlist.bars} entries from
+    the trading config, already parsed into domain types at the
+    composition root. Empty list means no headless feeds; the
+    on-demand [Watch_bars_command] path keeps working in either
+    case. *)

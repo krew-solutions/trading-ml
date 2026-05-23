@@ -5,7 +5,7 @@
   yojson
   ppx_yojson_conv_lib
   atdgen-runtime
-  core broker_domain decimal datetime rop
+  core broker_domain decimal datetime rop log
   broker_view_models
   broker
   broker_store
@@ -50,3 +50,27 @@
   (progn
    (run atdgen -t -o cancel_pending_order_command %{atd})
    (run atdgen -j -o cancel_pending_order_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/commands/watch_bars_command.atd))
+ (targets watch_bars_command_t.ml
+          watch_bars_command_t.mli
+          watch_bars_command_j.ml
+          watch_bars_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o watch_bars_command %{atd})
+   (run atdgen -j -o watch_bars_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/commands/unwatch_bars_command.atd))
+ (targets unwatch_bars_command_t.ml
+          unwatch_bars_command_t.mli
+          unwatch_bars_command_j.ml
+          unwatch_bars_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o unwatch_bars_command %{atd})
+   (run atdgen -j -o unwatch_bars_command %{atd}))))

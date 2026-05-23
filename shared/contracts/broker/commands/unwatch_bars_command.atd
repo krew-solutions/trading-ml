@@ -1,0 +1,14 @@
+(* Wire contract: broker/lib/application/commands/unwatch_bars_command.ml
+
+   Counterpart to {!Watch_bars_command.t}. Releases this caller's
+   interest in the (instrument, timeframe) bar feed via the
+   broker port's {!Broker.S.unsubscribe}. The adapter-side
+   refcount decrements; the upstream venue feed only actually
+   closes when the count reaches zero — sibling watchers
+   (other SSE clients, the headless watchlist) are unaffected. *)
+
+type t = {
+  symbol <doc text="Qualified instrument: TICKER@MIC[/BOARD] — Core.Instrument.of_qualified round-trips it. Must match the [symbol] of the prior Watch_bars_command from the same caller."> : string;
+
+  timeframe <doc text="Bar timeframe code understood by Core.Timeframe.of_string ('M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'D1', etc.). Must match the timeframe of the prior Watch_bars_command from the same caller."> : string;
+}

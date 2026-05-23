@@ -12,9 +12,12 @@ module Reservation_released =
   Account_integration_events.Reservation_released_integration_event
 module Reservation_rejected =
   Account_integration_events.Reservation_rejected_integration_event
-module Order_accepted = Broker_integration_events.Order_accepted_integration_event
-module Order_rejected = Broker_integration_events.Order_rejected_integration_event
-module Order_unreachable = Broker_integration_events.Order_unreachable_integration_event
+module Order_accepted =
+  Server_external_integration_events.Order_accepted_integration_event
+module Order_rejected =
+  Server_external_integration_events.Order_rejected_integration_event
+module Order_unreachable =
+  Server_external_integration_events.Order_unreachable_integration_event
 
 val handle_amount_reserved : registry:Stream.t -> Amount_reserved.t -> unit
 val handle_reservation_released : registry:Stream.t -> Reservation_released.t -> unit

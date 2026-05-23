@@ -20,7 +20,6 @@
   synthetic
   http_transport
   inbound_http
-  server
   log
   eio
   eio.unix

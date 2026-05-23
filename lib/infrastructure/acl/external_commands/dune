@@ -1,0 +1,37 @@
+(library
+ (name server_external_commands)
+ (public_name trading.server.acl.external_commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  atdgen-runtime
+  core
+  bus
+  server_application_ports)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+
+; Regenerated from the producer's .atd (broker BC) — same source
+; of truth as the inbound deserializer on the broker side,
+; byte-for-byte wire shape match.
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/commands/watch_bars_command.atd))
+ (targets watch_bars_command_t.ml watch_bars_command_t.mli
+          watch_bars_command_j.ml watch_bars_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o watch_bars_command %{atd})
+   (run atdgen -j -o watch_bars_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/commands/unwatch_bars_command.atd))
+ (targets unwatch_bars_command_t.ml unwatch_bars_command_t.mli
+          unwatch_bars_command_j.ml unwatch_bars_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o unwatch_bars_command %{atd})
+   (run atdgen -j -o unwatch_bars_command %{atd}))))

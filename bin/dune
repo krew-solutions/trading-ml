@@ -12,16 +12,16 @@
             broker_factory
             paper_broker
             paper_broker_factory
-            account_commands account_integration_events
+            account_commands
             account_inbound_http broker_inbound_http
             broker_commands broker_integration_events
             server_application_ports
             server_external_commands
-            server_external_integration_events
+            server_factory
             strategy_external_integration_events strategy_external_view_models
             bus in_memory
             logistic_regression triple_barrier
-            http_transport finam bcs acl_common datetime broker_persistence synthetic server log logs
+            http_transport finam bcs acl_common datetime broker_persistence synthetic log logs
             trading_config
             eio_main mirage-crypto-rng.unix unix)
  (flags (:standard -open Common)))

@@ -202,23 +202,7 @@ let handler ~broker ~bc_handlers ~registry _conn request body =
   | `Response _ -> Log.info "%s %s → %d (%.1fms)" meth_str line status dt_ms);
   action
 
-module Bar_subscription = Server_application_ports.Bar_subscription
-
-let run
-    ?(bar_subscription = Bar_subscription.noop)
-    ?(bc_handlers = [])
-    ~sw
-    ~env
-    ~port
-    ~bus
-    ~broker
-    ~(register_publisher : Stream.t -> unit)
-    () =
-  let registry =
-    Stream.create ~on_first_subscriber:bar_subscription.watch
-      ~on_last_unsubscriber:bar_subscription.unwatch ~bus ()
-  in
-  register_publisher registry;
+let run ?(bc_handlers = []) ~registry ~sw ~env ~port ~broker () =
   let socket =
     Eio.Net.listen ~reuse_addr:true ~backlog:16 ~sw (Eio.Stdenv.net env)
       (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))

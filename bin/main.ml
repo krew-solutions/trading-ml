@@ -635,10 +635,6 @@ let cmd_serve args =
      that needs ambient time. See ADR 0013. *)
   let clock = Datetime.Unix_clock.make () in
   let now () = Datetime.Clock.now clock in
-  let consumer (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
-    Bus.consumer bus ~uri ~group ~deserialize:(fun s ->
-        t_of_yojson (Yojson.Safe.from_string s))
-  in
   (* Parse the operator-declared watchlist from config strings into
      domain types here at the composition root; the broker factory
      consumes already-typed (instrument, timeframe) pairs and is the
@@ -721,59 +717,6 @@ let cmd_serve args =
       make_backtest_handler ~env;
     ]
   in
-  (* SSE projector subscribers: each event type gets its own consumer
-     in group "sse-publisher" with the publisher-side DTO
-     deserializer. SSE is part of the same logical "Trading host"
-     deployment as Broker/Account so it legitimately imports their
-     outbound types. *)
-  let register_publisher (registry : Server.Stream.t) =
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://account.amount-reserved" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Account_integration_events.Amount_reserved_integration_event.t_of_yojson)
-        (Server.Publish_order_events.handle_amount_reserved ~registry)
-    in
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://account.reservation-released" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Account_integration_events.Reservation_released_integration_event.t_of_yojson)
-        (Server.Publish_order_events.handle_reservation_released ~registry)
-    in
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://account.reservation-rejected" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Account_integration_events.Reservation_rejected_integration_event.t_of_yojson)
-        (Server.Publish_order_events.handle_reservation_rejected ~registry)
-    in
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://broker.order-accepted" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Server_external_integration_events.Order_accepted_integration_event
-             .t_of_yojson)
-        (Server.Publish_order_events.handle_order_accepted ~registry)
-    in
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://broker.order-rejected" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Server_external_integration_events.Order_rejected_integration_event
-             .t_of_yojson)
-        (Server.Publish_order_events.handle_order_rejected ~registry)
-    in
-    let _ : Bus.subscription =
-      Bus.subscribe
-        (consumer ~uri:"in-memory://broker.order-unreachable" ~group:"sse-publisher"
-           ~t_of_yojson:
-             Server_external_integration_events.Order_unreachable_integration_event
-             .t_of_yojson)
-        (Server.Publish_order_events.handle_order_unreachable ~registry)
-    in
-    ()
-  in
   Log.info "listening on http://127.0.0.1:%d (%s)" port (Broker.name broker.client);
   (* Bar-subscription port: SSE clients arriving / leaving
      publish [Watch_bars_command] / [Unwatch_bars_command] on
@@ -786,8 +729,8 @@ let cmd_serve args =
       unwatch = Server_external_commands.Unwatch_bars_command_sender.make ~bus;
     }
   in
-  Server.Http.run ~bar_subscription ~bc_handlers ~sw ~env ~port ~bus ~broker:broker.client
-    ~register_publisher ()
+  let server = Server_factory.Factory.build ~bus ~bar_subscription in
+  Server_factory.Factory.serve server ~bc_handlers ~sw ~env ~port ~broker:broker.client ()
 
 let cmd_backtest args =
   let strategy_name =

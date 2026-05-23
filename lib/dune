@@ -1,0 +1,13 @@
+(library
+ (name server_factory)
+ (public_name trading.server.factory)
+ (modules factory)
+ (libraries
+  bus
+  core
+  yojson
+  log
+  account_integration_events
+  server
+  server_application_ports
+  server_external_integration_events))

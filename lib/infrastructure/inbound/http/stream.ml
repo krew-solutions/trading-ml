@@ -4,21 +4,24 @@
     - per-key bar feeds (each [(instrument, timeframe)] is independent);
     - global order broadcast.
 
-    Bar feeds are sourced from the [broker.bar-updated] bus topic.
-    A single bus consumer demultiplexes events by
-    [(instrument, timeframe)] into per-key feeds, caches the latest
-    candles, and fans the framed SSE chunks out to subscribers that
-    declared interest in the key. Late SSE joiners receive the
-    cache as their seed; the chart UI is expected to pull deeper
-    history through [/api/candles] before opening the stream.
+    Pure state machine: no bus knowledge, no ACL knowledge, no
+    transport awareness. Bars are injected through {!push_bar}
+    by an outside caller (today: the trading-host factory's bus
+    consumer for [broker.bar-updated]). The registry caches the
+    latest candles per [(instrument, timeframe)] and fans
+    framed SSE chunks out to subscribers that declared interest
+    in the key. Late SSE joiners receive the cache as their
+    seed; the chart UI is expected to pull deeper history
+    through [/api/candles] before opening the stream.
 
     Whether the upstream [(instrument, timeframe)] is actually open
-    on a real broker is the broker BC's concern; this registry
-    just forwards interest declarations through
-    [on_first_subscriber] / [on_last_unsubscriber] so the broker
-    can keep its per-key refcount in sync with SSE demand. The
-    headless watchlist in the composition root takes the same
-    [Broker.subscribe] path and coexists via that refcount. *)
+    is the broker BC's concern; this registry just forwards
+    interest declarations through [on_first_subscriber] /
+    [on_last_unsubscriber] so the caller can publish the matching
+    {!Watch_bars_command} / {!Unwatch_bars_command}. The headless
+    watchlist in the composition root takes the same
+    [Broker.subscribe] path and coexists via the adapter-side
+    refcount. *)
 
 open Core
 
@@ -90,11 +93,6 @@ type t = {
   mutable next_id : int;
 }
 
-module External_integration_events = Server_external_integration_events
-module Bar_updated_ie = External_integration_events.Bar_updated_integration_event
-module Bar_updated_ie_handler =
-  External_integration_events.Bar_updated_integration_event_handler
-
 (** Intra-bar mutation detector: two bars with the same [ts] are
     considered distinct if their OHLC or volume diverge. *)
 let same_bar (a : Candle.t) (b : Candle.t) =
@@ -110,22 +108,23 @@ let last = function
 let subscribers_of_key t key =
   List.filter (fun s -> KSet.mem key s.bar_keys) t.subscribers
 
-(** Handle one decoded bar event from the bus: update the cached
-    candle for [(instrument, timeframe)] and fan the framed SSE
-    chunk out to every subscriber that holds the key. No-op when
-    no subscriber holds the key (the feed doesn't exist) — this
+(** Inject a fresh bar observation: update the cached candle for
+    [(instrument, timeframe)] and fan the framed SSE chunk out
+    to every subscriber that holds the key. No-op when no
+    subscriber holds the key (the feed doesn't exist) — this
     happens for keys opened by the headless watchlist but unused
     by any SSE client.
 
-    Monotonicity is enforced upstream at the broker ACL boundary,
-    so by the time an event reaches us it is already monotonic
-    within its key. We keep a defensive last-ts guard anyway: it
-    silences the surprising case of a brand-new SSE feed seeing
-    a bar with a [ts] strictly older than something it already
-    cached locally (e.g. cache populated by an earlier SSE
-    session that this feed inherited), which would still violate
-    the chart library's ascending-time invariant on the wire. *)
-let dispatch_bar t ~instrument ~timeframe (candle : Candle.t) =
+    Monotonicity is enforced upstream at the broker ACL
+    boundary, so by the time an event reaches us it is already
+    monotonic within its key. We keep a defensive last-ts guard
+    anyway: it silences the surprising case of a brand-new SSE
+    feed seeing a bar with a [ts] strictly older than something
+    it already cached locally (e.g. cache populated by an
+    earlier SSE session that this feed inherited), which would
+    still violate the chart library's ascending-time invariant
+    on the wire. *)
+let push_bar t ~instrument ~timeframe (candle : Candle.t) =
   let key = (instrument, timeframe) in
   let chunk_opt =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
@@ -167,38 +166,26 @@ let dispatch_bar t ~instrument ~timeframe (candle : Candle.t) =
   | None -> ()
   | Some (chunk, subs) -> List.iter (fun s -> Eio.Stream.add s.queue chunk) subs
 
-let handle_bus_event t (ie : Bar_updated_ie.t) : unit =
-  Bar_updated_ie_handler.handle ~push:(dispatch_bar t) ie
-
 (** [on_first_subscriber] fires the first time any subscriber declares
     interest in a [(instrument, timeframe)] key — the natural moment
-    to forward the subscription to the broker so its upstream feed
-    opens. [on_last_unsubscriber] fires when the last interested
-    subscriber drops the key, so the broker-side refcount can
-    decrement. The composition-root watchlist also calls
-    [Broker.subscribe] for keys it cares about, sharing that
-    refcount; one path doesn't shut the other one down. *)
+    for the caller to publish a {!Watch_bars_command} so the broker
+    BC opens an upstream feed for it. [on_last_unsubscriber] fires
+    when the last interested subscriber drops the key, symmetric
+    for {!Unwatch_bars_command}. The composition-root watchlist
+    issues the same commands for keys it cares about; they coexist
+    via the broker adapter's per-key refcount. *)
 let create
     ?(on_first_subscriber : lifecycle_hook = fun ~instrument:_ ~timeframe:_ -> ())
     ?(on_last_unsubscriber : lifecycle_hook = fun ~instrument:_ ~timeframe:_ -> ())
-    ~bus
     () =
-  let t =
-    {
-      on_first = on_first_subscriber;
-      on_last = on_last_unsubscriber;
-      feeds = KMap.empty;
-      subscribers = [];
-      mutex = Eio.Mutex.create ();
-      next_id = 0;
-    }
-  in
-  let consumer =
-    Bus.consumer bus ~uri:"in-memory://broker.bar-updated" ~group:"sse-stream"
-      ~deserialize:(fun s -> Bar_updated_ie.t_of_yojson (Yojson.Safe.from_string s))
-  in
-  let _ : Bus.subscription = Bus.subscribe consumer (handle_bus_event t) in
-  t
+  {
+    on_first = on_first_subscriber;
+    on_last = on_last_unsubscriber;
+    feeds = KMap.empty;
+    subscribers = [];
+    mutex = Eio.Mutex.create ();
+    next_id = 0;
+  }
 
 let connect t : subscriber =
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->

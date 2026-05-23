@@ -508,7 +508,10 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
     | Some other ->
         failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs)")
   in
-  { broker; server; engine; logging }
+  (* CLI overlay never declares a watchlist — the operator should
+     express bar subscriptions in a config file, not on the
+     command line. *)
+  { broker; server; engine; watchlist = None; logging }
 
 let config_default_path = "config/default.config.json"
 let config_env_var = "TRADING_CONFIG"
@@ -635,6 +638,37 @@ let cmd_serve args =
         t_of_yojson (Yojson.Safe.from_string s))
   in
   let broker = Broker_factory.Factory.build ~bus ~env ~now ~opened ~paper_mode in
+  (* Open watchlist subscriptions. Headless mode: the operator
+     declares the set of (instrument, timeframe) feeds the host
+     needs; we forward each to [Broker.subscribe] right after
+     [start_live_feed] (issued inside [Broker_factory.Factory.build]).
+     The broker adapter's internal refcount means HTTP / SSE clients
+     can later subscribe to the same key without conflict; unsubscribe
+     decrements the count but never reaches zero while the watchlist
+     entry is still in play. *)
+  let watchlist_bars =
+    match cfg.watchlist with
+    | Some { bars = Some xs } -> xs
+    | _ -> []
+  in
+  List.iter
+    (fun (b : Trading_config.bar_subscription) ->
+      match
+        ( (try Some (Instrument.of_qualified b.symbol) with _ -> None),
+          try Some (Timeframe.of_string b.timeframe) with _ -> None )
+      with
+      | None, _ -> Log.warn "watchlist: unparseable symbol %S — skipping" b.symbol
+      | _, None ->
+          Log.warn "watchlist: unknown timeframe %S for %s — skipping" b.timeframe
+            b.symbol
+      | Some instrument, Some timeframe -> (
+          try
+            Broker.subscribe broker.client (Subscribe_bars { instrument; timeframe });
+            Log.info "watchlist: subscribed %s/%s" b.symbol b.timeframe
+          with e ->
+            Log.warn "watchlist: %s/%s failed: %s" b.symbol b.timeframe
+              (Printexc.to_string e)))
+    watchlist_bars;
   let _paper_broker =
     if paper_mode then
       Some

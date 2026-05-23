@@ -7,6 +7,9 @@
   "engine": {
     "paper_mode": false
   },
+  "watchlist": {
+    "bars": []
+  },
   "logging": {
     "level": "Info"
   }

@@ -36,6 +36,17 @@ let merge_logging (base : T.logging option) (overlay : T.logging option) :
   | None, x | x, None -> x
   | Some b, Some o -> Some { T.level = pick b.level o.level }
 
+(* [bars] is treated as a whole-field override (overlay replaces
+   base if Some). Per-element merge (union / dedup) would be more
+   subtle than is useful here: an operator who wants to add one
+   bar to the default set typically just copies the full list
+   into local.config.json. *)
+let merge_watchlist (base : T.watchlist option) (overlay : T.watchlist option) :
+    T.watchlist option =
+  match (base, overlay) with
+  | None, x | x, None -> x
+  | Some b, Some o -> Some { T.bars = pick b.bars o.bars }
+
 (* Broker is a variant; per-field overlay on credentials would
    require matching both sides to the same constructor. We take
    the whole variant from the overlay if present — operationally
@@ -51,5 +62,6 @@ let merge (base : T.t) (overlay : T.t) : T.t =
     T.broker = merge_broker base.broker overlay.broker;
     server = merge_server base.server overlay.server;
     engine = merge_engine base.engine overlay.engine;
+    watchlist = merge_watchlist base.watchlist overlay.watchlist;
     logging = merge_logging base.logging overlay.logging;
   }

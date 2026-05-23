@@ -61,9 +61,19 @@ type logging = {
   ?level <doc text="Global logging verbosity."> : log_level option;
 }
 
+type bar_subscription = {
+  symbol <doc text="Qualified instrument: TICKER@MIC (e.g. \"SBER@MISX\")."> : string;
+  timeframe <doc text="Timeframe code: M1 / M5 / M15 / M30 / H1 / H4 / D1 / W1 / MN1."> : string;
+}
+
+type watchlist = {
+  ?bars <doc text="Bars the broker BC subscribes to at startup, independent of any HTTP / SSE client. Drives headless operation: the operator declares the set of (instrument, timeframe) feeds the trading host needs; the composition root forwards each entry to Broker.subscribe(Subscribe_bars _); the rest of the system (strategy engine, portfolio manager, integration-event publishers) sees the resulting bar stream over the bus."> : bar_subscription list option;
+}
+
 type t = {
   ?broker <doc text="Broker selection (Finam / BCS / Synthetic) and its credentials."> : broker option;
   ?server <doc text="HTTP listener configuration."> : server option;
   ?engine <doc text="Live engine / strategy configuration. None means: no strategy mounted."> : engine option;
+  ?watchlist <doc text="Operator-declared set of upstream subscriptions opened at startup. None / empty list means no always-on bar feed (subscriptions may still be opened on-demand by HTTP / SSE clients)."> : watchlist option;
   ?logging <doc text="Logging configuration."> : logging option;
 }

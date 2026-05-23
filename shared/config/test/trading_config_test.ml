@@ -65,6 +65,7 @@ let test_cli_overrides_env () =
       broker = None;
       server = Some { host = None; port = Some 7777 };
       engine = None;
+      watchlist = None;
       logging = None;
     }
   in

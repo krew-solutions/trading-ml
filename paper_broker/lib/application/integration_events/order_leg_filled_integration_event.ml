@@ -12,7 +12,7 @@ let of_domain ~(correlation_id : string) (ev : domain) : t =
   {
     correlation_id;
     placement_id = Paper_broker.Order.Values.Placement_id.to_int ev.placement_id;
-    trade_id = ev.exec_id;
+    trade_id = ev.trade_id;
     instrument = Instrument_view_model.of_domain ev.instrument;
     side = Side.to_string ev.side;
     fill_quantity = Decimal.to_string ev.fill_quantity;

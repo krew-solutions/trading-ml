@@ -57,7 +57,7 @@ type commit_fill_error =
 
 val commit_fill :
   t ->
-  exec_id:string ->
+  trade_id:string ->
   fill_quantity:Decimal.t ->
   fill_price:Decimal.t ->
   fee:Decimal.t ->

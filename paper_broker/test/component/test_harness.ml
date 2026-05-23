@@ -121,7 +121,7 @@ type ctx = {
   store : Test_store.t;
   command_log : Test_command_log.t;
   next_order_id : unit -> string;
-  next_exec_id : unit -> string;
+  next_trade_id : unit -> string;
   slippage_bps : Slippage_bps.t;
   fee_rate : Fee_rate.t;
   participation_rate : Paper_broker.Matching.Values.Participation_rate.t option;
@@ -144,7 +144,7 @@ let fresh_ctx () =
     store = Test_store.create ();
     command_log = Test_command_log.create ();
     next_order_id = make_id_seq "po";
-    next_exec_id = make_id_seq "ex";
+    next_trade_id = make_id_seq "tr";
     slippage_bps = Slippage_bps.zero;
     fee_rate = Fee_rate.zero;
     participation_rate = None;
@@ -287,7 +287,7 @@ let bar_arrives
     Apply_bar_wf.execute ~store:store_module ~store_handle:ctx.store
       ~command_log:log_module ~command_log_handle:ctx.command_log
       ~slippage_bps:ctx.slippage_bps ~fee_rate:ctx.fee_rate
-      ~participation_rate:ctx.participation_rate ~next_exec_id:ctx.next_exec_id
+      ~participation_rate:ctx.participation_rate ~next_trade_id:ctx.next_trade_id
       ~publish_order_filled:publish_filled cmd
   in
   let bar_ts = Datetime.Iso8601.parse ts in

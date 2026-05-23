@@ -60,7 +60,7 @@ type commit_fill_error =
   | Non_positive_fill_quantity of Decimal.t
   | Negative_fee of Decimal.t
 
-let commit_fill t ~exec_id ~fill_quantity ~fill_price ~fee ~fill_ts =
+let commit_fill t ~trade_id ~fill_quantity ~fill_price ~fee ~fill_ts =
   if is_terminal t then Error (Order_already_terminal t.status)
   else if not (Decimal.is_positive fill_quantity) then
     Error (Non_positive_fill_quantity fill_quantity)
@@ -79,7 +79,7 @@ let commit_fill t ~exec_id ~fill_quantity ~fill_price ~fee ~fill_ts =
         {
           id = t.id;
           placement_id = t.placement_id;
-          exec_id;
+          trade_id;
           instrument = t.instrument;
           side = t.side;
           fill_quantity;

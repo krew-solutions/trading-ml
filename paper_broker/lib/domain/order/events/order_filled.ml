@@ -1,7 +1,7 @@
 type t = {
   id : string;
   placement_id : Values.Placement_id.t;
-  exec_id : string;
+  trade_id : string;
   instrument : Core.Instrument.t;
   side : Core.Side.t;
   fill_quantity : Decimal.t;

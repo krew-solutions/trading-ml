@@ -102,7 +102,7 @@ let test_bar_fills_market_buy_at_open () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   submit_market_buy ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> 1_700_000_000L)
     ~placed_after_ts:(fun _ -> 1_700_000_000L)
@@ -111,7 +111,7 @@ let test_bar_fills_market_buy_at_open () =
   let result =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:None ~next_exec_id
+      ~participation_rate:None ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
@@ -129,7 +129,7 @@ let test_bar_at_placed_after_ts_does_not_fill () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   let bar_ts_int64 = Datetime.Iso8601.parse "2024-01-01T10:00:00Z" in
   submit_market_buy ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> bar_ts_int64)
@@ -139,7 +139,7 @@ let test_bar_at_placed_after_ts_does_not_fill () =
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:None ~next_exec_id
+      ~participation_rate:None ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
@@ -150,7 +150,7 @@ let test_bar_for_different_instrument_does_not_fill () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   submit_market_buy ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> 1_700_000_000L)
     ~placed_after_ts:(fun _ -> 1_700_000_000L)
@@ -160,7 +160,7 @@ let test_bar_for_different_instrument_does_not_fill () =
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:None ~next_exec_id
+      ~participation_rate:None ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       other_bar
   in
@@ -170,7 +170,7 @@ let test_participation_rate_caps_market_buy_to_partial_fill () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   submit_market_buy ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> 1_700_000_000L)
     ~placed_after_ts:(fun _ -> 1_700_000_000L)
@@ -180,7 +180,7 @@ let test_participation_rate_caps_market_buy_to_partial_fill () =
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:rate ~next_exec_id
+      ~participation_rate:rate ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~volume:"200" ())
   in
@@ -198,7 +198,7 @@ let test_zero_volume_bar_does_not_fill_under_cap () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   submit_market_buy ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> 1_700_000_000L)
     ~placed_after_ts:(fun _ -> 1_700_000_000L)
@@ -208,7 +208,7 @@ let test_zero_volume_bar_does_not_fill_under_cap () =
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:rate ~next_exec_id
+      ~participation_rate:rate ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~volume:"0" ())
   in
@@ -219,7 +219,7 @@ let test_limit_sell_above_bar_high_does_not_fill () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
   let next_order_id = make_id_seq "po" in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   submit_limit_sell ~store ~log ~next_id:next_order_id
     ~now_ts:(fun () -> 1_700_000_000L)
     ~placed_after_ts:(fun _ -> 1_700_000_000L)
@@ -228,7 +228,7 @@ let test_limit_sell_above_bar_high_does_not_fill () =
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:None ~next_exec_id
+      ~participation_rate:None ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~open_:"100" ~high:"105" ~low:"95" ~close:"102" ())
   in
@@ -238,13 +238,13 @@ let test_limit_sell_above_bar_high_does_not_fill () =
 let test_invalid_bar_returns_error () =
   let store = Test_store.create () in
   let log = Test_command_log.create () in
-  let next_exec_id = make_id_seq "ex" in
+  let next_trade_id = make_id_seq "tr" in
   let filled = ref [] in
   let bad : Apply_bar.t = { (bar_cmd ()) with instrument = "GARBAGE" } in
   let result =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
-      ~participation_rate:None ~next_exec_id
+      ~participation_rate:None ~next_trade_id
       ~publish_order_filled:(fun ie -> filled := ie :: !filled)
       bad
   in

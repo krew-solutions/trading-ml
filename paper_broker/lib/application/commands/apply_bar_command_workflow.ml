@@ -12,13 +12,13 @@ let execute
     ~(slippage_bps : Paper_broker.Slippage.Values.Slippage_bps.t)
     ~(fee_rate : Paper_broker.Fee.Values.Fee_rate.t)
     ~(participation_rate : Paper_broker.Matching.Values.Participation_rate.t option)
-    ~(next_exec_id : unit -> string)
+    ~(next_trade_id : unit -> string)
     ~(publish_order_filled : Order_filled.t -> unit)
     (cmd : Apply_bar_command.t) : (unit, Apply_bar_command_handler.handle_error) Rop.t =
   let module L = (val command_log : Command_log with type t = log) in
   match
     Apply_bar_command_handler.handle ~store ~store_handle ~slippage_bps ~fee_rate
-      ~participation_rate ~next_exec_id cmd
+      ~participation_rate ~next_trade_id cmd
   with
   | Ok fills ->
       List.iter

@@ -28,11 +28,11 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
       incr counter;
       Printf.sprintf "po-%d" !counter
   in
-  let next_exec_id =
+  let next_trade_id =
     let counter = ref 0 in
     fun () ->
       incr counter;
-      Printf.sprintf "ex-%d" !counter
+      Printf.sprintf "tr-%d" !counter
   in
   let now_ts = now in
   let last_seen_bar_ts : (Instrument.t, int64) Hashtbl.t = Hashtbl.create 16 in
@@ -84,7 +84,7 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
        Paper_broker_commands.Apply_bar_command_workflow.execute ~store:store_module
          ~store_handle:store ~command_log:command_log_module
          ~command_log_handle:command_log ~slippage_bps ~fee_rate ~participation_rate
-         ~next_exec_id ~publish_order_filled cmd
+         ~next_trade_id ~publish_order_filled cmd
      with
     | Ok () -> ()
     | Error _ -> ());

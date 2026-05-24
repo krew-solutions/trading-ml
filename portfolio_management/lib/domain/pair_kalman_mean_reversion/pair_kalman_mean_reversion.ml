@@ -2,19 +2,23 @@ open Core
 
 module Values = Values
 module Events = Events
-module Config = Values.Pair_mr_config
-module State = Values.Pair_mr_state
+module Config = Values.Kalman_dlm_config
+module State = Values.Kalman_dlm_state
 module Direction = Common.Pair_direction
 
 type config = Config.t
 type state = State.t
 
-let name = "pair_mean_reversion"
+let name = "pair_kalman_mean_reversion"
 let init = State.init
 
 let log_close (c : Candle.t) = log (Decimal.to_float c.close)
 
-(* Direction transition under hysteresis. *)
+(* Direction transition under hysteresis. Identical logic to the
+   static policy; thresholds operate on the innovation z-score
+   (already an empirical-floor standardised residual) rather than
+   the rolling-spread z-score. The hysteresis predicate is the
+   same: enter on |z| ≥ z_entry, exit on |z| ≤ z_exit. *)
 let next_direction ~(config : Config.t) ~(current : Direction.t) ~(z : float) :
     Direction.t option =
   let z_entry = Common.Z_score.to_float config.z_entry in
@@ -50,13 +54,11 @@ let on_bar (state : State.t) ~instrument ~candle :
           | None -> (state', None)
           | Some new_dir ->
               let state'' = State.with_direction state' new_dir in
-              let beta =
-                Decimal.to_float (Common.Hedge_ratio.to_decimal cfg.hedge_ratio)
-              in
+              let beta = (State.posterior state').mean_beta in
               let intent =
                 Common.Pair_intent_builder.build ~pair:cfg.pair ~book_id:cfg.book_id
                   ~direction:new_dir ~beta
-                  ~source:(Common.Source.Pair_mean_reversion cfg.pair)
+                  ~source:(Common.Source.Pair_kalman_mean_reversion cfg.pair)
                   ~observed_at:candle.ts ~coupling_source:name
               in
               (state'', Some intent)))

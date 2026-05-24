@@ -7,6 +7,8 @@ module Target_portfolio_updated =
 let execute
     ~(pair_mr_states_for :
        Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list)
+    ~(pair_kalman_mr_states_for :
+       Core.Instrument.t -> Portfolio_management.Pair_kalman_mean_reversion.state ref list)
     ~(update_mark : Core.Instrument.t -> close:Decimal.t -> unit)
     ~(update_vol : Core.Instrument.t -> close:Decimal.t -> unit)
     ~risk_config_for
@@ -17,7 +19,9 @@ let execute
     ~target_portfolio_for
     ~publish_target_portfolio_updated
     (cmd : Apply_bar_command.t) : (unit, Apply_bar_command_handler.handle_error) Rop.t =
-  match Apply_bar_command_handler.handle ~pair_mr_states_for cmd with
+  match
+    Apply_bar_command_handler.handle ~pair_mr_states_for ~pair_kalman_mr_states_for cmd
+  with
   | Ok { intents; mark = instrument, close } ->
       update_mark instrument ~close;
       update_vol instrument ~close;

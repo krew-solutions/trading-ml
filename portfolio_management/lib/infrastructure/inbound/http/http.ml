@@ -4,6 +4,8 @@ module SBA = Portfolio_management_commands.Subscribe_book_to_alpha_command
 module SBAH = Portfolio_management_commands.Subscribe_book_to_alpha_command_handler
 module DPM = Portfolio_management_commands.Define_pair_mr_command
 module DPMH = Portfolio_management_commands.Define_pair_mr_command_handler
+module DPKM = Portfolio_management_commands.Define_pair_kalman_mr_command
+module DPKMH = Portfolio_management_commands.Define_pair_kalman_mr_command_handler
 
 let success_body : Yojson.Safe.t = `Assoc [ ("result", `String "ok") ]
 
@@ -60,8 +62,19 @@ let define_pair_mr_response define_pair_mr body : Inbound_http.Route.response =
   | Ok cmd ->
       respond_rop ~error_to_string:DPMH.handle_error_to_string (define_pair_mr cmd)
 
-let make_handler ~configure_risk ~subscribe_book_to_alpha ~define_pair_mr :
-    Inbound_http.Route.handler =
+let define_pair_kalman_mr_response define_pair_kalman_mr body :
+    Inbound_http.Route.response =
+  match parse_body DPKM.t_of_string body with
+  | Error msg -> json_response ~status:`Bad_request (malformed_body ~msg)
+  | Ok cmd ->
+      respond_rop ~error_to_string:DPKMH.handle_error_to_string
+        (define_pair_kalman_mr cmd)
+
+let make_handler
+    ~configure_risk
+    ~subscribe_book_to_alpha
+    ~define_pair_mr
+    ~define_pair_kalman_mr : Inbound_http.Route.handler =
  fun request body ->
   let uri = Cohttp.Request.uri request in
   let path = Uri.path uri in
@@ -73,4 +86,6 @@ let make_handler ~configure_risk ~subscribe_book_to_alpha ~define_pair_mr :
       Some (subscribe_book_to_alpha_response subscribe_book_to_alpha body)
   | `POST, "/api/portfolio_management/pair_mr_policies" ->
       Some (define_pair_mr_response define_pair_mr body)
+  | `POST, "/api/portfolio_management/pair_kalman_mr_policies" ->
+      Some (define_pair_kalman_mr_response define_pair_kalman_mr body)
   | _ -> None

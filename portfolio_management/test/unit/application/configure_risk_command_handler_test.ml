@@ -15,6 +15,9 @@ let alpha_source : CR.construction_source =
 let pair_source : CR.construction_source =
   `Pair_mean_reversion { CR.a = "SBER@MISX"; b = "GAZP@MISX" }
 
+let kalman_pair_source : CR.construction_source =
+  `Pair_kalman_mean_reversion { CR.a = "SBER@MISX"; b = "GAZP@MISX" }
+
 let default_sizing : CR.sizing_policy = `Equity_proportional
 
 let well_formed_cmd
@@ -69,6 +72,25 @@ let test_happy_persists_pair_source () =
             Pm.Common.Source.Pair_mean_reversion (Pm.Common.Pair.make ~a ~b)
           in
           Alcotest.(check bool) "pair source" true (Pm.Common.Source.equal src expected)
+      | None -> Alcotest.fail "registry empty")
+  | Error _ -> Alcotest.fail "expected Ok"
+
+let test_happy_persists_kalman_pair_source () =
+  let tbl, persist = make_registry () in
+  let cmd = well_formed_cmd ~source:kalman_pair_source () in
+  match H.handle ~persist_risk_config:persist cmd with
+  | Ok () -> (
+      match Hashtbl.find_opt tbl book_id with
+      | Some cfg ->
+          let src = Pm.Risk_config.construction_source cfg in
+          let a = Core.Instrument.of_qualified "SBER@MISX" in
+          let b = Core.Instrument.of_qualified "GAZP@MISX" in
+          let expected =
+            Pm.Common.Source.Pair_kalman_mean_reversion (Pm.Common.Pair.make ~a ~b)
+          in
+          Alcotest.(check bool)
+            "kalman pair source" true
+            (Pm.Common.Source.equal src expected)
       | None -> Alcotest.fail "registry empty")
   | Error _ -> Alcotest.fail "expected Ok"
 
@@ -140,6 +162,8 @@ let tests =
       test_happy_persists_alpha_source;
     Alcotest.test_case "happy path persists pair config" `Quick
       test_happy_persists_pair_source;
+    Alcotest.test_case "happy path persists Kalman pair config" `Quick
+      test_happy_persists_kalman_pair_source;
     Alcotest.test_case "second config replaces first" `Quick test_replaces_existing_config;
     Alcotest.test_case "rejects empty book_id" `Quick test_rejects_empty_book_id;
     Alcotest.test_case "rejects fraction above 1" `Quick test_rejects_fraction_above_one;

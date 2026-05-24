@@ -1,0 +1,39 @@
+(** Why3 companion for [pair_intent_builder.mli] — sign convention
+    of the leg weights as a function of [Pair_direction.t].
+
+    The OCaml implementation realises this in [build]; here we
+    expose the structural sign mapping so downstream Why3 proofs
+    (e.g. pair-mr clip preservation lemmas) can reason about the
+    leg-sign invariant without unfolding [build]. *)
+
+module Pair_intent_builder
+  use int.Int
+  use common.pair_direction.Pair_direction as D
+
+  function sign_a (d: D.t) : int =
+    match d with
+    | D.Flat -> 0
+    | D.Long_spread -> 1
+    | D.Short_spread -> -1
+    end
+
+  function sign_b (d: D.t) : int =
+    match d with
+    | D.Flat -> 0
+    | D.Long_spread -> -1
+    | D.Short_spread -> 1
+    end
+
+  lemma flat_zero : sign_a D.Flat = 0 /\ sign_b D.Flat = 0
+
+  lemma long_a_positive : sign_a D.Long_spread = 1
+  lemma long_b_negative : sign_b D.Long_spread = -1
+
+  lemma short_a_negative : sign_a D.Short_spread = -1
+  lemma short_b_positive : sign_b D.Short_spread = 1
+
+  (** Open positions have opposite signs across legs (β-hedge
+      symmetry); flat collapses to zeros. *)
+  lemma signs_opposite_when_open : forall d: D.t.
+    D.is_open d -> sign_a d + sign_b d = 0
+end

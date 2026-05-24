@@ -1,13 +1,14 @@
 (** Command handler for {!Apply_bar_command.t}.
 
     Parses the wire-format bar, locates every registered
-    pair-mean-reversion state whose pair includes the bar's
-    instrument, and advances each one through
-    {!Portfolio_management.Pair_mean_reversion.on_bar}. The
-    state ref is mutated in place; emitted
-    {!Construction_intent.t} values are returned in the Ok track
-    for the workflow to feed into the unified construction →
-    sizing → clipping pipeline.
+    pair-mean-reversion state — both static
+    ({!Portfolio_management.Pair_mean_reversion}) and adaptive
+    ({!Portfolio_management.Pair_kalman_mean_reversion}) — whose
+    pair includes the bar's instrument, and advances each one
+    through its respective [on_bar]. The state refs are mutated
+    in place; emitted {!Construction_intent.t} values are returned
+    in the Ok track for the workflow to feed into the unified
+    construction → sizing → clipping pipeline.
 
     State-mutation semantics: refs are updated as the iteration
     progresses. A parse error before iteration short-circuits
@@ -38,10 +39,12 @@ type ok = {
 val handle :
   pair_mr_states_for:
     (Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list) ->
+  pair_kalman_mr_states_for:
+    (Core.Instrument.t -> Portfolio_management.Pair_kalman_mean_reversion.state ref list) ->
   Apply_bar_command.t ->
   (ok, handle_error) Rop.t
-(** Parse, advance every matching pair-mr state, collect emitted
-    intents, and return the freshly-parsed mark for the bar's
-    instrument. A validation error short-circuits the entire
-    output, including the mark — a bar that fails to parse does
-    not refresh the cache. *)
+(** Parse, advance every matching pair-mr state (static and
+    adaptive), collect emitted intents from both, and return the
+    freshly-parsed mark for the bar's instrument. A validation
+    error short-circuits the entire output, including the mark
+    — a bar that fails to parse does not refresh the cache. *)

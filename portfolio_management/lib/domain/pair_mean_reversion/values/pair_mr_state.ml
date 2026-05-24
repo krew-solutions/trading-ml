@@ -1,11 +1,4 @@
-module Direction = struct
-  type t = Flat | Long_spread | Short_spread
-
-  let equal a b =
-    match (a, b) with
-    | Flat, Flat | Long_spread, Long_spread | Short_spread, Short_spread -> true
-    | _ -> false
-end
+module Direction = Common.Pair_direction
 
 (* Fixed-size circular buffer of doubles. *)
 type ring = { capacity : int; data : float array; next : int; count : int }

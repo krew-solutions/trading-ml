@@ -1,0 +1,32 @@
+(** Why3 companion for [kalman_dlm_config.mli] — DLM-tuning
+    invariants. Mirrors [Pair_mr_config.mlw] in that the
+    structural model is opaque; the smart constructor in OCaml
+    enforces the numerical invariants and downstream lemmas
+    axiomatise as needed. *)
+
+module Kalman_dlm_config
+  use int.Int
+
+  type book_id
+  type pair
+  type decimal
+  type z_score
+
+  type t = {
+    book_id        : book_id;
+    pair           : pair;
+    discount       : decimal;
+    v              : decimal;
+    z_entry        : z_score;
+    z_exit         : z_score;
+    burn_in        : int;
+    prior_alpha    : decimal;
+    prior_beta     : decimal;
+    prior_variance : decimal;
+  }
+
+  (** Structural-only model. Invariants ([0 < discount < 1],
+      [v > 0], [|z_entry| > |z_exit|], [burn_in >= 0],
+      [prior_variance > 0], [prior_beta > 0]) are enforced by
+      the OCaml smart constructor [Kalman_dlm_config.make]. *)
+end

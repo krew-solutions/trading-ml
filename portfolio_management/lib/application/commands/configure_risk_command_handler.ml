@@ -66,6 +66,20 @@ let parse_construction_source (src : CR.construction_source) :
           try
             Rop.succeed (Pm.Common.Source.Pair_mean_reversion (Pm.Common.Pair.make ~a ~b))
           with Invalid_argument msg -> Rop.fail (Invalid_pair msg)))
+  | `Pair_kalman_mean_reversion payload -> (
+      let open Rop in
+      let parsed =
+        let+ a = parse_instrument ~field:"a" payload.a
+        and+ b = parse_instrument ~field:"b" payload.b in
+        (a, b)
+      in
+      match parsed with
+      | Error _ as e -> e
+      | Ok (a, b) -> (
+          try
+            Rop.succeed
+              (Pm.Common.Source.Pair_kalman_mean_reversion (Pm.Common.Pair.make ~a ~b))
+          with Invalid_argument msg -> Rop.fail (Invalid_pair msg)))
 
 let parse_sizing_policy (sp : CR.sizing_policy) :
     (Pm.Common.Sizing_policy_choice.t, validation_error) Rop.t =

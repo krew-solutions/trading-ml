@@ -1,0 +1,35 @@
+(* Wire contract: portfolio_management/lib/application/commands/define_pair_kalman_mr_command.ml
+
+   Defines (creates or replaces) a [Pair_kalman_mean_reversion]
+   policy state for a book. Same pair / hysteresis shape as
+   Define_pair_mr_command, but β is estimated adaptively via a
+   Harrison-West DLM Kalman filter rather than supplied statically.
+   The operator therefore configures the filter — discount factor,
+   observation noise, prior, burn-in — instead of a hedge_ratio.
+
+   Sizing is governed by the book's [Risk_config], not this
+   command. *)
+
+type t = {
+  book_id <doc text="Identifier of the book the policy runs on. Direction flips emitted by this policy will produce a Coupled construction intent addressed to this book."> : string;
+
+  a <doc text="First leg's qualified instrument symbol (e.g. \"SBER@MISX\"); ordered. The filter regresses log(a) on log(b)."> : string;
+
+  b <doc text="Second leg's qualified instrument symbol; must differ from a."> : string;
+
+  discount <doc text="Harrison-West discount factor in (0, 1) for the prior covariance: C_pred = C_prev / discount. Smaller values let β drift faster; daily-bar settings typically sit near 0.99. Decimal string."> : string;
+
+  v <doc text="Observation noise variance v on log(a) given (α, β, log(b)), in squared log-price units. Must be strictly positive. Operator's estimate of how noisy the regression residual is; the empirical-scale floor in the filter rescues a mis-specification within ~20 paired bars."> : string;
+
+  z_entry <doc text="|z| threshold to open a spread position, in units of the filter's innovation σ. Decimal string. Must be strictly greater than |z_exit| (hysteresis)."> : string;
+
+  z_exit <doc text="|z| threshold to close an open spread position, in units of the filter's innovation σ. Decimal string."> : string;
+
+  burn_in <doc text="Number of paired (A∧B) observations to skip before any signal. Must be >= 0. Allows the filter to learn β before the policy starts trading."> : int;
+
+  prior_alpha <doc text="Initial mean for α (regression intercept on log-prices). Any Decimal string (typically \"0.0\")."> : string;
+
+  prior_beta <doc text="Initial mean for β (hedge ratio). Must be strictly positive — mirrors the static-policy invariant. Decimal string."> : string;
+
+  prior_variance <doc text="Diagonal entry of the prior covariance C_0 applied to both (α, β). Larger values mean weaker prior. Must be > 0. Decimal string."> : string;
+}

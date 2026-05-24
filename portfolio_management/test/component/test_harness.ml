@@ -290,10 +290,17 @@ let define_alpha_view
     publishes a [target_portfolio_updated] event. The bar is
     built with [open=high=low=close] for convenience —
     sufficient for component-level driver tests. *)
-let apply_bar ctx ~state_ref ~instrument ~ts ~close =
+let apply_bar ?kalman_state_ref ctx ~state_ref ~instrument ~ts ~close =
   let pair_mr_states_for inst =
     let cfg = Pm.Pair_mean_reversion.Values.Pair_mr_state.config !state_ref in
     if Pm.Common.Pair.contains cfg.pair inst then [ state_ref ] else []
+  in
+  let pair_kalman_mr_states_for inst =
+    match kalman_state_ref with
+    | None -> []
+    | Some kref ->
+        let cfg = Pm.Pair_kalman_mean_reversion.Values.Kalman_dlm_state.config !kref in
+        if Pm.Common.Pair.contains cfg.pair inst then [ kref ] else []
   in
   let target_portfolio_for book =
     if Pm.Common.Book_id.equal book book_alpha then ctx.target_portfolio
@@ -321,11 +328,11 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
   in
   let update_vol inst ~close = make_update_vol ctx inst ~close in
   let result =
-    Apply_bar_wf.execute ~pair_mr_states_for ~update_mark ~update_vol
-      ~risk_config_for:(risk_config_for ctx) ~total_equity_for:(total_equity_for ctx)
-      ~mark_for:(mark_for ctx) ~volatility_for:(volatility_for ctx)
-      ~sizing_for:(sizing_for ctx) ~target_portfolio_for ~publish_target_portfolio_updated
-      cmd
+    Apply_bar_wf.execute ~pair_mr_states_for ~pair_kalman_mr_states_for ~update_mark
+      ~update_vol ~risk_config_for:(risk_config_for ctx)
+      ~total_equity_for:(total_equity_for ctx) ~mark_for:(mark_for ctx)
+      ~volatility_for:(volatility_for ctx) ~sizing_for:(sizing_for ctx)
+      ~target_portfolio_for ~publish_target_portfolio_updated cmd
   in
   { ctx with last_apply_bar_result = Some result }
 
@@ -335,6 +342,7 @@ let apply_bar ctx ~state_ref ~instrument ~ts ~close =
     bar stream (e.g. vol-target warm-up for the alpha path). *)
 let feed_bar ctx ~instrument ~ts ~close =
   let pair_mr_states_for _ = [] in
+  let pair_kalman_mr_states_for _ = [] in
   let target_portfolio_for book =
     if Pm.Common.Book_id.equal book book_alpha then ctx.target_portfolio
     else ref (Pm.Target_portfolio.empty book)
@@ -361,11 +369,11 @@ let feed_bar ctx ~instrument ~ts ~close =
   in
   let update_vol inst ~close = make_update_vol ctx inst ~close in
   let result =
-    Apply_bar_wf.execute ~pair_mr_states_for ~update_mark ~update_vol
-      ~risk_config_for:(risk_config_for ctx) ~total_equity_for:(total_equity_for ctx)
-      ~mark_for:(mark_for ctx) ~volatility_for:(volatility_for ctx)
-      ~sizing_for:(sizing_for ctx) ~target_portfolio_for ~publish_target_portfolio_updated
-      cmd
+    Apply_bar_wf.execute ~pair_mr_states_for ~pair_kalman_mr_states_for ~update_mark
+      ~update_vol ~risk_config_for:(risk_config_for ctx)
+      ~total_equity_for:(total_equity_for ctx) ~mark_for:(mark_for ctx)
+      ~volatility_for:(volatility_for ctx) ~sizing_for:(sizing_for ctx)
+      ~target_portfolio_for ~publish_target_portfolio_updated cmd
   in
   { ctx with last_apply_bar_result = Some result }
 

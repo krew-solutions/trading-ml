@@ -1,0 +1,21 @@
+(** Why3 companion for [pair_direction.mli] — three-valued
+    directional state of a pair-trading policy. *)
+
+module Pair_direction
+  type t = Flat | Long_spread | Short_spread
+
+  predicate is_flat (d: t) =
+    match d with
+    | Flat -> true
+    | Long_spread | Short_spread -> false
+    end
+
+  predicate is_open (d: t) =
+    match d with
+    | Flat -> false
+    | Long_spread | Short_spread -> true
+    end
+
+  lemma flat_xor_open : forall d: t.
+    is_flat d <-> not (is_open d)
+end

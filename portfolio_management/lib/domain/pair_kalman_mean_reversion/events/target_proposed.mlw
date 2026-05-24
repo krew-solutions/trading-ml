@@ -1,0 +1,14 @@
+(** Why3 companion for [target_proposed.mli] — Domain Event record.
+    Structurally identical to
+    {!Pair_mean_reversion.Events.Target_proposed}. *)
+
+module Target_proposed
+  use common.target_proposal.Target_proposal as TPR
+
+  type z_score
+
+  type t = {
+    proposal : TPR.t;
+    z        : z_score;
+  }
+end

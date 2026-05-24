@@ -1,0 +1,32 @@
+(** Why3 companion for [kalman_dlm_state.mli] — opaque state with
+    the direction discriminator drawn from {!Common.Pair_direction}.
+    The structural lemma we expose is the [Flat]-on-init property;
+    the hysteresis predicate used by
+    [pair_kalman_mean_reversion.mlw] follows the static-policy
+    pattern (axiomatised, not derived).
+
+    {b Out of Why3 scope (covered by stress tests):}
+    - PSD preservation by the Joseph-form covariance update —
+      a numerical-analysis property, not a domain invariant.
+    - β-convergence under stationary data — a statistical
+      property.
+    - Discount-factor monotonicity on posterior variance —
+      a numerical-stability property. *)
+
+module Kalman_dlm_state
+  use common.pair_direction.Pair_direction as D
+
+  type t
+  type config
+
+  function direction_of (s: t) : D.t
+  function bars_observed_of (s: t) : int
+
+  function init (c: config) : t
+
+  (** A fresh state starts Flat. *)
+  axiom init_is_flat : forall c: config. direction_of (init c) = D.Flat
+
+  (** No paired observations have been applied on init. *)
+  axiom init_bars_zero : forall c: config. bars_observed_of (init c) = 0
+end

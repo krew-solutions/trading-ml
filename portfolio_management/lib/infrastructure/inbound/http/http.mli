@@ -10,6 +10,9 @@
       POST /api/portfolio_management/pair_mr_policies
         — define a {!Pair_mean_reversion} policy state for a
           book via {!Define_pair_mr_command.t}.
+      POST /api/portfolio_management/pair_kalman_mr_policies
+        — define a {!Pair_kalman_mean_reversion} policy state
+          for a book via {!Define_pair_kalman_mr_command.t}.
 
     Synchronous: 200 OK on success, 400 Bad Request with a
     structured error list on Rop validation failure.
@@ -37,5 +40,10 @@ val make_handler :
     (Portfolio_management_commands.Define_pair_mr_command.t ->
     ( unit,
       Portfolio_management_commands.Define_pair_mr_command_handler.handle_error )
+    Rop.t) ->
+  define_pair_kalman_mr:
+    (Portfolio_management_commands.Define_pair_kalman_mr_command.t ->
+    ( unit,
+      Portfolio_management_commands.Define_pair_kalman_mr_command_handler.handle_error )
     Rop.t) ->
   Inbound_http.Route.handler

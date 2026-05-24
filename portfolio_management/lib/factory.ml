@@ -42,6 +42,24 @@ let build ~bus ~now : t =
         else acc)
       pair_mr_states []
   in
+  (* Kalman-adaptive pair-mr state registry, parallel to
+     [pair_mr_states]. Same keying [(book_id, pair)] so a single
+     book can re-define its pair policy at any time; the workflow
+     iterates over both registries on every bar and the unified
+     downstream handler filters by [Risk_config.authorises]. *)
+  let pair_kalman_mr_states :
+      ( Portfolio_management.Common.Book_id.t * Portfolio_management.Common.Pair.t,
+        Portfolio_management.Pair_kalman_mean_reversion.state ref )
+      Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let pair_kalman_mr_states_for instrument =
+    Hashtbl.fold
+      (fun (_book, pair) state_ref acc ->
+        if Portfolio_management.Common.Pair.contains pair instrument then state_ref :: acc
+        else acc)
+      pair_kalman_mr_states []
+  in
   let target_portfolio_for_create book_id =
     match Hashtbl.find_opt target_portfolios book_id with
     | Some r -> r
@@ -291,8 +309,9 @@ let build ~bus ~now : t =
   let dispatch_apply_bar cmd =
     match
       Portfolio_management_commands.Apply_bar_command_workflow.execute ~pair_mr_states_for
-        ~update_mark ~update_vol ~risk_config_for ~total_equity_for ~mark_for
-        ~volatility_for ~sizing_for ~target_portfolio_for:target_portfolio_for_create
+        ~pair_kalman_mr_states_for ~update_mark ~update_vol ~risk_config_for
+        ~total_equity_for ~mark_for ~volatility_for ~sizing_for
+        ~target_portfolio_for:target_portfolio_for_create
         ~publish_target_portfolio_updated cmd
     with
     | Ok () -> ()
@@ -329,6 +348,20 @@ let build ~bus ~now : t =
       Rop.t =
     Portfolio_management_commands.Define_pair_mr_command_workflow.execute
       ~persist_pair_mr_state cmd
+  in
+  let persist_pair_kalman_mr_state ~book_id ~pair ~state =
+    let key = (book_id, pair) in
+    match Hashtbl.find_opt pair_kalman_mr_states key with
+    | Some r -> r := state
+    | None -> Hashtbl.replace pair_kalman_mr_states key (ref state)
+  in
+  let dispatch_define_pair_kalman_mr cmd :
+      ( unit,
+        Portfolio_management_commands.Define_pair_kalman_mr_command_handler.handle_error
+      )
+      Rop.t =
+    Portfolio_management_commands.Define_pair_kalman_mr_command_workflow.execute
+      ~persist_pair_kalman_mr_state cmd
   in
   (* [dispatch_set_target] is reserved scaffolding for future external
      entries (PM HTTP route / CLI override / cross-BC import). No
@@ -392,5 +425,6 @@ let build ~bus ~now : t =
       ~configure_risk:dispatch_configure_risk
       ~subscribe_book_to_alpha:dispatch_subscribe_book_to_alpha
       ~define_pair_mr:dispatch_define_pair_mr
+      ~define_pair_kalman_mr:dispatch_define_pair_kalman_mr
   in
   { http_handler }

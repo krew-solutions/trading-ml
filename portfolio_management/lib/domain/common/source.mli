@@ -16,11 +16,22 @@ type t =
       (** A single-asset directional bias from an upstream alpha
           source; produces a [Scalar] intent. *)
   | Pair_mean_reversion of Pair.t
-      (** A coupled two-leg construction with a β-hedge invariant;
-          produces a [Coupled] intent. *)
+      (** A coupled two-leg construction with a β-hedge invariant
+          and a {b static} operator-supplied β; produces a
+          [Coupled] intent. *)
+  | Pair_kalman_mean_reversion of Pair.t
+      (** A coupled two-leg construction with a β-hedge invariant
+          and an {b adaptive} β estimated online via a Harrison-West
+          DLM Kalman filter; produces a [Coupled] intent of the
+          same shape as {!Pair_mean_reversion}, but provenanced
+          separately so [Risk_config.authorises] can structurally
+          distinguish a Kalman-driven book from a static one and
+          downstream audit can name the policy that filed the
+          target. *)
 
 val to_string : t -> string
 (** Stable rendering for logs, audit, and the wire boundary.
-    ["alpha_view:<id>"] or ["pair_mean_reversion:<a>|<b>"]. *)
+    ["alpha_view:<id>"], ["pair_mean_reversion:<a>|<b>"], or
+    ["pair_kalman_mean_reversion:<a>|<b>"]. *)
 
 val equal : t -> t -> bool

@@ -111,3 +111,15 @@
   (progn
    (run atdgen -t -o define_pair_mr_command %{atd})
    (run atdgen -j -o define_pair_mr_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/portfolio_management/commands/define_pair_kalman_mr_command.atd))
+ (targets define_pair_kalman_mr_command_t.ml
+          define_pair_kalman_mr_command_t.mli
+          define_pair_kalman_mr_command_j.ml
+          define_pair_kalman_mr_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o define_pair_kalman_mr_command %{atd})
+   (run atdgen -j -o define_pair_kalman_mr_command %{atd}))))

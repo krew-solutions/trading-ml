@@ -16,7 +16,8 @@
 
 type construction_source = [
   | Alpha_view of alpha_view_source <doc text="Single-asset alpha source identified by [alpha_source_id].">
-  | Pair_mean_reversion of pair_source <doc text="Two-leg cointegrated pair construction identified by its ordered (a, b) instruments.">
+  | Pair_mean_reversion of pair_source <doc text="Two-leg cointegrated pair construction with static β, identified by its ordered (a, b) instruments.">
+  | Pair_kalman_mean_reversion of pair_source <doc text="Two-leg cointegrated pair construction with adaptive β (Harrison-West DLM Kalman filter), identified by its ordered (a, b) instruments. Distinct from Pair_mean_reversion for audit and one-source-per-book authorisation.">
 ]
 
 type alpha_view_source = {

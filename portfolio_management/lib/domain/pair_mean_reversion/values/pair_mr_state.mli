@@ -10,12 +10,10 @@
 
     Pure value type — every transition returns a fresh [t]. *)
 
-(** Direction of the open position, in spread terms. *)
-module Direction : sig
-  type t = Flat | Long_spread | Short_spread
-
-  val equal : t -> t -> bool
-end
+module Direction = Common.Pair_direction
+(** Direction of the open position, in spread terms. Re-exported
+    from {!Common.Pair_direction} (shared with
+    {!Pair_kalman_mean_reversion}). *)
 
 type t
 

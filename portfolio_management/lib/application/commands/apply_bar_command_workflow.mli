@@ -13,7 +13,15 @@
     ({!Build_target_on_construction_intent.handle}); the
     construction policy alone decides {b what} the intent looks
     like (Scalar for alpha, Coupled for pair-MR), the unified
-    handler decides {b how} it becomes a sized clipped target. *)
+    handler decides {b how} it becomes a sized clipped target.
+
+    Two families of pair-MR policies are driven from the same
+    workflow call: the static one
+    ([pair_mr_states_for]) and the Kalman-adaptive one
+    ([pair_kalman_mr_states_for]). Both are iterated for every
+    bar; both feed intents into the same downstream pipeline. A
+    book authorising at most one of them via [Risk_config] is
+    the unified handler's responsibility. *)
 
 module Target_portfolio_updated =
   Portfolio_management_integration_events.Target_portfolio_updated_integration_event
@@ -21,6 +29,8 @@ module Target_portfolio_updated =
 val execute :
   pair_mr_states_for:
     (Core.Instrument.t -> Portfolio_management.Pair_mean_reversion.state ref list) ->
+  pair_kalman_mr_states_for:
+    (Core.Instrument.t -> Portfolio_management.Pair_kalman_mean_reversion.state ref list) ->
   update_mark:(Core.Instrument.t -> close:Decimal.t -> unit) ->
   update_vol:(Core.Instrument.t -> close:Decimal.t -> unit) ->
   risk_config_for:

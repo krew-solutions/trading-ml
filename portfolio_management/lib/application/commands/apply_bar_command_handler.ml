@@ -1,4 +1,5 @@
 module Pair_mean_reversion = Portfolio_management.Pair_mean_reversion
+module Pair_kalman_mean_reversion = Portfolio_management.Pair_kalman_mean_reversion
 module Common = Portfolio_management.Common
 
 type validation_error =
@@ -54,6 +55,8 @@ type ok = {
 
 let handle
     ~(pair_mr_states_for : Core.Instrument.t -> Pair_mean_reversion.state ref list)
+    ~(pair_kalman_mr_states_for :
+       Core.Instrument.t -> Pair_kalman_mean_reversion.state ref list)
     (cmd : Apply_bar_command.t) : (ok, handle_error) Rop.t =
   let parsed =
     let open Rop in
@@ -64,7 +67,7 @@ let handle
   match parsed with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)
   | Ok (instrument, candle) ->
-      let intents =
+      let static_intents =
         List.fold_left
           (fun acc state_ref ->
             let state', intent_opt =
@@ -77,4 +80,21 @@ let handle
           []
           (pair_mr_states_for instrument)
       in
-      Rop.succeed { intents = List.rev intents; mark = (instrument, candle.close) }
+      let kalman_intents =
+        List.fold_left
+          (fun acc state_ref ->
+            let state', intent_opt =
+              Pair_kalman_mean_reversion.on_bar !state_ref ~instrument ~candle
+            in
+            state_ref := state';
+            match intent_opt with
+            | Some i -> i :: acc
+            | None -> acc)
+          []
+          (pair_kalman_mr_states_for instrument)
+      in
+      Rop.succeed
+        {
+          intents = List.rev_append static_intents (List.rev kalman_intents);
+          mark = (instrument, candle.close);
+        }

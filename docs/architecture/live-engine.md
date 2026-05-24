@@ -209,26 +209,25 @@ let on_fill_event t fe =
     match Hashtbl.find_opt t.pending fe.client_order_id with
     | None -> Log.warn "unknown cid"
     | Some p ->
-      let new_remaining = p.remaining_quantity - fe.actual_quantity in
-      if new_remaining <= 0 then begin
-        Hashtbl.remove t.pending fe.client_order_id;
-        t.state <- Engine.Step.commit_fill t.state
-          ~reservation_id:p.reservation_id
-          ~actual_quantity:fe.actual_quantity
-          ~actual_price:fe.actual_price
-          ~actual_fee:fe.actual_fee
-      end else begin
-        Hashtbl.replace t.pending fe.client_order_id
-          { p with remaining_quantity = new_remaining };
-        t.state <- Engine.Step.commit_partial_fill t.state ...
-      end)
+      match Engine.Step.commit_fill t.state
+              ~reservation_id:p.reservation_id
+              ~actual_quantity:fe.actual_quantity
+              ~actual_price:fe.actual_price
+              ~actual_fee:fe.actual_fee with
+      | Ok (state', Drawn_down _) -> t.state <- state'
+      | Ok (state', Fully_committed _) ->
+          Hashtbl.remove t.pending fe.client_order_id;
+          t.state <- state'
+      | Error _ -> ())
 ```
 
-Distinguishes partial vs full fill by comparing the event's
-`actual_quantity` to the pending's `remaining_quantity`. The
-pending entry is either shrunk (partial) or removed (full).
-Multiple partial events on one cid are handled correctly —
-remaining quantity decreases with each until it hits zero.
+The domain decides partial vs terminal by tracking cover/open
+inside the reservation; the engine just dispatches by the
+returned outcome. Multiple legs on one cid are handled
+naturally — each call returns `Drawn_down` until cover and
+open both reach zero, at which point the final call returns
+`Fully_committed` and the pending entry can be removed. See
+[ADR 0028](../adr/0028-account-progressive-reservation-drawdown.md).
 
 ### Fallback: `reconcile`
 

@@ -47,12 +47,13 @@ val reserve :
   price:Decimal.t -> slippage_buffer:float -> fee_rate:float -> t
 
 val commit_fill :
-  t -> id:int -> actual_quantity -> actual_price -> actual_fee -> t
+  t -> id:int ->
+  actual_quantity:Decimal.t ->
+  actual_price:Decimal.t ->
+  actual_fee:Decimal.t ->
+  (t * commit_fill_outcome, commit_fill_error) result
 
-val commit_partial_fill :
-  t -> id:int -> actual_quantity -> actual_price -> actual_fee -> t
-
-val release : t -> id:int -> t
+val release : t -> id:int -> (t * Reservation_released.t, release_error) result
 
 val available_cash : t -> Decimal.t
 val available_qty : t -> Instrument.t -> Decimal.t
@@ -60,15 +61,21 @@ val available_qty : t -> Instrument.t -> Decimal.t
 
 - `reserve` appends a reservation. `cash` and `positions`
   unchanged; `available_cash` / `available_qty` drop.
-- `commit_fill` settles the reservation **fully**: removes it
-  from the list, applies `fill` with the actual numbers. If the
-  actual numbers differ from reserved, the proration works out
-  automatically because only the `fill` call touches `cash` /
-  `positions`, and the reservation is entirely removed.
-- `commit_partial_fill` settles **part**: shrinks the
-  reservation's remaining `quantity` by `actual_quantity`, applies
-  `fill` for that slice. When `quantity` reaches zero the
-  reservation is removed.
+- `commit_fill` settles a leg against the reservation. Cover-first
+  attribution: each call depletes `cover_qty` before `open_qty`.
+  The outcome variant tells which fact this leg is:
+  - `Drawn_down` — the reservation stays in the ledger with
+    reduced cover/open parts. Per-leg event for progressive
+    drawdown (TWAP/Iceberg/POV).
+  - `Fully_committed` — both cover and open reached zero. The
+    reservation is removed; the event carries the terminal
+    post-image of cash and position.
+  - `Overfill` error — the broker reported a fill exceeding the
+    reservation's remaining quantity (rounding or in-flight
+    cancel race). The aggregate state is unchanged; the
+    application layer decides how to react.
+  See [ADR 0028](../adr/0028-account-progressive-reservation-drawdown.md)
+  for the contract this operation fulfils for the saga.
 - `release` drops the reservation with no fill (cancel/reject).
 
 ### `available_cash`
@@ -128,8 +135,10 @@ in
   per bar. Behaves exactly like the pre-reservations `fill`.
 - **Live** sets `auto_commit = false`. The reservation persists
   until a broker event arrives through
-  `Live_engine.on_fill_event`, at which point `commit_fill` or
-  `commit_partial_fill` is called with actual broker numbers.
+  `Live_engine.on_fill_event`, at which point `commit_fill` is
+  called with actual broker numbers — each call either draws the
+  reservation down (`Drawn_down`) or settles it terminally
+  (`Fully_committed`).
 
 ## End-to-end flow in Live mode
 
@@ -153,7 +162,7 @@ in
  Live_engine.on_fill_event { cid; actual_qty; actual_price; actual_fee }
   │
   ├─ find cid in pending map
-  ├─ Step.commit_fill or commit_partial_fill
+  ├─ Step.commit_fill (Drawn_down: shrink; Fully_committed: remove)
   └─ Portfolio.reservations shrinks, cash moves, position updates
 ```
 
@@ -213,13 +222,16 @@ frame from a real broker. Carries **actual** fill numbers:
 ```ocaml
 let on_fill_event t (fe : fill_event) =
   ...
-  let new_remaining = pending.remaining_quantity - fe.actual_quantity in
-  if new_remaining <= 0 then
-    Step.commit_fill t.state ~reservation_id ...  (* full *)
-  else begin
-    Step.commit_partial_fill t.state ~reservation_id ...
-    Hashtbl.replace t.pending cid { pending with remaining_quantity = new_remaining }
-  end
+  match Step.commit_fill t.state ~reservation_id
+          ~actual_quantity:fe.actual_quantity
+          ~actual_price:fe.actual_price ~actual_fee:fe.actual_fee with
+  | Ok (state', Drawn_down _) ->
+      t.state <- state';
+      (* reservation still open; engine-side bookkeeping if any *)
+  | Ok (state', Fully_committed _) ->
+      t.state <- state';
+      Hashtbl.remove t.pending cid
+  | Error _ -> ()  (* Reservation_not_found | Overfill — log + drop *)
 ```
 
 ### Fallback: reconcile
@@ -250,7 +262,7 @@ N bars inside `on_bar`.
 
 On a `Filled` status, reconcile calls
 `Broker.get_executions ~client_order_id` and commits each
-returned execution via `Step.commit_partial_fill` with actual
+returned execution via `Step.commit_fill` with actual
 broker numbers. Paper returns its own fill history filtered by
 cid; real brokers (Finam, BCS) will return per-execution trade
 records (Finam's `/v1/accounts/{id}/trades`, BCS's `Deal`

@@ -30,6 +30,9 @@ module Reservation_released_ie =
 module Reservation_filled_ie =
   Account_integration_events.Reservation_filled_integration_event
 
+module Reservation_drawn_down_ie =
+  Account_integration_events.Reservation_drawn_down_integration_event
+
 type ctx = {
   portfolio : Account.Portfolio.t ref;
   next_reservation_id : unit -> int;
@@ -41,6 +44,7 @@ type ctx = {
   reservation_rejected_pub : Reservation_rejected_ie.t list ref;
   reservation_released_pub : Reservation_released_ie.t list ref;
   reservation_filled_pub : Reservation_filled_ie.t list ref;
+  reservation_drawn_down_pub : Reservation_drawn_down_ie.t list ref;
   last_reserve_result : (unit, Reserve_h.handle_error) Rop.t option;
   last_release_result : (unit, Release_h.handle_error) Rop.t option;
   last_commit_fill_result : (unit, Commit_fill_h.handle_error) Rop.t option;
@@ -74,6 +78,7 @@ let fresh_ctx () =
     reservation_rejected_pub = ref [];
     reservation_released_pub = ref [];
     reservation_filled_pub = ref [];
+    reservation_drawn_down_pub = ref [];
     last_reserve_result = None;
     last_release_result = None;
     last_commit_fill_result = None;
@@ -143,7 +148,11 @@ let commit_fill ctx ~reservation_id ~quantity ~price ~fee =
   let publish_reservation_filled e =
     ctx.reservation_filled_pub := e :: !(ctx.reservation_filled_pub)
   in
+  let publish_reservation_drawn_down e =
+    ctx.reservation_drawn_down_pub := e :: !(ctx.reservation_drawn_down_pub)
+  in
   let result =
-    Commit_fill_wf.execute ~portfolio:ctx.portfolio ~publish_reservation_filled cmd
+    Commit_fill_wf.execute ~portfolio:ctx.portfolio ~publish_reservation_drawn_down
+      ~publish_reservation_filled cmd
   in
   { ctx with last_commit_fill_result = Some result }

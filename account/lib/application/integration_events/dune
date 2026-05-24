@@ -57,3 +57,15 @@
   (progn
    (run atdgen -t -o reservation_released_integration_event %{atd})
    (run atdgen -j -o reservation_released_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/reservation_drawn_down_integration_event.atd))
+ (targets reservation_drawn_down_integration_event_t.ml
+          reservation_drawn_down_integration_event_t.mli
+          reservation_drawn_down_integration_event_j.ml
+          reservation_drawn_down_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o reservation_drawn_down_integration_event %{atd})
+   (run atdgen -j -o reservation_drawn_down_integration_event %{atd}))))

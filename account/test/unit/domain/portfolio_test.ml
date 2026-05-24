@@ -182,7 +182,7 @@ let test_reserve_sell_growing_short () =
       Alcotest.check dec "reserved_cash on adding to short" (d 250.0) ev.reserved_cash
   | Error _ -> Alcotest.fail "expected acceptance"
 
-let test_commit_partial_fill_cover_first () =
+let test_commit_fill_cover_first_sell () =
   (* Long 6, sell 10 → cover=6, open=4. Partial fill 5 should
      deplete cover (5 of 6) leaving cover=1, open=4. Next partial
      fill 5 should deplete remaining cover=1 then 4 of open. *)
@@ -201,8 +201,17 @@ let test_commit_partial_fill_cover_first () =
     | Error _ -> Alcotest.fail "reserve must succeed"
   in
   let p =
-    Portfolio.commit_partial_fill p ~id:1 ~actual_quantity:(d 5.0) ~actual_price:(d 100.0)
-      ~actual_fee:Decimal.zero
+    match
+      Portfolio.commit_fill p ~id:1 ~actual_quantity:(d 5.0) ~actual_price:(d 100.0)
+        ~actual_fee:Decimal.zero
+    with
+    | Ok (p', Portfolio.Drawn_down ev) ->
+        Alcotest.check dec "drawn_quantity" (d 5.0) ev.drawn_quantity;
+        Alcotest.check dec "remaining_cover_qty after first draw" (d 1.0)
+          ev.remaining_cover_qty;
+        Alcotest.check dec "remaining_open_qty unchanged" (d 4.0) ev.remaining_open_qty;
+        p'
+    | _ -> Alcotest.fail "expected Ok (Drawn_down _) on partial cover-first fill"
   in
   (match p.reservations with
   | [ r ] ->
@@ -210,8 +219,12 @@ let test_commit_partial_fill_cover_first () =
       Alcotest.check dec "open_qty unchanged after first partial" (d 4.0) r.open_qty
   | _ -> Alcotest.fail "expected one reservation");
   let p =
-    Portfolio.commit_partial_fill p ~id:1 ~actual_quantity:(d 5.0) ~actual_price:(d 100.0)
-      ~actual_fee:Decimal.zero
+    match
+      Portfolio.commit_fill p ~id:1 ~actual_quantity:(d 5.0) ~actual_price:(d 100.0)
+        ~actual_fee:Decimal.zero
+    with
+    | Ok (p', Portfolio.Fully_committed _) -> p'
+    | _ -> Alcotest.fail "expected Ok (Fully_committed _) on terminal fill"
   in
   Alcotest.(check int) "reservation closed" 0 (List.length p.reservations)
 
@@ -227,8 +240,8 @@ let test_commit_fill_removes_reservation () =
       Portfolio.commit_fill p ~id:3 ~actual_quantity:(d 10.0) ~actual_price:(d 99.5)
         ~actual_fee:(d 0.995)
     with
-    | Ok pair -> pair
-    | Error _ -> Alcotest.fail "expected the reservation to exist"
+    | Ok (p', Portfolio.Fully_committed ev) -> (p', ev)
+    | _ -> Alcotest.fail "expected Ok (Fully_committed _)"
   in
   Alcotest.(check (float 1e-3))
     "cash debited at actual" 9004.005 (Decimal.to_float p.cash);
@@ -274,7 +287,11 @@ let test_commit_unknown_id_returns_not_found () =
   | Error (Portfolio.Reservation_not_found 42) -> ()
   | _ -> Alcotest.fail "expected Reservation_not_found 42"
 
-let test_commit_partial_fill_shrinks_reservation () =
+let test_commit_fill_partial_buy_drawn_down () =
+  (* reserve 10 Buy at 100, slippage 0, fee 0; commit 3 →
+     Drawn_down with remaining_open_qty = 7, cash debited by 300,
+     remaining reserved cash = 700, reservation still in the
+     ledger. *)
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:10 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
@@ -284,39 +301,73 @@ let test_commit_partial_fill_shrinks_reservation () =
   Alcotest.(check (float 1e-6))
     "available after reserve" 9000.0
     (Decimal.to_float (Portfolio.available_cash p));
-  let p =
-    Portfolio.commit_partial_fill p ~id:10 ~actual_quantity:(d 3.0)
-      ~actual_price:(d 100.0) ~actual_fee:Decimal.zero
-  in
-  Alcotest.(check (float 1e-6)) "cash after partial" 9700.0 (Decimal.to_float p.cash);
-  Alcotest.(check (float 1e-6))
-    "available after partial" 9000.0
-    (Decimal.to_float (Portfolio.available_cash p));
-  Alcotest.(check int) "reservation still open" 1 (List.length p.reservations);
-  let p =
-    Portfolio.commit_partial_fill p ~id:10 ~actual_quantity:(d 7.0)
-      ~actual_price:(d 100.0) ~actual_fee:Decimal.zero
-  in
-  Alcotest.(check (float 1e-6)) "cash after full fill" 9000.0 (Decimal.to_float p.cash);
-  Alcotest.(check int)
-    "reservation closed on zero remaining" 0 (List.length p.reservations)
+  match
+    Portfolio.commit_fill p ~id:10 ~actual_quantity:(d 3.0) ~actual_price:(d 100.0)
+      ~actual_fee:Decimal.zero
+  with
+  | Ok (p', Portfolio.Drawn_down ev) ->
+      Alcotest.(check (float 1e-6)) "cash after partial" 9700.0 (Decimal.to_float p'.cash);
+      Alcotest.(check (float 1e-6))
+        "available after partial" 9000.0
+        (Decimal.to_float (Portfolio.available_cash p'));
+      Alcotest.(check int) "reservation still open" 1 (List.length p'.reservations);
+      Alcotest.check dec "event remaining_open_qty" (d 7.0) ev.remaining_open_qty;
+      Alcotest.check dec "event remaining_reserved_cash" (d 700.0)
+        ev.remaining_reserved_cash;
+      Alcotest.(check (float 1e-6)) "event new_cash" 9700.0 (Decimal.to_float ev.new_cash)
+  | _ -> Alcotest.fail "expected Ok (Drawn_down _)"
 
-let test_commit_partial_fill_over_reserve_raises () =
+let test_commit_fill_drawn_then_filled () =
+  (* reserve 10 Buy at 100; commit 3, then commit 7 → first leg
+     Drawn_down (open=7), second leg Fully_committed (reservation
+     gone, cash = 9000). *)
+  let p = Portfolio.empty ~cash:(d 10_000.0) in
+  let p =
+    Portfolio.reserve p ~id:20 ~side:Buy ~instrument:inst ~quantity:(d 10.0)
+      ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
+      ~margin_policy:stub_policy
+  in
+  let p =
+    match
+      Portfolio.commit_fill p ~id:20 ~actual_quantity:(d 3.0) ~actual_price:(d 100.0)
+        ~actual_fee:Decimal.zero
+    with
+    | Ok (p', Portfolio.Drawn_down _) -> p'
+    | _ -> Alcotest.fail "expected Drawn_down on first leg"
+  in
+  match
+    Portfolio.commit_fill p ~id:20 ~actual_quantity:(d 7.0) ~actual_price:(d 100.0)
+      ~actual_fee:Decimal.zero
+  with
+  | Ok (p', Portfolio.Fully_committed ev) ->
+      Alcotest.(check (float 1e-6)) "cash after full" 9000.0 (Decimal.to_float p'.cash);
+      Alcotest.(check int) "reservation closed" 0 (List.length p'.reservations);
+      Alcotest.(check (float 1e-6))
+        "event filled_quantity (terminal leg only)" 7.0
+        (Decimal.to_float ev.filled_quantity)
+  | _ -> Alcotest.fail "expected Fully_committed on second leg"
+
+let test_commit_fill_overfill_returns_error () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
   let p =
     Portfolio.reserve p ~id:11 ~side:Buy ~instrument:inst ~quantity:(d 5.0)
       ~price:(d 100.0) ~slippage_buffer:Decimal.zero ~fee_rate:Decimal.zero
       ~margin_policy:stub_policy
   in
-  Alcotest.check_raises "overfill raises"
-    (Invalid_argument
-       "Portfolio.commit_partial_fill: actual_quantity exceeds remaining reserved \
-        quantity") (fun () ->
-      let _ =
-        Portfolio.commit_partial_fill p ~id:11 ~actual_quantity:(d 10.0)
-          ~actual_price:(d 100.0) ~actual_fee:Decimal.zero
-      in
-      ())
+  let cash_before = p.cash in
+  let reservations_before = List.length p.reservations in
+  match
+    Portfolio.commit_fill p ~id:11 ~actual_quantity:(d 10.0) ~actual_price:(d 100.0)
+      ~actual_fee:Decimal.zero
+  with
+  | Error (Portfolio.Overfill { id; attempted; remaining }) ->
+      Alcotest.(check int) "overfill id" 11 id;
+      Alcotest.check dec "overfill attempted" (d 10.0) attempted;
+      Alcotest.check dec "overfill remaining" (d 5.0) remaining;
+      Alcotest.check dec "portfolio cash unchanged" cash_before p.cash;
+      Alcotest.(check int)
+        "reservation count unchanged" reservations_before (List.length p.reservations)
+  | _ -> Alcotest.fail "expected Error (Overfill _)"
 
 let test_multiple_reservations_stack () =
   let p = Portfolio.empty ~cash:(d 10_000.0) in
@@ -350,7 +401,7 @@ let tests =
       test_reserve_sell_open_only_fails_margin );
     ("reserve sell mixed cover+open", `Quick, test_reserve_sell_mixed_cover_and_open);
     ("reserve sell growing short", `Quick, test_reserve_sell_growing_short);
-    ("commit partial fill cover-first", `Quick, test_commit_partial_fill_cover_first);
+    ("commit fill cover-first sell", `Quick, test_commit_fill_cover_first_sell);
     ("commit_fill removes reservation", `Quick, test_commit_fill_removes_reservation);
     ( "release does not touch cash",
       `Quick,
@@ -359,8 +410,9 @@ let tests =
       `Quick,
       test_commit_unknown_id_returns_not_found );
     ("multiple reservations stack", `Quick, test_multiple_reservations_stack);
-    ( "partial fill shrinks reservation",
+    ( "commit_fill partial buy is Drawn_down",
       `Quick,
-      test_commit_partial_fill_shrinks_reservation );
-    ("overfill on partial raises", `Quick, test_commit_partial_fill_over_reserve_raises);
+      test_commit_fill_partial_buy_drawn_down );
+    ("commit_fill drawn then filled", `Quick, test_commit_fill_drawn_then_filled);
+    ("commit_fill overfill returns Error", `Quick, test_commit_fill_overfill_returns_error);
   ]

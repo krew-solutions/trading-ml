@@ -39,6 +39,8 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0024](0024-equity-anchored-sizing-with-explicit-risk-config.md) | Equity-anchored sizing with explicit Risk_config | Accepted | 2026-05-19 |
 | [0025](0025-volatility-target-sizing.md) | Volatility-target sizing as the first vol-aware policy | Accepted | 2026-05-19 |
 | [0026](0026-bar-stream-multi-timeframe-routing.md) | Bar streams as first-class subscriptions; multi-timeframe routing through domain BCs | Proposed | 2026-05-20 |
+| [0027](0027-kalman-pair-mean-reversion.md) | Adaptive-β pair mean reversion as a sibling policy | Accepted | 2026-05-24 |
+| [0028](0028-account-progressive-reservation-drawdown.md) | Progressive reservation drawdown in Account | Accepted | 2026-05-24 |
 
 ## Template
 

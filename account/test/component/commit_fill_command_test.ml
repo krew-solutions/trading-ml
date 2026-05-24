@@ -2,8 +2,12 @@
     reservation.
 
     Covers the happy path (the reservation matures, the atomic
-    [Reservation_filled] is announced) and the refusal scenarios
-    — malformed quantity / price / fee, missing reservation. *)
+    [Reservation_filled] is announced), the progressive-drawdown
+    path (a partial leg announces [Reservation_drawn_down] and
+    keeps the reservation in the ledger, a subsequent terminal
+    leg announces [Reservation_filled] and removes it), and the
+    refusal scenarios — malformed quantity / price / fee,
+    missing reservation. *)
 
 module Gherkin = Gherkin_edsl
 open Test_harness
@@ -151,10 +155,119 @@ let non_positive_quantity_fails_validation =
           | _ -> Alcotest.fail "expected refusal for non-positive quantity");
     ]
 
+let a_partial_fill_announces_a_drawn_down_and_keeps_the_reservation =
+  Gherkin.scenario
+    "A partial fill announces a drawn-down and keeps the reservation open for the \
+     unfilled remainder"
+    fresh_ctx
+    [
+      Gherkin.given "a portfolio with 10 000 cash" (fun ctx ->
+          ctx |> with_cash ~cash:"10000");
+      Gherkin.and_ "an existing buy reservation for 10 SBER@MISX at 100" (fun ctx ->
+          ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
+      Gherkin.when_ "the broker reports a partial fill of 3 at 100 with fee 0" (fun ctx ->
+          ctx |> commit_fill ~reservation_id:1 ~quantity:"3" ~price:"100" ~fee:"0");
+      Gherkin.then_ "the request is accepted" (fun ctx ->
+          match ctx.last_commit_fill_result with
+          | Some (Ok ()) -> ()
+          | _ -> Alcotest.fail "expected acceptance");
+      Gherkin.then_ "a drawn-down announcement is published, not a final fill" (fun ctx ->
+          Alcotest.(check int)
+            "reservation-filled count" 0
+            (List.length !(ctx.reservation_filled_pub));
+          match !(ctx.reservation_drawn_down_pub) with
+          | [ ie ] ->
+              Alcotest.(check int) "reservation_id" 1 ie.reservation_id;
+              Alcotest.(check string) "drawn_quantity" "3" ie.drawn_quantity;
+              Alcotest.(check string) "remaining_open_qty" "7" ie.remaining_open_qty;
+              Alcotest.(check string) "new_cash (10 000 - 3*100)" "9700" ie.new_cash
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected one drawn-down announcement, got %d"
+                   (List.length other)));
+      Gherkin.then_ "the reservation stays in the ledger" (fun ctx ->
+          Alcotest.(check int)
+            "reservations still 1" 1
+            (List.length !(ctx.portfolio).reservations));
+    ]
+
+let progressive_drawdown_across_two_legs_terminates_in_a_final_fill =
+  Gherkin.scenario
+    "A reservation drawn down by two legs ends with a Reservation_filled and an empty \
+     ledger"
+    fresh_ctx
+    [
+      Gherkin.given "a portfolio with 10 000 cash" (fun ctx ->
+          ctx |> with_cash ~cash:"10000");
+      Gherkin.and_ "an existing buy reservation for 10 SBER@MISX at 100" (fun ctx ->
+          ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"10" ~price:"100");
+      Gherkin.when_ "the broker reports two legs (3 + 7) at 100 with fee 0" (fun ctx ->
+          ctx
+          |> commit_fill ~reservation_id:1 ~quantity:"3" ~price:"100" ~fee:"0"
+          |> commit_fill ~reservation_id:1 ~quantity:"7" ~price:"100" ~fee:"0");
+      Gherkin.then_ "exactly one drawn-down precedes exactly one final fill" (fun ctx ->
+          Alcotest.(check int)
+            "drawn-down count" 1
+            (List.length !(ctx.reservation_drawn_down_pub));
+          match !(ctx.reservation_filled_pub) with
+          | [ ie ] ->
+              Alcotest.(check string) "terminal filled_quantity" "7" ie.filled_quantity;
+              Alcotest.(check string) "terminal new_cash" "9000" ie.new_cash
+          | other ->
+              Alcotest.fail
+                (Printf.sprintf "expected one terminal fill, got %d" (List.length other)));
+      Gherkin.then_ "the reservation is consumed and the position equals the total"
+        (fun ctx ->
+          Alcotest.(check int)
+            "reservations" 0
+            (List.length !(ctx.portfolio).reservations);
+          let instrument = Core.Instrument.of_qualified "SBER@MISX" in
+          match Account.Portfolio.position !(ctx.portfolio) instrument with
+          | Some pos ->
+              Alcotest.(check string) "position qty" "10" (Decimal.to_string pos.quantity)
+          | None -> Alcotest.fail "expected an open SBER@MISX position");
+    ]
+
+let overfill_is_refused_and_nothing_is_announced =
+  Gherkin.scenario
+    "An overfill (broker reported more than the reservation's remaining) is refused"
+    fresh_ctx
+    [
+      Gherkin.given "a portfolio with 10 000 cash" (fun ctx ->
+          ctx |> with_cash ~cash:"10000");
+      Gherkin.and_ "an existing buy reservation for 5 SBER@MISX at 100" (fun ctx ->
+          ctx |> reserve ~side:"BUY" ~symbol:"SBER@MISX" ~quantity:"5" ~price:"100");
+      Gherkin.when_ "the broker reports a fill of 10 against it" (fun ctx ->
+          ctx |> commit_fill ~reservation_id:1 ~quantity:"10" ~price:"100" ~fee:"0");
+      Gherkin.then_ "the request is refused as overfill" (fun ctx ->
+          match ctx.last_commit_fill_result with
+          | Some (Error errs)
+            when List.exists
+                   (function
+                     | Commit_fill_h.Commit (Account.Portfolio.Overfill { id = 1; _ }) ->
+                         true
+                     | _ -> false)
+                   errs -> ()
+          | _ -> Alcotest.fail "expected Overfill refusal");
+      Gherkin.then_ "nothing is announced and the portfolio is unchanged" (fun ctx ->
+          Alcotest.(check int)
+            "drawn-down count" 0
+            (List.length !(ctx.reservation_drawn_down_pub));
+          Alcotest.(check int)
+            "reservation-filled count" 0
+            (List.length !(ctx.reservation_filled_pub));
+          Alcotest.(check int)
+            "reservation still in the ledger" 1
+            (List.length !(ctx.portfolio).reservations));
+    ]
+
 let feature =
   Gherkin.feature "Commit fill command"
     [
       commit_fill_after_reserve_announces_the_atomic_fill;
+      a_partial_fill_announces_a_drawn_down_and_keeps_the_reservation;
+      progressive_drawdown_across_two_legs_terminates_in_a_final_fill;
+      overfill_is_refused_and_nothing_is_announced;
       commit_fill_rejected_for_already_released_reservation;
       zero_id_fails_validation;
       negative_fee_fails_validation;

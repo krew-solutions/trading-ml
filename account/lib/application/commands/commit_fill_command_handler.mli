@@ -2,16 +2,19 @@
 
     Parses the wire payload, invokes
     {!Account.Portfolio.commit_fill}, and yields the resulting
-    {!Reservation_filled} domain event. The event is built inside
-    the aggregate operation, so the handler does not reconstruct
-    it from state diff — it simply unpacks the [Ok (_, event)]
-    branch.
+    {!Account.Portfolio.commit_fill_outcome} — either a
+    partial-draw {!Reservation_drawn_down} or a terminal
+    {!Reservation_filled} event. The event is built inside the
+    aggregate operation; the handler simply unpacks the
+    [Ok (_, outcome)] branch and forwards the variant to the
+    workflow, which fans out to the matching publisher.
 
     Symmetric with {!Release_command_handler}: validation errors
     sit on one side of [handle_error], the aggregate's typed
-    [Reservation_not_found] sits on the other. The workflow
-    propagates both Error tracks; the application layer (factory)
-    decides what to do with them (silent drop, log, alert).
+    [commit_fill_error] ([Reservation_not_found] |
+    [Overfill]) on the other. The workflow propagates both Error
+    tracks; the application layer (factory) decides what to do
+    with them (silent drop, log, alert).
 
     Validation is intentionally a private internal phase — same
     rationale as {!Reserve_command_handler}: a CQRS command has
@@ -51,4 +54,4 @@ type handle_error =
 val handle :
   portfolio:Account.Portfolio.t ref ->
   Commit_fill_command.t ->
-  (Account.Portfolio.Events.Reservation_filled.t, handle_error) Rop.t
+  (Account.Portfolio.commit_fill_outcome, handle_error) Rop.t

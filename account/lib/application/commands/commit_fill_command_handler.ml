@@ -26,6 +26,9 @@ type validated_commit_fill_command = {
 let commit_fill_error_to_string : Account.Portfolio.commit_fill_error -> string = function
   | Account.Portfolio.Reservation_not_found id ->
       Printf.sprintf "reservation %d not found" id
+  | Account.Portfolio.Overfill { id; attempted; remaining } ->
+      Printf.sprintf "overfill on reservation %d: attempted %s, remaining %s" id
+        (Decimal.to_string attempted) (Decimal.to_string remaining)
 
 type handle_error =
   | Validation of validation_error
@@ -71,7 +74,7 @@ let validate (cmd : Commit_fill_command.t) :
   { reservation_id; quantity; price; fee }
 
 let handle ~(portfolio : Account.Portfolio.t ref) (cmd : Commit_fill_command.t) :
-    (Account.Portfolio.Events.Reservation_filled.t, handle_error) Rop.t =
+    (Account.Portfolio.commit_fill_outcome, handle_error) Rop.t =
   match validate cmd with
   | Error errs -> Error (List.map (fun e -> Validation e) errs)
   | Ok v -> (
@@ -79,7 +82,7 @@ let handle ~(portfolio : Account.Portfolio.t ref) (cmd : Commit_fill_command.t) 
         Account.Portfolio.commit_fill !portfolio ~id:v.reservation_id
           ~actual_quantity:v.quantity ~actual_price:v.price ~actual_fee:v.fee
       with
-      | Ok (portfolio', event) ->
+      | Ok (portfolio', outcome) ->
           portfolio := portfolio';
-          Rop.succeed event
+          Rop.succeed outcome
       | Error e -> Error [ Commit e ])

@@ -46,6 +46,11 @@ let build ~bus ~initial_cash ~market_price : t =
       ~yojson_of:
         Account_integration_events.Reservation_filled_integration_event.yojson_of_t
   in
+  let publish_reservation_drawn_down =
+    produce ~uri:"in-memory://account.reservation-drawn-down"
+      ~yojson_of:
+        Account_integration_events.Reservation_drawn_down_integration_event.yojson_of_t
+  in
   let dispatch_reserve cmd =
     match
       Account_commands.Reserve_command_workflow.execute ~portfolio:portfolio_ref
@@ -73,15 +78,17 @@ let build ~bus ~initial_cash ~market_price : t =
   let dispatch_commit_fill (cmd : Account_commands.Commit_fill_command.t) =
     match
       Account_commands.Commit_fill_command_workflow.execute ~portfolio:portfolio_ref
-        ~publish_reservation_filled cmd
+        ~publish_reservation_drawn_down ~publish_reservation_filled cmd
     with
     | Ok () -> ()
-    (* Reservation-not-found surfaces here as a typed
-       [Commit_fill_command_handler.Commit (Reservation_not_found _)]
-       error. Today it is dropped silently, matching the same
-       compensation-idempotency policy applied to
-       [account.release-command] above; future deployments that
-       want to log / alert / surface it can branch on the variant. *)
+    (* Two typed errors surface here:
+       - [Reservation_not_found]: dropped silently, same
+         compensation-idempotency policy as [account.release-command]
+         above (a duplicated or late fill against a reservation
+         already drained or released is a no-op).
+       - [Overfill]: the broker reported a fill quantity exceeding
+         the reservation's remaining; today dropped silently, future
+         reconcile work may surface it. *)
     | Error _ -> ()
   in
   let consume (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =

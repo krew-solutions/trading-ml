@@ -1,8 +1,10 @@
 (** Pending trade Entity — qty/cash earmarked but not yet applied.
     Identified by [id]; lifecycle is
-    [reserve → commit_partial_fill* → commit_fill | release]. Lives
-    inside the [Portfolio] aggregate, so the parent aggregate is the
-    sole transactional consistency boundary.
+    [reserve → commit_fill+ | release]. Lives inside the
+    [Portfolio] aggregate, so the parent aggregate is the sole
+    transactional consistency boundary. Each [commit_fill] draws
+    cover/open down cover-first; the terminal draw removes the
+    reservation.
 
     A single reservation can carry both a {b cover} part (closes
     the opposite-side existing position — Sell on a long, Buy on a

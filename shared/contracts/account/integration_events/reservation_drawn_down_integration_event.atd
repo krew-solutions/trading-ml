@@ -1,0 +1,41 @@
+(* Wire contract: account/lib/application/integration_events/reservation_drawn_down_integration_event.ml
+
+   A partial fill drew the reservation down without exhausting
+   it. The reservation stays in the ledger with reduced
+   cover/open parts and the residual collateral block; the
+   terminal draw is announced by reservation_filled instead.
+
+   Cross-referenced types resolved via atdgen at code-generation
+   time; the consumer library opens Account_view_models so the
+   bare `Instrument_view_model_t` name binds across libraries:
+
+   - instrument_view_model — see view_models/instrument_view_model.atd *)
+
+type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
+
+type t = {
+  correlation_id <doc text="Saga-instance identifier echoed from the upstream Commit_fill_command.t."> : string;
+
+  reservation_id : int;
+
+  instrument : instrument_view_model;
+
+  side <doc text="'BUY' | 'SELL'."> : string;
+
+  drawn_quantity <doc text="This draw's filled quantity, decimal string. Always positive — sign is carried by [side]."> : string;
+
+  fill_price : string;
+  fee : string;
+
+  remaining_cover_qty <doc text="Cover portion still earmarked after this draw, decimal string. '0' when cover-first attribution has fully consumed it."> : string;
+
+  remaining_open_qty <doc text="Open portion still earmarked after this draw, decimal string. Drives the residual collateral block."> : string;
+
+  remaining_reserved_cash <doc text="Cash still blocked by the reservation after this draw: remaining_open_qty × per_unit_collateral, decimal string. [available_cash] grows by the delta this draw freed."> : string;
+
+  new_position_quantity <doc text="Signed post-fill quantity, decimal string. Negative denotes a short, '0' denotes a closed position."> : string;
+
+  new_avg_price <doc text="Post-fill VWAP of the surviving position. '0' when [new_position_quantity] is '0'."> : string;
+
+  new_cash <doc text="Post-fill cash balance, decimal string."> : string;
+}

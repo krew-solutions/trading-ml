@@ -156,7 +156,23 @@ val reserve :
     open_qty remainder reserves
     [open_qty × price × margin_pct] collateral. *)
 
-type commit_fill_error = Reservation_not_found of int
+type commit_fill_outcome =
+  | Drawn_down of Events.Reservation_drawn_down.t
+      (** Partial draw: the reservation stays in the ledger with
+          reduced cover/open parts. Per-fill consumers (PTR
+          drawdown, UI projections) update from this event. *)
+  | Fully_committed of Events.Reservation_filled.t
+      (** Terminal draw: cover and open both reached zero,
+          reservation removed from the ledger. *)
+
+type commit_fill_error =
+  | Reservation_not_found of int
+  | Overfill of { id : int; attempted : Decimal.t; remaining : Decimal.t }
+      (** [actual_quantity] exceeded the reservation's remaining
+          [cover_qty + open_qty]. Real brokers can deliver such
+          fills through rounding or in-flight cancel races; the
+          application layer decides how to react (log, alert,
+          reconcile) without an [Invalid_argument] raise. *)
 
 val commit_fill :
   t ->
@@ -164,36 +180,29 @@ val commit_fill :
   actual_quantity:Decimal.t ->
   actual_price:Decimal.t ->
   actual_fee:Decimal.t ->
-  (t * Events.Reservation_filled.t, commit_fill_error) result
-(** Settle reservation [id] fully with the broker's actual fill
-    numbers. Removes the reservation, applies a real {!fill}, and
-    returns the new portfolio plus the [Reservation_filled] domain
-    event describing the atomic transactional effect (both new
-    cash and new position post-images in one fact).
+  (t * commit_fill_outcome, commit_fill_error) result
+(** Settle a fill against reservation [id] with the broker's
+    actual numbers. Cover-first attribution: [actual_quantity]
+    depletes [cover_qty] before [open_qty], so the open
+    portion's collateral block stays in place as long as
+    possible. See [reservation/reservation.mli] for the cover/open
+    invariant.
 
-    Returns [Reservation_not_found] when [id] is absent. The
-    application layer decides what to do with the typed error —
-    silently drop (saga compensation already released the
-    reservation), log, alert, or surface to a caller. Mirrors the
-    Result-shape of [release]. *)
+    Outcome:
+    - [Fully_committed] when [cover_qty] and [open_qty] both
+      reach zero — the reservation is removed and the event
+      carries the atomic post-image (cash + position).
+    - [Drawn_down] when there is unfilled remainder — the
+      reservation stays in the ledger with reduced parts and
+      the event carries both the post-image and the residual
+      reserved snapshot.
 
-val commit_partial_fill :
-  t ->
-  id:int ->
-  actual_quantity:Decimal.t ->
-  actual_price:Decimal.t ->
-  actual_fee:Decimal.t ->
-  t
-(** Settle part of reservation [id]. Cover-first attribution:
-    [actual_quantity] depletes [cover_qty] before [open_qty], so the
-    open portion's collateral block stays in place as long as
-    possible. The reservation is removed automatically when both
-    [cover_qty] and [open_qty] reach zero (equivalent to
-    {!commit_fill}).
-
-    Raises [Not_found] when the id is absent. Raises
-    [Invalid_argument] if [actual_quantity] exceeds the
-    reservation's combined remaining quantity. *)
+    Errors:
+    - [Reservation_not_found] when [id] is absent. The
+      application layer decides what to do (saga compensation
+      already released, silent drop, log).
+    - [Overfill] when [actual_quantity] exceeds the
+      reservation's remaining quantity. *)
 
 val available_cash : t -> Decimal.t
 (** [cash − Σ reserved_cash r for all r in reservations]. What

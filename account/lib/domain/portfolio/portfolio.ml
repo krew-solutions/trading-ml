@@ -155,63 +155,77 @@ let reserve
 let find_reservation reservations id =
   List.partition (fun (r : Reservation.t) -> r.id = id) reservations
 
-type commit_fill_error = Reservation_not_found of int
+type commit_fill_outcome =
+  | Drawn_down of Events.Reservation_drawn_down.t
+  | Fully_committed of Events.Reservation_filled.t
 
+type commit_fill_error =
+  | Reservation_not_found of int
+  | Overfill of { id : int; attempted : Decimal.t; remaining : Decimal.t }
+
+(* Cover-first attribution: each fill depletes [cover_qty] before
+   [open_qty]. The open portion is what actually releases collateral
+   as it commits, so depleting it last keeps the collateral block
+   stable for as long as possible. *)
 let commit_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
   let matched, rest = find_reservation p.reservations id in
   match matched with
   | [] -> Error (Reservation_not_found id)
   | (r : Reservation.t) :: _ ->
-      let p' = { p with reservations = rest } in
-      let p'' =
-        fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
-          ~price:actual_price ~fee:actual_fee
-      in
-      let new_position_quantity, new_avg_price =
-        match position p'' r.instrument with
-        | Some (pos : Position.t) -> (pos.quantity, pos.avg_price)
-        | None -> (Decimal.zero, Decimal.zero)
-      in
-      let event : Events.Reservation_filled.t =
-        {
-          reservation_id = id;
-          instrument = r.instrument;
-          side = r.side;
-          filled_quantity = actual_quantity;
-          fill_price = actual_price;
-          fee = actual_fee;
-          new_position_quantity;
-          new_avg_price;
-          new_cash = p''.cash;
-        }
-      in
-      Ok (p'', event)
-
-let commit_partial_fill p ~id ~actual_quantity ~actual_price ~actual_fee =
-  let matched, rest = find_reservation p.reservations id in
-  match matched with
-  | [] -> raise Not_found
-  | (r : Reservation.t) :: _ ->
       let total_remaining = Decimal.add r.cover_qty r.open_qty in
       if Decimal.compare actual_quantity total_remaining > 0 then
-        invalid_arg
-          "Portfolio.commit_partial_fill: actual_quantity exceeds remaining reserved \
-           quantity";
-      (* Cover-first attribution: a partial fill consumes the cover
-         portion before the open portion. The open portion is what
-         actually releases collateral as it commits, so depleting it
-         last keeps collateral block stable for as long as possible. *)
-      let cover_consumed = Decimal.min actual_quantity r.cover_qty in
-      let open_consumed = Decimal.sub actual_quantity cover_consumed in
-      let new_cover = Decimal.sub r.cover_qty cover_consumed in
-      let new_open = Decimal.sub r.open_qty open_consumed in
-      let reservations' =
-        if Decimal.is_zero new_cover && Decimal.is_zero new_open then rest
-        else { r with cover_qty = new_cover; open_qty = new_open } :: rest
-      in
-      let p' = { p with reservations = reservations' } in
-      fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
-        ~price:actual_price ~fee:actual_fee
+        Error (Overfill { id; attempted = actual_quantity; remaining = total_remaining })
+      else
+        let cover_consumed = Decimal.min actual_quantity r.cover_qty in
+        let open_consumed = Decimal.sub actual_quantity cover_consumed in
+        let new_cover = Decimal.sub r.cover_qty cover_consumed in
+        let new_open = Decimal.sub r.open_qty open_consumed in
+        let fully_drained = Decimal.is_zero new_cover && Decimal.is_zero new_open in
+        let r' = { r with cover_qty = new_cover; open_qty = new_open } in
+        let reservations' = if fully_drained then rest else r' :: rest in
+        let p' = { p with reservations = reservations' } in
+        let p'' =
+          fill p' ~instrument:r.instrument ~side:r.side ~quantity:actual_quantity
+            ~price:actual_price ~fee:actual_fee
+        in
+        let new_position_quantity, new_avg_price =
+          match position p'' r.instrument with
+          | Some (pos : Position.t) -> (pos.quantity, pos.avg_price)
+          | None -> (Decimal.zero, Decimal.zero)
+        in
+        if fully_drained then
+          let event : Events.Reservation_filled.t =
+            {
+              reservation_id = id;
+              instrument = r.instrument;
+              side = r.side;
+              filled_quantity = actual_quantity;
+              fill_price = actual_price;
+              fee = actual_fee;
+              new_position_quantity;
+              new_avg_price;
+              new_cash = p''.cash;
+            }
+          in
+          Ok (p'', Fully_committed event)
+        else
+          let event : Events.Reservation_drawn_down.t =
+            {
+              reservation_id = id;
+              instrument = r.instrument;
+              side = r.side;
+              drawn_quantity = actual_quantity;
+              fill_price = actual_price;
+              fee = actual_fee;
+              remaining_cover_qty = new_cover;
+              remaining_open_qty = new_open;
+              remaining_reserved_cash = Reservation.reserved_cash r';
+              new_position_quantity;
+              new_avg_price;
+              new_cash = p''.cash;
+            }
+          in
+          Ok (p'', Drawn_down event)
 
 let available_cash p =
   List.fold_left

@@ -1,4 +1,4 @@
-module Order_filled = Paper_broker_integration_events.Order_leg_filled_integration_event
+module Order_filled = Paper_broker_integration_events.Order_filled_integration_event
 
 module type Store = Paper_broker_store.Order_store.S
 module type Command_log = Paper_broker_store.Order_command_log.S
@@ -34,7 +34,7 @@ let execute
                    sagas key by placement_id anyway. *)
                 ""
           in
-          Paper_broker_domain_event_handlers.Publish_integration_event_on_order_leg_filled
+          Paper_broker_domain_event_handlers.Publish_integration_event_on_order_filled
           .handle ~publish_order_filled ~correlation_id f.event)
         fills;
       Rop.succeed ()

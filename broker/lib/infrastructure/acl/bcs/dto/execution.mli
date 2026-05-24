@@ -6,7 +6,7 @@
     (and from the [/orders/execution/ws] WebSocket channel via
     {!Order_event.to_domain}, which lifts the WS payload through
     the same wire shape). The bcs library translates it to the
-    broker BC's domain [Order_leg_filled.t] in {!Bcs_broker} once
+    broker BC's domain [Order_filled.t] in {!Bcs_broker} once
     the parent [placement_id] is resolved.
 
     Distinct from {!Broker_domain.Order.trade} which is the broker

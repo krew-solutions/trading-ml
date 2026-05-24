@@ -1,8 +1,7 @@
-val handle :
+val execute :
   store:(module Execution_management_ports.Ticket_store.S with type t = 'store) ->
   store_handle:'store ->
   publish:(Execution_management.Order_ticket.event -> unit) ->
   now:(unit -> int64) ->
-  ticket_id_of_placement_id:(int -> int) ->
-  Order_leg_filled_integration_event.t ->
-  unit
+  Apply_placement_fill_command.t ->
+  (unit, Command_error.t) Rop.t

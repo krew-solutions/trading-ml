@@ -27,7 +27,7 @@ val to_domain :
   placement_id:int ->
   new_total_filled:Decimal.t ->
   update ->
-  Broker_domain.Remote_broker.Events.Order_leg_filled.t
+  Broker_domain.Remote_broker.Events.Order_filled.t
 (** Project a Finam [Trade.update] into the broker's domain event.
     [placement_id] is the caller's reverse-lookup result from the
     venue [order_id]; [new_total_filled] is the caller's

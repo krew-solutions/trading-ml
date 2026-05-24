@@ -1,7 +1,7 @@
 (** Sociable tests for {!Paper_broker_commands.Apply_bar_command_workflow}.
     Submits an order via the real submit pipeline, then drives the
     bar through {!Apply_bar_command_workflow.execute} and observes
-    the resulting {!Order_leg_filled_integration_event}. *)
+    the resulting {!Order_filled_integration_event}. *)
 
 module Submit = Paper_broker_commands.Submit_order_command
 module Submit_wf = Paper_broker_commands.Submit_order_command_workflow

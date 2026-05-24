@@ -28,7 +28,7 @@ open Core
     missing handlers. *)
 type event =
   | Remote_bar_updated of Remote_broker.Events.Remote_bar_updated.t
-  | Order_leg_filled of Remote_broker.Events.Order_leg_filled.t
+  | Order_filled of Remote_broker.Events.Order_filled.t
       (** The domain event — the adapter, acting as the
           recognizer of external venue facts (per Vernon's
           "external system as a source of Domain Events"

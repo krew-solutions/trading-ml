@@ -6,7 +6,7 @@ let execute
     ~(store_handle : store)
     ~(publish : Ot.event -> unit)
     ~(now : unit -> int64)
-    (cmd : Apply_placement_leg_fill_command.t) =
+    (cmd : Apply_placement_fill_command.t) =
   let module S =
     (val store : Execution_management_ports.Ticket_store.S with type t = store)
   in
@@ -17,9 +17,7 @@ let execute
       match S.get store_handle tid with
       | None -> Rop.fail (Command_error.Ticket_not_found cmd.ticket_id)
       | Some ticket -> (
-          match
-            Apply_placement_leg_fill_command_handler.handle ~ticket cmd ~now:(now ())
-          with
+          match Apply_placement_fill_command_handler.handle ~ticket cmd ~now:(now ()) with
           | Error errs -> Error errs
           | Ok (t', events) ->
               S.put store_handle t';

@@ -199,7 +199,7 @@ let test_decode_order_event_aggregate_state () =
 
 (** Same payload with [executionType] forced to ["11"] (Trade).
     Verifies that {!Order_event.is_fill} flips and {!to_domain}
-    constructs an [Order_leg_filled] with the expected
+    constructs an [Order_filled] with the expected
     discriminators. *)
 let test_decode_order_event_trade_leg () =
   let j =

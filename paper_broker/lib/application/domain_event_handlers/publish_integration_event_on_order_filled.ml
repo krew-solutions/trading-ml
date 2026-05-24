@@ -1,4 +1,4 @@
-module Order_filled = Paper_broker_integration_events.Order_leg_filled_integration_event
+module Order_filled = Paper_broker_integration_events.Order_filled_integration_event
 
 let handle
     ~(publish_order_filled : Order_filled.t -> unit)

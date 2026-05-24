@@ -1,12 +1,12 @@
-include Order_leg_filled_integration_event_t
-include Order_leg_filled_integration_event_j
+include Order_filled_integration_event_t
+include Order_filled_integration_event_j
 
 let yojson_of_t (v : t) : Yojson.Safe.t = Yojson.Safe.from_string (string_of_t v)
 let t_of_yojson (j : Yojson.Safe.t) : t = t_of_string (Yojson.Safe.to_string j)
 
-type domain = Broker_domain.Remote_broker.Events.Order_leg_filled.t
+type domain = Broker_domain.Remote_broker.Events.Order_filled.t
 
-(** Project a domain {!Broker_domain.Remote_broker.Events.Order_leg_filled.t}
+(** Project a domain {!Broker_domain.Remote_broker.Events.Order_filled.t}
     into the wire integration event.
 
     [correlation_id] is the saga-instance id — the application

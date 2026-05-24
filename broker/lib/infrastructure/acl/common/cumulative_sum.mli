@@ -2,7 +2,7 @@
     [key]; each [bump] adds a delta and returns the new total.
 
     Use case: per-placement cumulative-fill accumulation in
-    broker adapters — each [Order_leg_filled] event carries a
+    broker adapters — each [Order_filled] event carries a
     single leg's quantity, and the cumulative quantity observed
     across all legs for the same [placement_id] is the
     aggregate-state snapshot the adapter ships on the domain

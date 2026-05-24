@@ -1,4 +1,4 @@
-(* Wire contract: paper_broker/lib/application/integration_events/order_leg_filled_integration_event.ml
+(* Wire contract: paper_broker/lib/application/integration_events/order_filled_integration_event.ml
 
    Cross-referenced types resolved via atdgen at code-generation
    time; the consumer library opens Paper_broker_view_models so

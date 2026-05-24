@@ -15,7 +15,7 @@
 
     DTO carries every documented wire field verbatim;
     {!to_domain} projects the subset relevant to our
-    [Order_leg_filled] domain event. Non-fill messages on
+    [Order_filled] domain event. Non-fill messages on
     this channel parse cleanly but {!to_domain} returns
     [None] for them. *)
 
@@ -45,7 +45,7 @@ type t = {
           [5] Replaced, [6] Awaiting cancel, [8] Rejected,
           [9] Suspended, [10] Awaiting new, [11] Trade,
           [12] Status, [13] Corrected. {!to_domain} emits
-          [Order_leg_filled] only when this is ["11"]
+          [Order_filled] only when this is ["11"]
           (per-leg fill); other values describe state, not a
           new execution leg. *)
   order_quantity : Decimal.t;  (** Total requested. *)
@@ -102,9 +102,9 @@ val to_domain :
   placement_id:int ->
   new_total_filled:Decimal.t ->
   t ->
-  Broker_domain.Remote_broker.Events.Order_leg_filled.t option
+  Broker_domain.Remote_broker.Events.Order_filled.t option
 (** Project a BCS execution-status event into an
-    [Order_leg_filled] domain event. Returns [Some] only when
+    [Order_filled] domain event. Returns [Some] only when
     [execution_type = "11"] (per-leg Trade); other values
     return [None] (lifecycle transitions belong on the
     transaction-status channel and will surface as a

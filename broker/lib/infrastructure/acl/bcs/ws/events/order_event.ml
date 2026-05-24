@@ -102,7 +102,7 @@ let parse (j : Yojson.Safe.t) : t option =
 let is_fill (t : t) : bool = t.execution_type = "11"
 
 let to_domain ~(placement_id : int) ~(new_total_filled : Decimal.t) (t : t) :
-    Broker_domain.Remote_broker.Events.Order_leg_filled.t option =
+    Broker_domain.Remote_broker.Events.Order_filled.t option =
   if not (is_fill t) then None
   else
     let instrument =

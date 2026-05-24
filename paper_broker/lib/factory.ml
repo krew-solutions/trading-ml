@@ -51,9 +51,9 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
         Paper_broker_integration_events.Order_accepted_integration_event.yojson_of_t
   in
   let publish_order_filled =
-    produce ~uri:"in-memory://broker.order-leg-filled"
+    produce ~uri:"in-memory://broker.order-filled"
       ~yojson_of:
-        Paper_broker_integration_events.Order_leg_filled_integration_event.yojson_of_t
+        Paper_broker_integration_events.Order_filled_integration_event.yojson_of_t
   in
   let publish_order_rejected =
     produce ~uri:"in-memory://broker.order-rejected"

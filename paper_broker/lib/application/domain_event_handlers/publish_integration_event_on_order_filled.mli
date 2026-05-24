@@ -1,5 +1,5 @@
 (** Domain Event handler: translates {!Paper_broker.Order.Events.Order_filled.t}
-    into {!Paper_broker_integration_events.Order_leg_filled_integration_event.t}
+    into {!Paper_broker_integration_events.Order_filled_integration_event.t}
     and publishes it through the supplied port closure.
 
     [correlation_id] is sourced by the caller — typically the
@@ -8,7 +8,7 @@
     the fill has no correlation_id of its own. *)
 
 module Order_filled :
-    module type of Paper_broker_integration_events.Order_leg_filled_integration_event
+    module type of Paper_broker_integration_events.Order_filled_integration_event
 
 val handle :
   publish_order_filled:(Order_filled.t -> unit) ->

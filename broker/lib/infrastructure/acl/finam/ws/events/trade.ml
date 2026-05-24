@@ -47,7 +47,7 @@ let parse (j : Yojson.Safe.t) : update list =
   | _ -> []
 
 let to_domain ~(placement_id : int) ~(new_total_filled : Decimal.t) (tu : update) :
-    Broker_domain.Remote_broker.Events.Order_leg_filled.t =
+    Broker_domain.Remote_broker.Events.Order_filled.t =
   {
     placement_id;
     trade_id = tu.trade_id;

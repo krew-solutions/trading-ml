@@ -27,7 +27,7 @@ val build :
 
     [bus] must already have an adapter registered for the
     [in-memory://] scheme used by paper_broker's outbound URIs
-    ([broker.order-accepted], [broker.order-leg-filled],
+    ([broker.order-accepted], [broker.order-filled],
     [broker.order-cancelled], [broker.order-rejected]) and inbound
     URIs ([broker.submit-order-command],
     [broker.cancel-order-command], [broker.bar-updated]).

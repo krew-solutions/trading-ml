@@ -72,7 +72,7 @@ let apply_placement_cancelled ctx ~ticket_id ~placement_id =
         (String.concat "; " (List.map Cmds.Command_error.to_string errs))
 
 let apply_placement_fill ctx ~ticket_id ~placement_id ~quantity =
-  let cmd : Cmds.Apply_placement_leg_fill_command.t =
+  let cmd : Cmds.Apply_placement_fill_command.t =
     {
       ticket_id;
       placement_id;
@@ -83,7 +83,7 @@ let apply_placement_fill ctx ~ticket_id ~placement_id ~quantity =
     }
   in
   match
-    Cmds.Apply_placement_leg_fill_command_workflow.execute ~store:store_module
+    Cmds.Apply_placement_fill_command_workflow.execute ~store:store_module
       ~store_handle:ctx.store ~publish:(publish ctx) ~now:ctx.now cmd
   with
   | Ok () -> ctx

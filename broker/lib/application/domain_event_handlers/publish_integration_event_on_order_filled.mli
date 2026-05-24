@@ -1,6 +1,6 @@
 (** Domain Event handler: projects
-    {!Broker_domain.Remote_broker.Events.Order_leg_filled.t} into
-    {!Broker_integration_events.Order_leg_filled_integration_event.t}
+    {!Broker_domain.Remote_broker.Events.Order_filled.t} into
+    {!Broker_integration_events.Order_filled_integration_event.t}
     via [of_domain] and publishes it through the supplied port
     closure.
 
@@ -14,11 +14,11 @@
     Submit for (rotated cache, replay before catch-up, or an
     order placed out-of-band). *)
 
-module Order_leg_filled :
-    module type of Broker_integration_events.Order_leg_filled_integration_event
+module Order_filled :
+    module type of Broker_integration_events.Order_filled_integration_event
 
 val handle :
-  publish_order_leg_filled:(Order_leg_filled.t -> unit) ->
+  publish_order_filled:(Order_filled.t -> unit) ->
   origin_correlation_id:(placement_id:int -> string option) ->
-  Broker_domain.Remote_broker.Events.Order_leg_filled.t ->
+  Broker_domain.Remote_broker.Events.Order_filled.t ->
   unit

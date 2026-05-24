@@ -1,14 +1,14 @@
 (** Integration event: one fill leg was observed at the venue
     against an order this broker adapter placed. One order may
     produce many of these events — every leg in a multi-fill
-    sequence emits its own [Order_leg_filled] IE. Publishing
+    sequence emits its own [Order_filled] IE. Publishing
     terminates whether the order ended [Filled] or
     [Cancelled]/[Rejected] etc.; consumers detect order
     completion by comparing [new_total_filled] against the
     placement's intended quantity (or, in future, by listening
     for a dedicated [Order_filled] terminal event).
 
-    Published on [in-memory://broker.order-leg-filled] by the
+    Published on [in-memory://broker.order-filled] by the
     live adapter when its WebSocket subscription delivers a
     trade update; consumed by [execution_management] for the
     saga's commit-fill leg.
@@ -21,18 +21,18 @@
     the WS event itself arrives outside command-in-scope.
 
     Paper-broker BC emits its own variant of this same wire
-    contract ({!Paper_broker_integration_events.Order_leg_filled_integration_event})
+    contract ({!Paper_broker_integration_events.Order_filled_integration_event})
     for paper-mode runs. Both live publishers and the
     paper-broker simulator target the same URI on the bus, so
     the EM consumer is source-agnostic. *)
 
-include module type of Order_leg_filled_integration_event_t
-include module type of Order_leg_filled_integration_event_j with type t := t
+include module type of Order_filled_integration_event_t
+include module type of Order_filled_integration_event_j with type t := t
 
 val yojson_of_t : t -> Yojson.Safe.t
 val t_of_yojson : Yojson.Safe.t -> t
 
-type domain = Broker_domain.Remote_broker.Events.Order_leg_filled.t
+type domain = Broker_domain.Remote_broker.Events.Order_filled.t
 
 val of_domain : correlation_id:string -> domain -> t
 (** Project the domain event onto the wire IE.

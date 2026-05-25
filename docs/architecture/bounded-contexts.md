@@ -57,7 +57,7 @@ sits one level above and is concerned only with the graph.
         └────────────────┘                            │  Bar_updated_IE
                                        ▲              │
                                        │              ▼
-                              Order_filled_IE  ┌────────────────────┐
+                            Trade_executed_IE  ┌────────────────────┐
                                        │      │  paper_broker      │
                                        └──────┤  (in-memory order  │
                                               │   matching against │
@@ -274,10 +274,10 @@ covered by *Process correlation is not aggregate state* in
 shapes are byte-equivalent to local DTOs, no handler file needed),
 `broker.bar-updated` (ACL'd into `Apply_bar_command`).
 **Outbound** → `broker.order-accepted`, `broker.order-rejected`,
-`broker.order-filled`, `broker.order-cancelled` (every event
-carries the original `correlation_id` and the round-trip
-`reservation_id` so Account can locate the matching reservation
-on `commit_fill_command`).
+`broker.trade-executed`, `broker.order-cancelled`. `trade-executed`
+carries one executed trade leg (no cumulative aggregation —
+ADR 0029); every event carries the original `correlation_id` so
+execution_management can correlate it back to the ticket.
 
 In paper deployments paper_broker is the only producer of
 `broker.order-*`; in live deployments the broker BC is the only
@@ -344,7 +344,7 @@ Topic conventions per BC:
 | `in-memory://broker.order-accepted`            | broker or paper_broker | Cid echoed                    |
 | `in-memory://broker.order-rejected`            | broker or paper_broker | Cid echoed                    |
 | `in-memory://broker.order-unreachable`         | broker                | Cid echoed (live only)         |
-| `in-memory://broker.order-filled`              | paper_broker          | Cid + reservation_id echoed    |
+| `in-memory://broker.trade-executed`            | broker or paper_broker | One executed trade leg; cid echoed (ADR 0029) |
 | `in-memory://broker.order-cancelled`           | paper_broker          | Cid + reservation_id echoed    |
 | `in-memory://broker.bar-updated`               | broker                | Upstream candles               |
 | `in-memory://pre-trade-risk.trade-submission-blocked` | pre_trade_risk | Telemetry on a gate halt    |
@@ -417,17 +417,25 @@ through fills, with `cid` denoting the saga `correlation_id`:
     Release_command_workflow
     → account.reservation-released
 12. paper_broker.Apply_bar_command_workflow (in --paper) or
-    broker WS bridge (live) → fill events
-    → broker.order-filled                             [cid_n + reservation_id]
-13. account            ← broker.order-filled
-    Commit_fill_command_workflow → Portfolio.commit_fill
+    broker WS bridge (live) → one event per executed trade leg
+    → broker.trade-executed                           [cid_n, per leg]   (ADR 0029)
+13. execution_management ← broker.trade-executed
+    OrderTicket aggregates fills in Progress; on full fill it emits
+    one cumulative fact (total qty @ VWAP, total fees)
+    → execution-management.order-ticket-fill-recorded [cid_n, once]
+14. order_management saga ← order-ticket-fill-recorded
+    → account.commit-fill-command                     [cid_n] (single commit)
+    account: Commit_fill_command_workflow → Portfolio.commit_fill (Fully_committed)
     → account.reservation-filled                      (atomic: new cash + position + avg)
-14. portfolio_management, pre_trade_risk, execution_management
-    ← account.reservation-filled
-    PM:   Commit_actual_fill_command_workflow → Actual_portfolio.commit_fill
-    PTR:  Record_fill_command_workflow         → Risk_view.commit_fill
-    EMS:  Kill_switch.update_equity (new_cash as equity proxy)
+    → saga: Working → Settled (on reservation-filled)
+    portfolio_management and pre_trade_risk also consume
+    account.reservation-filled (Actual_portfolio / Risk_view commit_fill).
 ```
+
+Steps 6–11 above still describe the pre-ADR-0020 single-step saga and
+predate the OMS/EMS split; the authoritative current shape of the
+reservation cycle is ADR 0020 (saga in order_management), ADR 0022
+(commit/release ownership), and ADR 0029 (single terminal commit).
 
 The pure saga transitions (steps 6, 8, 10) are pinned by
 `execution_management/test/unit/order_process_manager_test.ml` against the

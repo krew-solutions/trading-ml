@@ -65,8 +65,7 @@ val available_qty : t -> Instrument.t -> Decimal.t
   attribution: each call depletes `cover_qty` before `open_qty`.
   The outcome variant tells which fact this leg is:
   - `Drawn_down` — the reservation stays in the ledger with
-    reduced cover/open parts. Per-leg event for progressive
-    drawdown (TWAP/Iceberg/POV).
+    reduced cover/open parts. Progressive per-leg drawdown.
   - `Fully_committed` — both cover and open reached zero. The
     reservation is removed; the event carries the terminal
     post-image of cash and position.
@@ -74,8 +73,14 @@ val available_qty : t -> Instrument.t -> Decimal.t
     reservation's remaining quantity (rounding or in-flight
     cancel race). The aggregate state is unchanged; the
     application layer decides how to react.
-  See [ADR 0028](../adr/0028-account-progressive-reservation-drawdown.md)
-  for the contract this operation fulfils for the saga.
+
+  > **Current saga flow (ADR 0029).** The place-order saga now
+  > commits **once** per reservation, at ticket close, with the
+  > cumulative executed quantity — so a single `commit_fill`
+  > reaches `Fully_committed` directly. The `Drawn_down` per-leg
+  > path (ADR 0028) is left in place but is not exercised by the
+  > live flow; see
+  > [ADR 0029](../adr/0029-single-terminal-commit-and-per-trade-execution.md).
 - `release` drops the reservation with no fill (cancel/reject).
 
 ### `available_cash`

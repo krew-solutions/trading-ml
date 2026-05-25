@@ -1,13 +1,19 @@
 type t = {
   total_quantity : Decimal.t;
   cumulative_filled : Decimal.t;
+  cumulative_notional : Decimal.t;
   total_fees : Decimal.t;
 }
 
 let empty ~total_quantity =
   if Decimal.compare total_quantity Decimal.zero <= 0 then
     invalid_arg "Progress.empty: total_quantity must be positive";
-  { total_quantity; cumulative_filled = Decimal.zero; total_fees = Decimal.zero }
+  {
+    total_quantity;
+    cumulative_filled = Decimal.zero;
+    cumulative_notional = Decimal.zero;
+    total_fees = Decimal.zero;
+  }
 
 let apply_fill t ~(fill : Placement.Values.Fill_record.t) =
   let new_filled = Decimal.add t.cumulative_filled fill.quantity in
@@ -16,9 +22,15 @@ let apply_fill t ~(fill : Placement.Values.Fill_record.t) =
   {
     total_quantity = t.total_quantity;
     cumulative_filled = new_filled;
+    cumulative_notional =
+      Decimal.add t.cumulative_notional (Decimal.mul fill.quantity fill.price);
     total_fees = Decimal.add t.total_fees fill.fee;
   }
 
 let remaining_quantity t = Decimal.sub t.total_quantity t.cumulative_filled
 
 let is_fully_filled t = Decimal.equal t.cumulative_filled t.total_quantity
+
+let volume_weighted_average_price t =
+  if Decimal.is_zero t.cumulative_filled then Decimal.zero
+  else Decimal.div t.cumulative_notional t.cumulative_filled

@@ -153,10 +153,10 @@ let build ~bus : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://execution-management.order-ticket-completed"
+      (consume ~uri:"in-memory://account.reservation-filled"
          ~group:"order-management-saga"
-         ~t_of_yojson:Inbound.Order_ticket_completed_integration_event.t_of_yojson)
-      (fun ev -> Pm.Engine.on_event engine (Pm.Ticket_completed ev))
+         ~t_of_yojson:Inbound.Reservation_filled_integration_event.t_of_yojson) (fun ev ->
+        Pm.Engine.on_event engine (Pm.Reservation_filled ev))
   in
   let _ : Bus.subscription =
     Bus.subscribe

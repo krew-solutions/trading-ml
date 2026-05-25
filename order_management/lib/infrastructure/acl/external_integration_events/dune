@@ -46,6 +46,16 @@
    (run atdgen -t -o reservation_rejected_integration_event %{atd})
    (run atdgen -j -o reservation_rejected_integration_event %{atd}))))
 
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/account/integration_events/reservation_filled_integration_event.atd))
+ (targets reservation_filled_integration_event_t.ml reservation_filled_integration_event_t.mli
+          reservation_filled_integration_event_j.ml reservation_filled_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o reservation_filled_integration_event %{atd})
+   (run atdgen -j -o reservation_filled_integration_event %{atd}))))
+
 ; Inbound: execution_management's ticket-lifecycle IEs.
 (rule
  (deps

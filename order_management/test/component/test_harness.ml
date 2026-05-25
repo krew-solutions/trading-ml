@@ -83,19 +83,22 @@ let push_ticket_fill_recorded
   Pm.Engine.on_event ctx.engine (Pm.Ticket_fill_recorded ev);
   ctx
 
-let push_ticket_completed ctx ~correlation_id ~ticket_id ~reservation_id =
-  let ev : Inbound.Order_ticket_completed_integration_event.t =
+let push_reservation_filled ctx ~correlation_id ~reservation_id ~symbol ~side =
+  let ev : Inbound.Reservation_filled_integration_event.t =
     {
       correlation_id;
-      ticket_id;
       reservation_id;
-      progress =
-        progress_vm ~total_quantity:"10" ~cumulative_filled:"10" ~remaining_quantity:"0"
-          ~total_fees:"0";
-      occurred_at = "1970-01-01T00:00:00Z";
+      instrument = instrument_vm ~symbol;
+      side;
+      filled_quantity = "10";
+      fill_price = "100";
+      fee = "0";
+      new_position_quantity = "10";
+      new_avg_price = "100";
+      new_cash = "0";
     }
   in
-  Pm.Engine.on_event ctx.engine (Pm.Ticket_completed ev);
+  Pm.Engine.on_event ctx.engine (Pm.Reservation_filled ev);
   ctx
 
 let push_ticket_cancelled ctx ~correlation_id ~ticket_id ~reservation_id ~reason =

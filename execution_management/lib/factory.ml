@@ -132,9 +132,6 @@ let build ~bus ~now : t =
   in
   let correlation_by_ticket : (int, string) Hashtbl.t = Hashtbl.create 64 in
   let ticket_intent : (int, Ot.Values.Trade_intent.t) Hashtbl.t = Hashtbl.create 64 in
-  let reservation_by_ticket : (int, Ot.Values.Reservation_id.t) Hashtbl.t =
-    Hashtbl.create 64
-  in
   let correlation_for tid =
     Option.value (Hashtbl.find_opt correlation_by_ticket tid) ~default:""
   in
@@ -163,7 +160,6 @@ let build ~bus ~now : t =
     | Ev_ticket_opened e ->
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         Hashtbl.replace ticket_intent tid e.intent;
-        Hashtbl.replace reservation_by_ticket tid e.reservation_id;
         (match e.directive with
         | Ot.Values.Execution_directive.Pov params ->
             let sub =
@@ -223,8 +219,7 @@ let build ~bus ~now : t =
           (Outbound_ie.Order_ticket_failed_integration_event.of_domain ~correlation_id e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
-        Hashtbl.remove ticket_intent tid;
-        Hashtbl.remove reservation_by_ticket tid
+        Hashtbl.remove ticket_intent tid
     | Ev_ticket_cancelled e ->
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
@@ -233,31 +228,24 @@ let build ~bus ~now : t =
              e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
-        Hashtbl.remove ticket_intent tid;
-        Hashtbl.remove reservation_by_ticket tid
+        Hashtbl.remove ticket_intent tid
     | Ev_ticket_completed e ->
         let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
         let correlation_id = correlation_for tid in
+        (* One fill_recorded per ticket, carrying the cumulative
+           execution (total quantity, VWAP price, total fees); the
+           saga commits it against the reservation in a single shot.
+           Published before the completed-telemetry IE. *)
+        publish_ticket_fill_recorded
+          (Outbound_ie.Order_ticket_fill_recorded_integration_event.of_domain
+             ~correlation_id e);
         publish_ticket_completed
           (Outbound_ie.Order_ticket_completed_integration_event.of_domain ~correlation_id
              e);
         detach_volume_subscription tid;
         Hashtbl.remove correlation_by_ticket tid;
-        Hashtbl.remove ticket_intent tid;
-        Hashtbl.remove reservation_by_ticket tid
-    | Ev_placement_filled e -> (
-        let tid = Ot.Values.Ticket_id.to_int e.ticket_id in
-        let correlation_id = correlation_for tid in
-        match Hashtbl.find_opt reservation_by_ticket tid with
-        | None ->
-            ()
-            (* Should never happen: Ev_ticket_opened populates the map
-               before any Placement_filled can land. Silent drop is safer
-               than a crash on a future ordering edge case. *)
-        | Some reservation_id ->
-            publish_ticket_fill_recorded
-              (Outbound_ie.Order_ticket_fill_recorded_integration_event.of_domain
-                 ~correlation_id ~reservation_id e))
+        Hashtbl.remove ticket_intent tid
+    | Ev_placement_filled _
     | Ev_placement_acknowledged _
     | Ev_placement_rejected _
     | Ev_placement_unreachable _

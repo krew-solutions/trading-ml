@@ -1,6 +1,6 @@
 # 0028. Progressive reservation drawdown in Account
 
-**Status**: Accepted
+**Status**: Superseded by [0029](0029-single-terminal-commit-and-per-trade-execution.md)
 **Date**: 2026-05-24
 
 ## Context

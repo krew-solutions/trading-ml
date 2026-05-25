@@ -6,8 +6,8 @@
     - PTR: [Trade_intent_approved]                 (saga start)
     - Account: [Amount_reserved]                   (Working entry)
     - Account: [Reservation_rejected]              (compensation)
-    - EM: [Order_ticket_fill_recorded]             (per-fill commit)
-    - EM: [Order_ticket_completed]                 (terminal: settled)
+    - EM: [Order_ticket_fill_recorded]             (ticket closed: commit)
+    - Account: [Reservation_filled]                (terminal: settled)
     - EM: [Order_ticket_cancelled]                 (terminal: release)
     - EM: [Order_ticket_failed]                    (terminal: release)
 
@@ -15,8 +15,22 @@
 
     - Account: [Reserve_command]                   (at start)
     - EM: [Open_order_ticket_command]              (cross-BC wire)
-    - Account: [Commit_fill_command]               (per fill recorded)
+    - Account: [Commit_fill_command]               (once, at ticket close)
     - Account: [Release_command]                   (at cancel / fail)
+
+    A ticket reserves once and commits once: [Order_ticket_fill_recorded]
+    fires a single time when the ticket is fully filled, carrying the
+    cumulative executed quantity at the ticket's VWAP, and the saga
+    turns it into one [Commit_fill_command]. Account confirms with
+    [Reservation_filled], which settles the saga. (Progressive
+    per-fill drawdown — ADR 0028 — is not exercised by this flow;
+    the single commit draws the reservation to zero in one shot.)
+
+    {b Known gap.} A ticket cancelled or failed after a partial fill
+    emits no [Order_ticket_fill_recorded] (it fires only at full
+    fill), so the executed portion is not committed and the whole
+    reservation is released. Settling a partial-then-cancelled ticket
+    is deferred to a reconcile path / future step.
 
     State machine:
 
@@ -27,7 +41,7 @@
 
       Working
         ├─ Ticket_fill_recorded     → Working          (+ Dispatch_commit_fill)
-        ├─ Ticket_completed         → Settled          (terminal, no command)
+        ├─ Reservation_filled       → Settled          (terminal, no command)
         ├─ Ticket_cancelled         → Released         (+ Dispatch_release)
         └─ Ticket_failed            → Released         (+ Dispatch_release)
     v}
@@ -73,10 +87,8 @@ type event =
       Order_management_external_integration_events
       .Order_ticket_fill_recorded_integration_event
       .t
-  | Ticket_completed of
-      Order_management_external_integration_events
-      .Order_ticket_completed_integration_event
-      .t
+  | Reservation_filled of
+      Order_management_external_integration_events.Reservation_filled_integration_event.t
   | Ticket_cancelled of
       Order_management_external_integration_events
       .Order_ticket_cancelled_integration_event

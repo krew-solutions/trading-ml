@@ -321,8 +321,8 @@ not hold. Two consequences:
 2. Process correlation lives in a **separate store** that links
    `(incoming_command_kind, correlation_id, aggregate_id)`. This
    store answers questions like "which originating-saga's
-   `correlation_id` should an `Order_filled` integration event
-   echo, given that the bar that produced the fill has no
+   `correlation_id` should a `Trade_executed` integration event
+   echo, given that the bar that produced the trade has no
    `correlation_id` of its own?" — answer: the `Submit` entry's
    `correlation_id` for this order.
 
@@ -368,9 +368,10 @@ The answer tells you where to source the `correlation_id`:
 - `Order_rejected` — same.
 - `Order_cancelled` — consequence of the `Cancel` command → use
   the cancel command's `correlation_id` (in scope).
-- `Order_filled` — consequence of a bar arrival, which is not a
-  saga-driven command. Look up the originating `Submit`
-  correlation in the correlation log for the order being filled.
+- `Trade_executed` — consequence of a bar arrival / venue trade,
+  which is not a saga-driven command. Look up the originating
+  `Submit` correlation in the correlation log for the order being
+  filled.
 
 ## Stable wire contract
 

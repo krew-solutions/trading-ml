@@ -21,13 +21,15 @@ type state =
   | Awaiting_reservation of { payload : payload }
   | Working of working_state
       (** Reservation confirmed, ticket dispatched to EM. Stays here
-          while fills land and the OrderTicket progresses; transitions
-          to Settled on Ticket_completed (no command) or Released on
-          Ticket_cancelled / Ticket_failed (emits Release_command). *)
+          while the OrderTicket executes; on the single
+          Ticket_fill_recorded it dispatches one Commit_fill_command
+          and waits for Account's Reservation_filled to reach
+          Settled. Released instead on Ticket_cancelled /
+          Ticket_failed (emits Release_command). *)
   | Settled of { reservation_id : int }
-      (** Terminal: ticket completed normally. All fills have been
-          committed at Account via the per-fill Commit_fill_command
-          chain; nothing left to release. *)
+      (** Terminal: the single commit drew the reservation to zero,
+          confirmed by Account's Reservation_filled. Nothing left to
+          release. *)
   | Released of { reservation_id : int; reason : string }
       (** Terminal: ticket cancelled or failed. Release_command
           dispatched. *)
@@ -38,7 +40,7 @@ type event =
   | Amount_reserved of Inbound.Amount_reserved_integration_event.t
   | Reservation_rejected of Inbound.Reservation_rejected_integration_event.t
   | Ticket_fill_recorded of Inbound.Order_ticket_fill_recorded_integration_event.t
-  | Ticket_completed of Inbound.Order_ticket_completed_integration_event.t
+  | Reservation_filled of Inbound.Reservation_filled_integration_event.t
   | Ticket_cancelled of Inbound.Order_ticket_cancelled_integration_event.t
   | Ticket_failed of Inbound.Order_ticket_failed_integration_event.t
 
@@ -103,7 +105,7 @@ module Definition = struct
     | Amount_reserved e -> e.correlation_id
     | Reservation_rejected e -> e.correlation_id
     | Ticket_fill_recorded e -> e.correlation_id
-    | Ticket_completed e -> e.correlation_id
+    | Reservation_filled e -> e.correlation_id
     | Ticket_cancelled e -> e.correlation_id
     | Ticket_failed e -> e.correlation_id
 
@@ -130,6 +132,10 @@ module Definition = struct
         (Compensated { reason = "rejected_by_account: " ^ ev.reason }, [])
     (* ---------- Working ---------- *)
     | Working _, Ticket_fill_recorded ev ->
+        (* The ticket finished executing: one Commit_fill_command for
+           the cumulative executed quantity (at the ticket's VWAP)
+           settles the whole reservation. The saga stays Working
+           until Account confirms with Reservation_filled. *)
         let cmd =
           Dispatch_commit_fill
             {
@@ -141,10 +147,9 @@ module Definition = struct
             }
         in
         (s, [ cmd ])
-    | Working { reservation_id; _ }, Ticket_completed _ ->
-        (* All per-fill commits already dispatched along the way;
-           the reservation has been drawn down by the cumulative
-           commits. Nothing further. *)
+    | Working { reservation_id; _ }, Reservation_filled _ ->
+        (* Account confirmed the single commit drew the reservation
+           to zero. Terminal — nothing left to release. *)
         (Settled { reservation_id }, [])
     | Working { reservation_id; correlation_id }, Ticket_cancelled ev ->
         let cmd =

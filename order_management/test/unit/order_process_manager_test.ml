@@ -43,14 +43,6 @@ let progress_zero : Order_management_external_view_models.Progress_view_model.t 
     total_fees = "0";
   }
 
-let progress_full : Order_management_external_view_models.Progress_view_model.t =
-  {
-    total_quantity = "10";
-    cumulative_filled = "10";
-    remaining_quantity = "0";
-    total_fees = "0.05";
-  }
-
 let fill_recorded : Inbound.Order_ticket_fill_recorded_integration_event.t =
   {
     correlation_id = cid;
@@ -62,13 +54,18 @@ let fill_recorded : Inbound.Order_ticket_fill_recorded_integration_event.t =
     occurred_at = "1970-01-01T00:00:00Z";
   }
 
-let ticket_completed : Inbound.Order_ticket_completed_integration_event.t =
+let reservation_filled : Inbound.Reservation_filled_integration_event.t =
   {
     correlation_id = cid;
-    ticket_id = 42;
     reservation_id = 42;
-    progress = progress_full;
-    occurred_at = "1970-01-01T00:00:00Z";
+    instrument = instrument_vm;
+    side = "BUY";
+    filled_quantity = "10";
+    fill_price = "100";
+    fee = "0.05";
+    new_position_quantity = "10";
+    new_avg_price = "100";
+    new_cash = "0";
   }
 
 let ticket_cancelled : Inbound.Order_ticket_cancelled_integration_event.t =
@@ -135,9 +132,9 @@ let test_fill_in_working_emits_commit_fill () =
   Alcotest.(check int) "exactly one command" 1 (List.length cmds);
   Alcotest.(check bool) "command is Commit_fill" true (List.exists is_commit_fill cmds)
 
-let test_ticket_completed_settles_with_no_command () =
+let test_reservation_filled_settles_with_no_command () =
   let s0 = Pm.Working { reservation_id = 42; correlation_id = cid } in
-  let s1, cmds = Pm.Definition.transition s0 (Pm.Ticket_completed ticket_completed) in
+  let s1, cmds = Pm.Definition.transition s0 (Pm.Reservation_filled reservation_filled) in
   Alcotest.(check bool)
     "transitions to Settled" true
     (match s1 with
@@ -193,8 +190,8 @@ let tests =
       test_reservation_rejected_compensates;
     Alcotest.test_case "Ticket_fill_recorded in Working → Commit_fill" `Quick
       test_fill_in_working_emits_commit_fill;
-    Alcotest.test_case "Ticket_completed → Settled (no command)" `Quick
-      test_ticket_completed_settles_with_no_command;
+    Alcotest.test_case "Reservation_filled → Settled (no command)" `Quick
+      test_reservation_filled_settles_with_no_command;
     Alcotest.test_case "Ticket_cancelled → Released + Dispatch_release" `Quick
       test_ticket_cancelled_releases;
     Alcotest.test_case "Ticket_failed → Released + Dispatch_release" `Quick

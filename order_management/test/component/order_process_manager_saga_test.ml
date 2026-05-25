@@ -60,9 +60,10 @@ let happy_path =
           Alcotest.(check int)
             "one Commit_fill" 1
             (count is_commit_fill (dispatched_commands ctx)));
-      Gherkin.when_ "the ticket announces it completed" (fun ctx ->
+      Gherkin.when_ "the account confirms the reservation was filled" (fun ctx ->
           ctx
-          |> push_ticket_completed ~correlation_id:cid ~ticket_id:42 ~reservation_id:42);
+          |> push_reservation_filled ~correlation_id:cid ~reservation_id:42
+               ~symbol:"SBER@MISX" ~side:"BUY");
       Gherkin.then_ "the saga reaches the Settled terminal and is dropped" (fun ctx ->
           Alcotest.(check int) "no active sagas" 0 (active_count ctx);
           Alcotest.(check int)
@@ -147,7 +148,8 @@ let late_event_in_settled_is_dropped =
           |> push_amount_reserved ~correlation_id:cid ~reservation_id:42
                ~symbol:"SBER@MISX" ~side:"BUY" ~quantity:"10" ~price:"100"
                ~reserved_cash:"1000"
-          |> push_ticket_completed ~correlation_id:cid ~ticket_id:42 ~reservation_id:42);
+          |> push_reservation_filled ~correlation_id:cid ~reservation_id:42
+               ~symbol:"SBER@MISX" ~side:"BUY");
       Gherkin.when_ "a late Ticket_fill_recorded arrives for the same cid" (fun ctx ->
           ctx
           |> push_ticket_fill_recorded ~correlation_id:cid ~ticket_id:42

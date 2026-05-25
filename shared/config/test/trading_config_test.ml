@@ -84,6 +84,75 @@ let test_log_level_env_override () =
   | `Warning -> ()
   | _ -> Alcotest.fail "expected Warning"
 
+(* Regression (ADR 0031): a broker named on the CLI must still receive
+   its credentials from the environment. The CLI overlay carries the
+   variant with empty credential fields; env fills them. *)
+let test_cli_selected_broker_gets_env_creds () =
+  let default = write_tmp {|{ "broker": "Synthetic" }|} in
+  Unix.putenv "FINAM_ACCOUNT_ID" "ENV_ACC";
+  Unix.putenv "FINAM_SECRET" "ENV_SECRET";
+  let cli : T.t =
+    {
+      broker = Some (`Finam { account_id = None; secret = None });
+      server = None;
+      engine = None;
+      watchlist = None;
+      logging = None;
+    }
+  in
+  let cfg = Trading_config.Loader.load ~default_path:default ~cli_overrides:cli () in
+  Unix.putenv "FINAM_ACCOUNT_ID" "";
+  Unix.putenv "FINAM_SECRET" "";
+  match cfg.broker with
+  | Some (`Finam creds) ->
+      Alcotest.(check string) "account from env" "ENV_ACC" (Option.get creds.account_id);
+      Alcotest.(check string) "secret from env" "ENV_SECRET" (Option.get creds.secret)
+  | _ -> Alcotest.fail "expected Finam selected on the CLI"
+
+(* CLI flag beats the env var for the same credential field. *)
+let test_cli_account_overrides_env () =
+  let default = write_tmp {|{ "broker": "Synthetic" }|} in
+  Unix.putenv "FINAM_ACCOUNT_ID" "ENV_ACC";
+  let cli : T.t =
+    {
+      broker = Some (`Finam { account_id = Some "CLI_ACC"; secret = Some "CLI_SECRET" });
+      server = None;
+      engine = None;
+      watchlist = None;
+      logging = None;
+    }
+  in
+  let cfg = Trading_config.Loader.load ~default_path:default ~cli_overrides:cli () in
+  Unix.putenv "FINAM_ACCOUNT_ID" "";
+  match cfg.broker with
+  | Some (`Finam creds) ->
+      Alcotest.(check string)
+        "CLI account beats env" "CLI_ACC" (Option.get creds.account_id)
+  | _ -> Alcotest.fail "expected Finam"
+
+(* Alor credentials resolve from ALOR_PORTFOLIO / ALOR_SECRET. *)
+let test_alor_env_creds () =
+  let default = write_tmp {|{ "broker": "Synthetic" }|} in
+  Unix.putenv "ALOR_PORTFOLIO" "D777";
+  Unix.putenv "ALOR_SECRET" "REFRESH";
+  let cli : T.t =
+    {
+      broker = Some (`Alor { portfolio = None; secret = None; exchange = None });
+      server = None;
+      engine = None;
+      watchlist = None;
+      logging = None;
+    }
+  in
+  let cfg = Trading_config.Loader.load ~default_path:default ~cli_overrides:cli () in
+  Unix.putenv "ALOR_PORTFOLIO" "";
+  Unix.putenv "ALOR_SECRET" "";
+  match cfg.broker with
+  | Some (`Alor creds) ->
+      Alcotest.(check string) "portfolio from env" "D777" (Option.get creds.portfolio);
+      Alcotest.(check string) "secret from env" "REFRESH" (Option.get creds.secret)
+  | _ -> Alcotest.fail "expected Alor selected on the CLI"
+
 let () =
   Alcotest.run "trading-config"
     [
@@ -98,5 +167,10 @@ let () =
           Alcotest.test_case "cli overrides default" `Quick test_cli_overrides_env;
           Alcotest.test_case "LOG_LEVEL env overrides logging" `Quick
             test_log_level_env_override;
+          Alcotest.test_case "CLI-selected broker gets env credentials" `Quick
+            test_cli_selected_broker_gets_env_creds;
+          Alcotest.test_case "CLI flag overrides env credential" `Quick
+            test_cli_account_overrides_env;
+          Alcotest.test_case "Alor credentials from env" `Quick test_alor_env_creds;
         ] );
     ]

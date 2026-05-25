@@ -48,9 +48,10 @@ let usage () =
         --secret VALUE  or  <BROKER>_SECRET env var (FINAM_SECRET, BCS_SECRET, ALOR_SECRET)
         --account VALUE or  <BROKER>_ACCOUNT_ID env var
       Alor-only:
-        --account carries the portfolio code (e.g. D12345); --secret is
-        the long-lived refresh token (or ALOR_SECRET env var, which Alor
-        does not rotate); --exchange overrides the default venue (MOEX).
+        --account carries the portfolio code (e.g. D12345), or the
+        ALOR_PORTFOLIO env var; --secret is the long-lived refresh token
+        (or ALOR_SECRET env var, which Alor does not rotate); --exchange
+        overrides the default venue (MOEX).
       BCS-only:
         --client-id VALUE or BCS_CLIENT_ID env var. Must match the
         Keycloak client under which your refresh-token was issued —
@@ -584,6 +585,10 @@ let cmd_serve args =
     | `Alor creds -> creds.exchange
     | _ -> None
   in
+  (* [secret] / [account] / [client_id] already carry the env-var
+     fallback: the config loader resolves broker credentials with
+     CLI > env > file precedence before [broker_choice] is read here
+     (ADR 0031). *)
   let log_level =
     match cfg.logging with
     | Some { level = Some level } -> logs_level_of_config level

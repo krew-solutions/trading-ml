@@ -31,47 +31,75 @@ let resolve_local_path ~local_path ~env_var : string option =
           let conventional = "config/local.config.json" in
           if Sys.file_exists conventional then Some conventional else None)
 
-(* Build a sparse Broker overlay carrying only the credentials
-   the env vars contributed. Returns [None] if no relevant env
-   vars are set; otherwise returns a [Some broker] that the
-   surrounding layered merge will use to *replace* the broker
-   variant whole. This is a deliberate trade-off: env vars set
-   credentials on a specific broker; the broker variant itself
-   should be selected by file or CLI. We honour env vars only
-   when the resolved base config already picks the matching
-   variant — otherwise an env-var setting for Finam credentials
-   on a BCS-configured book would silently swap the broker. *)
-let env_broker_overlay (base : T.broker option) : T.broker option =
-  match base with
-  | Some (`Finam creds) ->
-      let merged : T.finam_credentials =
-        {
-          account_id =
-            (match Sys.getenv_opt "FINAM_ACCOUNT_ID" with
-            | Some _ as s -> s
-            | None -> creds.account_id);
-          secret =
-            (match Sys.getenv_opt "FINAM_SECRET" with
-            | Some _ as s -> s
-            | None -> creds.secret);
-        }
-      in
-      Some (`Finam merged)
-  | Some (`Bcs creds) ->
-      let merged : T.bcs_credentials =
-        {
-          client_id =
-            (match Sys.getenv_opt "BCS_CLIENT_ID" with
-            | Some _ as s -> s
-            | None -> creds.client_id);
-          secret_seed =
-            (match Sys.getenv_opt "BCS_SECRET" with
-            | Some _ as s -> s
-            | None -> creds.secret_seed);
-        }
-      in
-      Some (`Bcs merged)
-  | other -> other
+(* Treat an empty env var as unset, so a cleared variable does not
+   shadow a file/default value (consistent with the broker adapters'
+   own env handling). *)
+let getenv name =
+  match Sys.getenv_opt name with
+  | Some s when s <> "" -> Some s
+  | _ -> None
+
+(* Per credential field: CLI value wins, else env var, else file/default
+   — the documented precedence CLI > env > file (ADR 0031). *)
+let pick3 (cli : string option) (env_name : string) (file : string option) : string option
+    =
+  match cli with
+  | Some _ -> cli
+  | None -> (
+      match getenv env_name with
+      | Some _ as e -> e
+      | None -> file)
+
+let resolve_finam ~(cli : T.finam_credentials option) ~(file : T.finam_credentials option)
+    : T.broker =
+  let c f = Option.bind cli f and g f = Option.bind file f in
+  `Finam
+    {
+      T.account_id =
+        pick3 (c (fun x -> x.account_id)) "FINAM_ACCOUNT_ID" (g (fun x -> x.account_id));
+      secret = pick3 (c (fun x -> x.secret)) "FINAM_SECRET" (g (fun x -> x.secret));
+    }
+
+let resolve_bcs ~(cli : T.bcs_credentials option) ~(file : T.bcs_credentials option) :
+    T.broker =
+  let c f = Option.bind cli f and g f = Option.bind file f in
+  `Bcs
+    {
+      T.client_id =
+        pick3 (c (fun x -> x.client_id)) "BCS_CLIENT_ID" (g (fun x -> x.client_id));
+      secret_seed =
+        pick3 (c (fun x -> x.secret_seed)) "BCS_SECRET" (g (fun x -> x.secret_seed));
+    }
+
+let resolve_alor ~(cli : T.alor_credentials option) ~(file : T.alor_credentials option) :
+    T.broker =
+  let c f = Option.bind cli f and g f = Option.bind file f in
+  `Alor
+    {
+      T.portfolio =
+        pick3 (c (fun x -> x.portfolio)) "ALOR_PORTFOLIO" (g (fun x -> x.portfolio));
+      secret = pick3 (c (fun x -> x.secret)) "ALOR_SECRET" (g (fun x -> x.secret));
+      exchange = pick3 (c (fun x -> x.exchange)) "ALOR_EXCHANGE" (g (fun x -> x.exchange));
+    }
+
+(* Resolve the broker: the variant is chosen by the CLI overlay if it
+   names one, otherwise by the file/default layer; env vars never select
+   a variant (so an env credential cannot silently swap a configured
+   broker), only fill its credential fields. See ADR 0031. *)
+let resolve_broker ~(file : T.broker option) ~(cli : T.broker option) : T.broker option =
+  match (cli, file) with
+  | Some (`Finam c), Some (`Finam f) -> Some (resolve_finam ~cli:(Some c) ~file:(Some f))
+  | Some (`Finam c), _ -> Some (resolve_finam ~cli:(Some c) ~file:None)
+  | Some (`Bcs c), Some (`Bcs f) -> Some (resolve_bcs ~cli:(Some c) ~file:(Some f))
+  | Some (`Bcs c), _ -> Some (resolve_bcs ~cli:(Some c) ~file:None)
+  | Some (`Alor c), Some (`Alor f) -> Some (resolve_alor ~cli:(Some c) ~file:(Some f))
+  | Some (`Alor c), _ -> Some (resolve_alor ~cli:(Some c) ~file:None)
+  | Some `Synthetic, _ -> Some `Synthetic
+  | None, Some (`Finam f) -> Some (resolve_finam ~cli:None ~file:(Some f))
+  | None, Some (`Bcs f) -> Some (resolve_bcs ~cli:None ~file:(Some f))
+  | None, Some (`Alor f) -> Some (resolve_alor ~cli:None ~file:(Some f))
+  | None, Some `Synthetic -> Some `Synthetic
+  | None, None -> None
 
 let parse_log_level (s : string) : T.log_level option =
   match String.lowercase_ascii s with
@@ -92,13 +120,6 @@ let env_logging_overlay (base : T.logging option) : T.logging option =
           | None -> Some { level = Some level }
           | Some _ -> Some { level = Some level }))
 
-let apply_env_overrides (cfg : T.t) : T.t =
-  {
-    cfg with
-    broker = env_broker_overlay cfg.broker;
-    logging = env_logging_overlay cfg.logging;
-  }
-
 let load
     ~(default_path : string)
     ?(local_path : string option)
@@ -114,7 +135,20 @@ let load
         | None -> default
         | Some local -> Merger.merge default local)
   in
-  let after_env = apply_env_overrides after_local in
-  match cli_overrides with
-  | None -> after_env
-  | Some cli -> Merger.merge after_env cli
+  (* Non-broker fields: the [LOG_LEVEL] env overlay sits below the CLI
+     overlay. Server / engine / watchlist have no env layer. *)
+  let after_env =
+    { after_local with logging = env_logging_overlay after_local.logging }
+  in
+  let merged =
+    match cli_overrides with
+    | None -> after_env
+    | Some cli -> Merger.merge after_env cli
+  in
+  (* Broker is resolved explicitly rather than through Merger's
+     whole-variant replacement (which would drop env credentials when the
+     CLI overlay names the broker): the variant comes from the CLI, else
+     the file layer, and each credential field is CLI ?? env ?? file.
+     See ADR 0031. *)
+  let cli_broker = Option.bind cli_overrides (fun c -> c.T.broker) in
+  { merged with broker = resolve_broker ~file:after_local.broker ~cli:cli_broker }

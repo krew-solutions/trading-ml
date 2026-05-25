@@ -49,13 +49,20 @@ val load :
     record-literal syntax to build a sparse overlay (all
     fields default to [None]).
 
-    Recognised env-var overrides applied at layer 3:
-    - [FINAM_ACCOUNT_ID], [FINAM_SECRET] — broker credentials
-      (used only if the resolved broker variant is [Finam]).
-    - [BCS_CLIENT_ID], [BCS_SECRET] — broker credentials for
-      [Bcs]. BCS does not take an account id parameter — its
-      refresh-token is bound to the account at Keycloak issue
-      time.
+    Recognised env-var overrides applied at layer 3. Broker
+    credentials fill the {b selected} variant — chosen by the CLI
+    [--broker] flag if present, else by the file/default layer; env
+    never selects a variant, only its credential fields, each resolved
+    [CLI ?? env ?? file] (see ADR 0031). An empty value is treated as
+    unset.
+    - [FINAM_ACCOUNT_ID], [FINAM_SECRET] — credentials when the
+      selected variant is [Finam].
+    - [BCS_CLIENT_ID], [BCS_SECRET] — credentials when the selected
+      variant is [Bcs]. BCS takes no account-id parameter — its
+      refresh-token is bound to the account at Keycloak issue time.
+    - [ALOR_PORTFOLIO], [ALOR_SECRET], [ALOR_EXCHANGE] — credentials
+      when the selected variant is [Alor] ([ALOR_PORTFOLIO] is the
+      account/portfolio code, [ALOR_SECRET] the refresh token).
     - [LOG_LEVEL] — overrides [logging.level]. Accepts
       ["debug"], ["info"], ["warning"], ["error"]
       (case-insensitive). *)

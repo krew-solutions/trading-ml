@@ -46,14 +46,6 @@ type t = {
   account_id : string;
   placements : Placement_handle_store.t;
   order_id_by_cid : (string, string) Hashtbl.t;
-  total_filled : (int, Decimal.t) Acl_common.Cumulative_sum.t;
-      (** Per-placement cumulative-fill accumulator. The
-          adapter is the recognizer of venue fill facts (per
-          Vernon's "external system as a source of Domain
-          Events"); the cumulative is bookkeeping derived from
-          the sequence of observed legs and lives here, with
-          the recognizer, rather than leaking into the
-          application layer. *)
   bar_dedup : (Instrument.t * Timeframe.t, Candle.t) Acl_common.Stream_dedup.t;
       (** Inbound bar-stream deduplicator: drops stale snapshots
           and exact intra-period duplicates before they cross
@@ -62,7 +54,7 @@ type t = {
           fact recognition — a second observation of the same
           fact at the same ts is not a new fact. *)
   fill_dedup :
-    (int, Broker_domain.Remote_broker.Events.Order_filled.t) Acl_common.Stream_dedup.t;
+    (int, Broker_domain.Remote_broker.Events.Trade_executed.t) Acl_common.Stream_dedup.t;
       (** Per-placement fill-stream deduplicator. Shared
           between the WS [Trades] branch and the REST
           [Rest.get_trades] fallback branch so the same fill
@@ -87,7 +79,7 @@ type t = {
           [Ws_bridge.unregister_lifecycle] in addition to
           stopping the supervisor. *)
   mutable fill_supervisor :
-    Broker_domain.Remote_broker.Events.Order_filled.t Acl_common.Transport_supervisor.t
+    Broker_domain.Remote_broker.Events.Trade_executed.t Acl_common.Transport_supervisor.t
     option;
       (** Account-wide fill supervisor — one per adapter
           instance. Created in {!start_live_feed} and bound to
@@ -104,8 +96,8 @@ let name = "finam"
 
 let make ~account_id (rest : Rest.t) : t =
   let fill_equal
-      (a : Broker_domain.Remote_broker.Events.Order_filled.t)
-      (b : Broker_domain.Remote_broker.Events.Order_filled.t) : bool =
+      (a : Broker_domain.Remote_broker.Events.Trade_executed.t)
+      (b : Broker_domain.Remote_broker.Events.Trade_executed.t) : bool =
     String.equal a.trade_id b.trade_id
   in
   {
@@ -113,7 +105,6 @@ let make ~account_id (rest : Rest.t) : t =
     account_id;
     placements = Placement_handle_store.create ();
     order_id_by_cid = Hashtbl.create 16;
-    total_filled = Acl_common.Cumulative_sum.create ~zero:Decimal.zero ~add:Decimal.add;
     bar_dedup = Acl_common.Stream_dedup.create ~equal_value:Candle.equal;
     fill_dedup = Acl_common.Stream_dedup.create ~equal_value:fill_equal;
     mutex = Eio.Mutex.create ();
@@ -231,7 +222,7 @@ let get_order t ~placement_id : Broker_domain.Order.t option =
       let external_order = Rest.get_order t.rest ~account_id:t.account_id ~order_id in
       Some (Dto.Order.to_domain ~placement_id external_order)
 
-let get_trades t ~placement_id : Broker_domain.Order.trade list =
+let get_trades t ~placement_id : Broker_domain.Order.Trade.t list =
   match Placement_handle_store.find_client_order_id t.placements ~placement_id with
   | None -> []
   | Some cid ->
@@ -248,40 +239,32 @@ let dispatch t (event : Broker.event) : unit =
   | None -> ()
 
 (** Funnel one inbound WS trade into the fill supervisor.
-    Returns a raw [Order_filled.t] with [new_total_filled =
-    zero] — the supervisor's [emit] closure
-    ({!finalize_and_dispatch_fill}) does the cumulative-bump
-    post-dedup. Returns [None] when we don't recognise the
-    [order_id] (a fill against some other client's order, or a
-    fill that raced ahead of the [remember] write). *)
-let order_filled_of_ws_trade t (tu : Ws.Events.Trade.update) :
-    Broker_domain.Remote_broker.Events.Order_filled.t option =
+    Returns the recognised [Trade_executed.t], or [None] when we
+    don't recognise the [order_id] (a fill against some other
+    client's order, or a fill that raced ahead of the [remember]
+    write). *)
+let trade_executed_of_ws_trade t (tu : Ws.Events.Trade.update) :
+    Broker_domain.Remote_broker.Events.Trade_executed.t option =
   match placement_id_by_order_id t ~order_id:tu.order_id with
   | None ->
       Log.warn "[finam ws] trade for unknown order_id=%s — skipping" tu.order_id;
       None
-  | Some placement_id ->
-      Some (Ws.Events.Trade.to_domain ~placement_id ~new_total_filled:Decimal.zero tu)
+  | Some placement_id -> Some (Ws.Events.Trade.to_domain ~placement_id tu)
 
 (** Common seam between WS and REST branches of the fill
     supervisor: dedup happened upstream in the supervisor; here
-    we bump the cumulative and dispatch. Mirrors BCS's
+    we dispatch the recognised trade. Mirrors BCS's
     [finalize_and_dispatch]. *)
-let finalize_and_dispatch_fill t (raw : Broker_domain.Remote_broker.Events.Order_filled.t)
-    : unit =
-  let new_total_filled =
-    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-        Acl_common.Cumulative_sum.bump t.total_filled ~key:raw.placement_id
-          ~delta:raw.fill_quantity)
-  in
-  dispatch t (Broker.Order_filled { raw with new_total_filled })
+let finalize_and_dispatch_fill
+    t
+    (raw : Broker_domain.Remote_broker.Events.Trade_executed.t) : unit =
+  dispatch t (Broker.Trade_executed raw)
 
 (** Translate a parsed [Ws.event] into zero or more {!Broker.event}s
     by routing them to the matching supervisor. Dedup is the
     supervisor's responsibility (it shares the same [Stream_dedup]
-    instance as the REST-fallback poll branch). For fills, the
-    cumulative bookkeeping happens inside the supervisor's [emit]
-    via {!finalize_and_dispatch_fill}. *)
+    instance as the REST-fallback poll branch). Recognised trades
+    are dispatched via {!finalize_and_dispatch_fill}. *)
 let dispatch_ws_event t (ev : Ws.event) : unit =
   match ev with
   | Bars b -> (
@@ -303,7 +286,7 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
       | Some sup ->
           List.iter
             (fun tu ->
-              match order_filled_of_ws_trade t tu with
+              match trade_executed_of_ws_trade t tu with
               | Some raw -> Acl_common.Transport_supervisor.feed_ws sup raw
               | None -> ())
             trades)
@@ -313,35 +296,34 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
 
 (** REST-side branch of the fill supervisor's [poll_window].
     Pulls [account_trade]s for [(since_ts, to_ts)] and lifts
-    each to a raw [Order_filled.t]. All discriminators —
+    each to a [Trade_executed.t]. All discriminators —
     [trade_id], [instrument], [side] — come straight from the
     Finam wire payload (per the AccountTrade proto: symbol +
     side fields), so the REST branch produces structurally
     identical events to the WS branch and dedup on [trade_id]
     is exact. *)
-let order_filled_of_rest_trade t (at : Dto.Trade.t) :
-    Broker_domain.Remote_broker.Events.Order_filled.t option =
+let trade_executed_of_rest_trade t (at : Dto.Trade.t) :
+    Broker_domain.Remote_broker.Events.Trade_executed.t option =
   match placement_id_by_order_id t ~order_id:at.order_id with
   | None -> None
   | Some placement_id ->
       Some
         {
           placement_id;
-          trade_id = at.trade_id;
+          trade_id = at.trade.trade_id;
           instrument = at.instrument;
           side = at.side;
-          fill_quantity = at.trade.quantity;
-          fill_price = at.trade.price;
+          quantity = at.trade.quantity;
+          price = at.trade.price;
           fee = at.trade.fee;
-          fill_ts = at.trade.ts;
-          new_total_filled = Decimal.zero;
+          ts = at.trade.ts;
         }
 
 let fill_poll_window t ~since_ts ~to_ts :
-    Broker_domain.Remote_broker.Events.Order_filled.t list =
+    Broker_domain.Remote_broker.Events.Trade_executed.t list =
   try
     Rest.get_trades ~from_ts:since_ts ~to_ts t.rest ~account_id:t.account_id
-    |> List.filter_map (order_filled_of_rest_trade t)
+    |> List.filter_map (trade_executed_of_rest_trade t)
   with e ->
     Log.warn "[finam] fill poll failed: %s" (Printexc.to_string e);
     []
@@ -354,15 +336,15 @@ let start_live_feed t ~sw ~env ~on_event : unit =
   let bridge = Ws_bridge.make ~env ~sw ~cfg ~auth ~on_event:(dispatch_ws_event t) in
   t.bridge <- Some bridge;
   let ts_now () = Int64.of_float (Unix.gettimeofday ()) in
-  let dedup_accept (ev : Broker_domain.Remote_broker.Events.Order_filled.t) =
-    Acl_common.Stream_dedup.should_accept t.fill_dedup ~key:ev.placement_id ~ts:ev.fill_ts
+  let dedup_accept (ev : Broker_domain.Remote_broker.Events.Trade_executed.t) =
+    Acl_common.Stream_dedup.should_accept t.fill_dedup ~key:ev.placement_id ~ts:ev.ts
       ~value:ev
   in
   let sup =
     Acl_common.Transport_supervisor.start ~env ~sw ~label:"finam fills" ~poll_interval:5.0
       ~ts_now
       ~poll_window:(fun ~since_ts ~to_ts -> fill_poll_window t ~since_ts ~to_ts)
-      ~ts_of_event:(fun ev -> ev.Broker_domain.Remote_broker.Events.Order_filled.fill_ts)
+      ~ts_of_event:(fun ev -> ev.Broker_domain.Remote_broker.Events.Trade_executed.ts)
       ~dedup_accept
       ~emit:(finalize_and_dispatch_fill t)
       ~initial_since_ts:(ts_now ())

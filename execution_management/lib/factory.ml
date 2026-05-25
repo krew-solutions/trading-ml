@@ -313,10 +313,10 @@ let build ~bus ~now : t =
   in
   let _ : Bus.subscription =
     Bus.subscribe
-      (consume ~uri:"in-memory://broker.order-filled"
+      (consume ~uri:"in-memory://broker.trade-executed"
          ~group:"execution-management-order-ticket"
-         ~t_of_yojson:Inbound.Order_filled_integration_event.t_of_yojson) (fun ev ->
-        Inbound.Order_filled_integration_event_handler.handle ~store:ticket_store_module
+         ~t_of_yojson:Inbound.Trade_executed_integration_event.t_of_yojson) (fun ev ->
+        Inbound.Trade_executed_integration_event_handler.handle ~store:ticket_store_module
           ~store_handle:ticket_store ~publish:publish_aggregate_event ~now
           ~ticket_id_of_placement_id ev)
   in

@@ -24,16 +24,15 @@ let market_buy_fills_on_next_bar_at_open =
               Alcotest.fail
                 (Printf.sprintf "expected one Order_accepted, got %d" (List.length other)));
       Gherkin.then_ "the fill is observed at the bar's open price" (fun ctx ->
-          match !(ctx.order_filled_pub) with
+          match !(ctx.trade_executed_pub) with
           | [ ie ] ->
               Alcotest.(check string) "correlation_id" "saga-A" ie.correlation_id;
               Alcotest.(check int) "placement_id" 7 ie.placement_id;
-              Alcotest.(check string) "fill_price = open" "100" ie.fill_price;
-              Alcotest.(check string) "fill_quantity = remaining" "10" ie.fill_quantity;
-              Alcotest.(check string) "new_total_filled" "10" ie.new_total_filled
+              Alcotest.(check string) "fill_price = open" "100" ie.price;
+              Alcotest.(check string) "fill_quantity = remaining" "10" ie.quantity
           | other ->
               Alcotest.fail
-                (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+                (Printf.sprintf "expected one Trade_executed, got %d" (List.length other)));
     ]
 
 let no_lookahead_skips_same_ts_bar_then_fills_on_the_next =
@@ -50,18 +49,18 @@ let no_lookahead_skips_same_ts_bar_then_fills_on_the_next =
           ctx |> bar_arrives ~ts:"2024-01-01T10:00:00Z" ~open_:"100" ~close:"101" ());
       Gherkin.then_ "no fill is observed on the same-ts bar" (fun ctx ->
           Alcotest.(check int)
-            "order_filled count" 0
-            (List.length !(ctx.order_filled_pub)));
+            "trade_executed count" 0
+            (List.length !(ctx.trade_executed_pub)));
       Gherkin.when_ "the next bar arrives at 10:01" (fun ctx ->
           ctx |> bar_arrives ~ts:"2024-01-01T10:01:00Z" ~open_:"100" ~close:"102" ());
       Gherkin.then_ "the order fills on the later bar" (fun ctx ->
-          match !(ctx.order_filled_pub) with
+          match !(ctx.trade_executed_pub) with
           | [ ie ] ->
               Alcotest.(check int) "placement_id" 8 ie.placement_id;
-              Alcotest.(check string) "fill_quantity" "5" ie.fill_quantity
+              Alcotest.(check string) "fill_quantity" "5" ie.quantity
           | other ->
               Alcotest.fail
-                (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+                (Printf.sprintf "expected one Trade_executed, got %d" (List.length other)));
     ]
 
 let limit_buy_below_market_does_not_fill =
@@ -76,8 +75,8 @@ let limit_buy_below_market_does_not_fill =
           ctx |> bar_arrives ~open_:"100" ~high:"105" ~low:"95" ~close:"102" ());
       Gherkin.then_ "no fill is observed" (fun ctx ->
           Alcotest.(check int)
-            "order_filled count" 0
-            (List.length !(ctx.order_filled_pub)));
+            "trade_executed count" 0
+            (List.length !(ctx.trade_executed_pub)));
       Gherkin.then_ "the order is still tracked" (fun ctx ->
           Alcotest.(check int) "store size" 1 (Test_store.length ctx.store));
     ]
@@ -106,8 +105,8 @@ let cancellation_announces_release_and_terminalises_the_order =
           ctx |> bar_arrives ~open_:"100" ());
       Gherkin.then_ "no fill is observed because the order is terminal" (fun ctx ->
           Alcotest.(check int)
-            "order_filled count" 0
-            (List.length !(ctx.order_filled_pub)));
+            "trade_executed count" 0
+            (List.length !(ctx.trade_executed_pub)));
     ]
 
 let invalid_side_is_refused_with_round_trip_placement_id =
@@ -180,16 +179,15 @@ let market_sell_opens_a_short_and_fills_at_slipped_open =
                 (Printf.sprintf "expected one Order_accepted, got %d" (List.length other)));
       Gherkin.then_ "the fill is observed for side=SELL at open - slippage (99.9)"
         (fun ctx ->
-          match !(ctx.order_filled_pub) with
+          match !(ctx.trade_executed_pub) with
           | [ ie ] ->
               Alcotest.(check string) "side echoed as SELL" "SELL" ie.side;
               Alcotest.(check int) "placement_id" 21 ie.placement_id;
-              Alcotest.(check string)
-                "fill_price = open * (1 - 10/10000)" "99.9" ie.fill_price;
-              Alcotest.(check string) "fill_quantity = remaining" "10" ie.fill_quantity
+              Alcotest.(check string) "fill_price = open * (1 - 10/10000)" "99.9" ie.price;
+              Alcotest.(check string) "fill_quantity = remaining" "10" ie.quantity
           | other ->
               Alcotest.fail
-                (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+                (Printf.sprintf "expected one Trade_executed, got %d" (List.length other)));
     ]
 
 let participation_cap_splits_large_order_across_bars =
@@ -208,14 +206,11 @@ let participation_cap_splits_large_order_across_bars =
           |> bar_arrives ~ts:"2024-01-01T10:00:00Z" ~symbol:"SBER@MISX" ~open_:"100"
                ~volume:"200" ());
       Gherkin.then_ "the first fill is exactly the bar's capped share (20)" (fun ctx ->
-          match !(ctx.order_filled_pub) with
-          | [ ie ] ->
-              Alcotest.(check string) "fill_quantity = 200 * 0.1" "20" ie.fill_quantity;
-              Alcotest.(check string)
-                "new_total_filled = 20 (still working)" "20" ie.new_total_filled
+          match !(ctx.trade_executed_pub) with
+          | [ ie ] -> Alcotest.(check string) "fill_quantity = 200 * 0.1" "20" ie.quantity
           | other ->
               Alcotest.fail
-                (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+                (Printf.sprintf "expected one Trade_executed, got %d" (List.length other)));
       Gherkin.when_ "a second bar arrives at 10:01 with volume 1000" (fun ctx ->
           ctx
           |> bar_arrives ~ts:"2024-01-01T10:01:00Z" ~symbol:"SBER@MISX" ~open_:"100"
@@ -223,15 +218,13 @@ let participation_cap_splits_large_order_across_bars =
       Gherkin.then_
         "the residual 80 fills in one slice (cap 100, residual 80 < cap → full residual)"
         (fun ctx ->
-          match !(ctx.order_filled_pub) with
+          match !(ctx.trade_executed_pub) with
           | [ second; _first ] ->
               Alcotest.(check string)
-                "second fill_quantity = residual 80" "80" second.fill_quantity;
-              Alcotest.(check string)
-                "new_total_filled = 100 (terminal)" "100" second.new_total_filled
+                "second fill_quantity = residual 80" "80" second.quantity
           | other ->
               Alcotest.fail
-                (Printf.sprintf "expected two Order_filled after second bar, got %d"
+                (Printf.sprintf "expected two Trade_executed after second bar, got %d"
                    (List.length other)));
     ]
 

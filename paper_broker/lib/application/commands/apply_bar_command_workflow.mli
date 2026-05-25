@@ -5,7 +5,7 @@
     publication.
 
     Each {!Paper_broker.Order.t} that the bar fills emits a
-    {!Paper_broker.Order.Events.Order_filled.t}. The bar itself
+    {!Paper_broker.Order.Events.Trade_executed.t}. The bar itself
     carries no [correlation_id], so for each fill the workflow
     recovers the originating-Submit's [correlation_id] from the
     {!Paper_broker_store.Order_command_log.S} (see *Process
@@ -13,8 +13,8 @@
     [docs/architecture/hexagonal-architecture.md]) and forwards it
     to the IE-emitting DEH. *)
 
-module Order_filled :
-    module type of Paper_broker_integration_events.Order_filled_integration_event
+module Trade_executed :
+    module type of Paper_broker_integration_events.Trade_executed_integration_event
 
 module type Store = Paper_broker_store.Order_store.S
 module type Command_log = Paper_broker_store.Order_command_log.S
@@ -28,6 +28,6 @@ val execute :
   fee_rate:Paper_broker.Fee.Values.Fee_rate.t ->
   participation_rate:Paper_broker.Matching.Values.Participation_rate.t option ->
   next_trade_id:(unit -> string) ->
-  publish_order_filled:(Order_filled.t -> unit) ->
+  publish_trade_executed:(Trade_executed.t -> unit) ->
   Apply_bar_command.t ->
   (unit, Apply_bar_command_handler.handle_error) Rop.t

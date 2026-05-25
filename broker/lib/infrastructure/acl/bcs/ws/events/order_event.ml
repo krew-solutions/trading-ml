@@ -101,8 +101,8 @@ let parse (j : Yojson.Safe.t) : t option =
 
 let is_fill (t : t) : bool = t.execution_type = "11"
 
-let to_domain ~(placement_id : int) ~(new_total_filled : Decimal.t) (t : t) :
-    Broker_domain.Remote_broker.Events.Order_filled.t option =
+let to_domain ~(placement_id : int) (t : t) :
+    Broker_domain.Remote_broker.Events.Trade_executed.t option =
   if not (is_fill t) then None
   else
     let instrument =
@@ -116,9 +116,8 @@ let to_domain ~(placement_id : int) ~(new_total_filled : Decimal.t) (t : t) :
         trade_id = t.execution_id;
         instrument;
         side = t.side;
-        fill_quantity = t.last_quantity;
-        fill_price = t.average_price;
+        quantity = t.last_quantity;
+        price = t.average_price;
         fee = t.commission;
-        fill_ts = t.transaction_time;
-        new_total_filled;
+        ts = t.transaction_time;
       }

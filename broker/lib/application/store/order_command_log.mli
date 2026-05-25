@@ -39,7 +39,7 @@ module type S = sig
       {!record_submit} for this placement. [None] if no Submit
       was logged (unknown placement, corrupted log, or the
       placement was rejected pre-Submit). Downstream events
-      generated outside command-in-scope (future Order_filled
+      generated outside command-in-scope (Trade_executed
       from WS) use this to recover the originating saga. *)
 
   val cancel_correlation_id : t -> placement_id:int -> string option

@@ -65,8 +65,8 @@ let test_partial_fill_transitions_to_partially_filled () =
         (Decimal.equal (Order.remaining o') (dec "7"));
       Alcotest.(check string) "event trade_id" "e1" ev.trade_id;
       Alcotest.(check bool)
-        "event new_total_filled = 3" true
-        (Decimal.equal ev.new_total_filled (dec "3"))
+        "event quantity = 3" true
+        (Decimal.equal ev.quantity (dec "3"))
 
 let test_full_fill_transitions_to_filled () =
   let o = new_buy_market ~quantity:"10" () in

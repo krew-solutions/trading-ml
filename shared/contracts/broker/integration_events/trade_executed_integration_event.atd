@@ -1,0 +1,31 @@
+(* Wire contract: one executed trade leg observed at the venue.
+
+   Shared by the live broker BC and the paper_broker simulator —
+   both publish the same shape on in-memory://broker.trade-executed,
+   and execution_management consumes it source-agnostically. Carries
+   the trade itself only (quantity, price, fee); cumulative fill
+   aggregation is the consuming aggregate's responsibility, not the
+   broker's.
+
+   Cross-referenced types resolved via atdgen at code-generation
+   time; the consumer library opens its own *_view_models so the
+   bare `Instrument_view_model_t` name binds across libraries:
+
+   - instrument_view_model — see view_models/instrument_view_model.atd *)
+
+type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
+
+type t = {
+  correlation_id <doc text="Saga-instance identifier of the originating submit_order_command (process metadata, recovered from the application correlation log since the trade event carries no correlation_id of its own)."> : string;
+
+  placement_id <doc text="Client's identifier of the order. Account uses it to locate the matching ledger state on commit_fill_command."> : int;
+
+  trade_id : string;
+  instrument : instrument_view_model;
+  side : string;
+  quantity : string;
+  price : string;
+  fee : string;
+
+  ts <doc text="ISO-8601."> : string;
+}

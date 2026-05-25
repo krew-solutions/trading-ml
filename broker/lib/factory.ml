@@ -142,9 +142,9 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
   let publish_bar_updated =
     Broker_ohs_integration_events.Bar_updated_integration_event_publisher.make ~bus
   in
-  let publish_order_filled =
-    produce ~uri:"in-memory://broker.order-filled"
-      ~yojson_of:Broker_integration_events.Order_filled_integration_event.yojson_of_t
+  let publish_trade_executed =
+    produce ~uri:"in-memory://broker.trade-executed"
+      ~yojson_of:Broker_integration_events.Trade_executed_integration_event.yojson_of_t
   in
   (* Process-correlation log: [placement_id ↦ submit/cancel
      correlation_id]. Recorded by Submit on Accepted (and, when
@@ -273,10 +273,9 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
      [on_event] is the single seam through which all events flow
      from adapter to application. Bars route to the OHS publisher
      (the bus is the sole live-bar surface — SSE, strategy, paper,
-     etc. all consume from there). [Order_filled] events get
-     correlation-id stamping, cumulative-fill accumulation, and IE
-     construction here, then publish on
-     [broker.order-filled]. *)
+     etc. all consume from there). [Trade_executed] events get
+     correlation-id stamping and IE construction here, then
+     publish on [broker.trade-executed]. *)
   (match opened with
   | Opened.Synthetic _ -> ()
   | Opened.Finam _ | Opened.Bcs _ ->
@@ -285,9 +284,9 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
         | Remote_bar_updated ev ->
             Broker_domain_event_handlers.Publish_integration_event_on_bar_updated.handle
               ~publish_bar_updated ev
-        | Order_filled domain_ev ->
-            Broker_domain_event_handlers.Publish_integration_event_on_order_filled.handle
-              ~publish_order_filled ~origin_correlation_id domain_ev
+        | Trade_executed domain_ev ->
+            Broker_domain_event_handlers.Publish_integration_event_on_trade_executed
+            .handle ~publish_trade_executed ~origin_correlation_id domain_ev
       in
       Broker.start_live_feed client ~sw ~env ~on_event);
   (* Apply the operator-declared watchlist: each entry opens an

@@ -33,7 +33,7 @@ let execute
       (* Terminal-on-venue (already filled / expired / rejected)
          and transport failures don't emit an IE today. In the
          terminal case the originating Submit's downstream IEs
-         (future Order_filled / current Order_rejected /
+         (Trade_executed / current Order_rejected /
          Order_unreachable) drive the saga's compensation; a
          dedicated [Order_uncancellable] IE for the unreachable
          path is a follow-up once Account grows compensation

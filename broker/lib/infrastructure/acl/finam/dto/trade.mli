@@ -21,11 +21,10 @@
     leak Finam concerns into the broker port. *)
 
 type t = {
-  trade_id : string;
   order_id : string;
   instrument : Core.Instrument.t;
   side : Core.Side.t;
-  trade : Broker_domain.Order.trade;
+  trade : Broker_domain.Order.Trade.t;
 }
 
 val of_json : Yojson.Safe.t -> t

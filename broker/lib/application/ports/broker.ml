@@ -28,15 +28,14 @@ open Core
     missing handlers. *)
 type event =
   | Remote_bar_updated of Remote_broker.Events.Remote_bar_updated.t
-  | Order_filled of Remote_broker.Events.Order_filled.t
+  | Trade_executed of Remote_broker.Events.Trade_executed.t
       (** The domain event — the adapter, acting as the
           recognizer of external venue facts (per Vernon's
           "external system as a source of Domain Events"
           pattern), constructs it directly from the broker's
-          fill frame and the adapter's own per-placement
-          cumulative bookkeeping. The application layer
-          consumes it as-is; no further recognition step is
-          needed at the seam. *)
+          trade frame. It carries the trade leg only; the
+          application layer consumes it as-is, and cumulative
+          fill aggregation is left to the consuming aggregate. *)
 
 (** Subscription request — describes what the adapter should
     listen to. The adapter is responsible for the upstream
@@ -103,7 +102,7 @@ module type S = sig
   (** Snapshot of a single placement's state. [None] when no
       placement is recorded under this id. *)
 
-  val get_trades : t -> placement_id:int -> Order.trade list
+  val get_trades : t -> placement_id:int -> Order.Trade.t list
   (** Per-trade detail for a placement. Empty list when the
       order has no fills yet or no placement is recorded.
       Wire-shape projection (e.g. {!Trade_view_model.of_domain})

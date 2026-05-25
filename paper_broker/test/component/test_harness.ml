@@ -11,7 +11,8 @@ module Apply_bar_wf = Paper_broker_commands.Apply_bar_command_workflow
 module Cancel_wf = Paper_broker_commands.Cancel_pending_order_command_workflow
 module Order_accepted_ie =
   Paper_broker_integration_events.Order_accepted_integration_event
-module Order_filled_ie = Paper_broker_integration_events.Order_filled_integration_event
+module Trade_executed_ie =
+  Paper_broker_integration_events.Trade_executed_integration_event
 module Order_rejected_ie =
   Paper_broker_integration_events.Order_rejected_integration_event
 module Order_cancelled_ie =
@@ -127,7 +128,7 @@ type ctx = {
   now_ts_ref : int64 ref;
   last_seen_bar_ts : (Core.Instrument.t, int64) Hashtbl.t;
   order_accepted_pub : Order_accepted_ie.t list ref;
-  order_filled_pub : Order_filled_ie.t list ref;
+  trade_executed_pub : Trade_executed_ie.t list ref;
   order_rejected_pub : Order_rejected_ie.t list ref;
   order_cancelled_pub : Order_cancelled_ie.t list ref;
 }
@@ -150,7 +151,7 @@ let fresh_ctx () =
     now_ts_ref = ref 1_700_000_000L;
     last_seen_bar_ts = Hashtbl.create 8;
     order_accepted_pub = ref [];
-    order_filled_pub = ref [];
+    trade_executed_pub = ref [];
     order_rejected_pub = ref [];
     order_cancelled_pub = ref [];
   }
@@ -281,13 +282,13 @@ let bar_arrives
       candle = { ts; open_; high; low; close; volume };
     }
   in
-  let publish_filled e = ctx.order_filled_pub := e :: !(ctx.order_filled_pub) in
+  let publish_filled e = ctx.trade_executed_pub := e :: !(ctx.trade_executed_pub) in
   let _ =
     Apply_bar_wf.execute ~store:store_module ~store_handle:ctx.store
       ~command_log:log_module ~command_log_handle:ctx.command_log
       ~slippage_bps:ctx.slippage_bps ~fee_rate:ctx.fee_rate
       ~participation_rate:ctx.participation_rate ~next_trade_id:ctx.next_trade_id
-      ~publish_order_filled:publish_filled cmd
+      ~publish_trade_executed:publish_filled cmd
   in
   let bar_ts = Datetime.Iso8601.parse ts in
   if not (Int64.equal bar_ts 0L) then begin

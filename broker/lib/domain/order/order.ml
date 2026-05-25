@@ -1,3 +1,5 @@
+module Trade = Trade
+
 type kind =
   | Market
   | Limit of Decimal.t
@@ -29,8 +31,6 @@ type t = {
   status : status;
   placed_ts : int64;
 }
-
-type trade = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
 
 let remaining_qty (o : t) = Decimal.sub o.quantity o.filled
 

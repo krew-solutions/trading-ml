@@ -1,6 +1,6 @@
 (** Command: broker reported a fill leg on a placement.
     Issued in-process by the ACL handler for
-    {!Broker.Order_filled_integration_event}. *)
+    {!Broker.Trade_executed_integration_event}. *)
 
 type t = {
   ticket_id : int;

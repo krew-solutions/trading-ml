@@ -6,10 +6,10 @@
     (and from the [/orders/execution/ws] WebSocket channel via
     {!Order_event.to_domain}, which lifts the WS payload through
     the same wire shape). The bcs library translates it to the
-    broker BC's domain [Order_filled.t] in {!Bcs_broker} once
+    broker BC's domain [Trade_executed.t] in {!Bcs_broker} once
     the parent [placement_id] is resolved.
 
-    Distinct from {!Broker_domain.Order.trade} which is the broker
+    Distinct from {!Broker_domain.Order.Trade.t} which is the broker
     BC's per-leg view stripped of foreign-handle bookkeeping; this
     {b external} sibling carries the [order_num] needed to
     correlate back to the parent order and the venue-side

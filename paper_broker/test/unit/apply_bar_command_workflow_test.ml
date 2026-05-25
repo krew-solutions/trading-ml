@@ -1,7 +1,7 @@
 (** Sociable tests for {!Paper_broker_commands.Apply_bar_command_workflow}.
     Submits an order via the real submit pipeline, then drives the
     bar through {!Apply_bar_command_workflow.execute} and observes
-    the resulting {!Order_filled_integration_event}. *)
+    the resulting {!Trade_executed_integration_event}. *)
 
 module Submit = Paper_broker_commands.Submit_order_command
 module Submit_wf = Paper_broker_commands.Submit_order_command_workflow
@@ -112,7 +112,7 @@ let test_bar_fills_market_buy_at_open () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:None ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
   Alcotest.(check bool) "workflow Ok" true (Result.is_ok result);
@@ -120,10 +120,9 @@ let test_bar_fills_market_buy_at_open () =
   | [ ie ] ->
       Alcotest.(check string) "correlation_id from origin log" "saga-A" ie.correlation_id;
       Alcotest.(check int) "placement_id" 101 ie.placement_id;
-      Alcotest.(check string) "fill price = open" "100" ie.fill_price;
-      Alcotest.(check string) "fill quantity = remaining" "10" ie.fill_quantity;
-      Alcotest.(check string) "new_total_filled" "10" ie.new_total_filled
-  | _ -> Alcotest.fail "expected exactly one Order_filled IE"
+      Alcotest.(check string) "fill price = open" "100" ie.price;
+      Alcotest.(check string) "fill quantity = remaining" "10" ie.quantity
+  | _ -> Alcotest.fail "expected exactly one Trade_executed IE"
 
 let test_bar_at_placed_after_ts_does_not_fill () =
   let store = Test_store.create () in
@@ -140,7 +139,7 @@ let test_bar_at_placed_after_ts_does_not_fill () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:None ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       (bar_cmd ())
   in
   Alcotest.(check int) "no fills on same-ts bar" 0 (List.length !filled);
@@ -161,7 +160,7 @@ let test_bar_for_different_instrument_does_not_fill () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:None ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       other_bar
   in
   Alcotest.(check int) "no cross-instrument fill" 0 (List.length !filled)
@@ -181,17 +180,14 @@ let test_participation_rate_caps_market_buy_to_partial_fill () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:rate ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~volume:"200" ())
   in
   (match !filled with
-  | [ ie ] ->
-      Alcotest.(check string) "partial fill_quantity = 20" "20" ie.fill_quantity;
-      Alcotest.(check string)
-        "new_total_filled = 20 (still working)" "20" ie.new_total_filled
+  | [ ie ] -> Alcotest.(check string) "partial fill_quantity = 20" "20" ie.quantity
   | other ->
       Alcotest.fail
-        (Printf.sprintf "expected one Order_filled, got %d" (List.length other)));
+        (Printf.sprintf "expected one Trade_executed, got %d" (List.length other)));
   Alcotest.(check int) "order still tracked for residual" 1 (Test_store.length store)
 
 let test_zero_volume_bar_does_not_fill_under_cap () =
@@ -209,7 +205,7 @@ let test_zero_volume_bar_does_not_fill_under_cap () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:rate ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~volume:"0" ())
   in
   Alcotest.(check int) "no fill on zero-volume bar under cap" 0 (List.length !filled);
@@ -229,7 +225,7 @@ let test_limit_sell_above_bar_high_does_not_fill () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:None ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       (bar_cmd ~open_:"100" ~high:"105" ~low:"95" ~close:"102" ())
   in
   Alcotest.(check int) "no fill on sell-limit above bar high" 0 (List.length !filled);
@@ -245,7 +241,7 @@ let test_invalid_bar_returns_error () =
     Apply_bar_wf.execute ~store:store_module ~store_handle:store ~command_log:log_module
       ~command_log_handle:log ~slippage_bps:Slippage_bps.zero ~fee_rate:Fee_rate.zero
       ~participation_rate:None ~next_trade_id
-      ~publish_order_filled:(fun ie -> filled := ie :: !filled)
+      ~publish_trade_executed:(fun ie -> filled := ie :: !filled)
       bad
   in
   Alcotest.(check bool) "workflow Error" true (Result.is_error result);

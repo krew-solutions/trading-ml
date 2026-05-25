@@ -17,7 +17,7 @@ let validation_error_to_string = function
   | Invalid_candle s -> Printf.sprintf "invalid candle: %s" s
 
 type handle_error = Validation of validation_error
-type fill_outcome = { order : Order.t; event : Order.Events.Order_filled.t }
+type fill_outcome = { order : Order.t; event : Order.Events.Trade_executed.t }
 
 let parse_instrument raw : (Core.Instrument.t, validation_error) Rop.t =
   try Rop.succeed (Core.Instrument.of_qualified raw)

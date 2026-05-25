@@ -3,6 +3,8 @@
     invariants are uniform across all concrete venues; protocol
     specifics live below the ACL boundary. See ADR-0015. *)
 
+module Trade : module type of Trade
+
 type kind =
   | Market
   | Limit of Decimal.t
@@ -46,14 +48,6 @@ type t = {
           incompatible shape the venue uses (ISO-8601, vendor
           epoch, RFC 3339, etc.) into our int64 form. *)
 }
-
-type trade = { ts : int64; quantity : Decimal.t; price : Decimal.t; fee : Decimal.t }
-(** One trade (fill slice) observed at the venue against this
-    order. A single {!t} may be filled across multiple trades;
-    the sum of [quantity] over the list equals the order's
-    [filled]. Price and fee are venue-actual numbers per fill
-    (not intended). [ts] is the venue-reported fill timestamp
-    normalised to int64 epoch. *)
 
 val remaining_qty : t -> Decimal.t
 (** [quantity - filled]. Non-negative by the [filled ≤ quantity]

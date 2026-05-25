@@ -193,13 +193,11 @@ let test_decode_order_event_aggregate_state () =
         (Bcs.Ws.Events.Order_event.is_fill ev);
       Alcotest.(check bool)
         "to_domain returns None on non-Trade event" true
-        (Bcs.Ws.Events.Order_event.to_domain ~placement_id:42
-           ~new_total_filled:Decimal.zero ev
-        = None)
+        (Bcs.Ws.Events.Order_event.to_domain ~placement_id:42 ev = None)
 
 (** Same payload with [executionType] forced to ["11"] (Trade).
     Verifies that {!Order_event.is_fill} flips and {!to_domain}
-    constructs an [Order_filled] with the expected
+    constructs a [Trade_executed] with the expected
     discriminators. *)
 let test_decode_order_event_trade_leg () =
   let j =
@@ -237,24 +235,17 @@ let test_decode_order_event_trade_leg () =
         "executionType=11 is a fill" true
         (Bcs.Ws.Events.Order_event.is_fill ev);
       Alcotest.(check bool) "side parsed as Sell" true (ev.side = Side.Sell);
-      match
-        Bcs.Ws.Events.Order_event.to_domain ~placement_id:42
-          ~new_total_filled:(Decimal.of_int 50) ev
-      with
+      match Bcs.Ws.Events.Order_event.to_domain ~placement_id:42 ev with
       | None -> Alcotest.fail "expected Some domain event on Trade"
       | Some dom ->
           Alcotest.(check int) "placement_id round-trip" 42 dom.placement_id;
           Alcotest.(check string)
             "trade_id = executionId" "TQBR-Z3fE7c-S-1-1-N" dom.trade_id;
           Alcotest.(check (float 1e-6))
-            "fill_quantity = 50" 50.0
-            (Decimal.to_float dom.fill_quantity);
-          Alcotest.(check (float 1e-6))
-            "fill_price = 244.5" 244.5
-            (Decimal.to_float dom.fill_price);
-          Alcotest.(check (float 1e-6))
-            "new_total_filled passed through" 50.0
-            (Decimal.to_float dom.new_total_filled))
+            "quantity = 50" 50.0
+            (Decimal.to_float dom.quantity);
+          Alcotest.(check (float 1e-6)) "price = 244.5" 244.5 (Decimal.to_float dom.price)
+      )
 
 let test_decode_order_event_malformed_returns_none () =
   let j = Yojson.Safe.from_string {| { "no": "data subtree" } |} in

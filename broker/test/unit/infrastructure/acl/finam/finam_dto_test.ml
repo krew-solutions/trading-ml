@@ -111,7 +111,7 @@ let test_account_trades_parse () =
   let trades = Finam.Dto.Trade.list_of_json j in
   Alcotest.(check int) "three trades" 3 (List.length trades);
   let (first : Finam.Dto.Trade.t) = List.nth trades 0 in
-  Alcotest.(check string) "trade_id round-trips" "T1" first.trade_id;
+  Alcotest.(check string) "trade_id round-trips" "T1" first.trade.trade_id;
   Alcotest.(check string) "order_id" "O1" first.order_id;
   Alcotest.(check string)
     "instrument ticker" "SBER"

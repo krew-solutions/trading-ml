@@ -50,10 +50,10 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
       ~yojson_of:
         Paper_broker_integration_events.Order_accepted_integration_event.yojson_of_t
   in
-  let publish_order_filled =
-    produce ~uri:"in-memory://broker.order-filled"
+  let publish_trade_executed =
+    produce ~uri:"in-memory://broker.trade-executed"
       ~yojson_of:
-        Paper_broker_integration_events.Order_filled_integration_event.yojson_of_t
+        Paper_broker_integration_events.Trade_executed_integration_event.yojson_of_t
   in
   let publish_order_rejected =
     produce ~uri:"in-memory://broker.order-rejected"
@@ -84,7 +84,7 @@ let build ~bus ~now ~slippage_bps ~fee_rate ?participation_rate () : t =
        Paper_broker_commands.Apply_bar_command_workflow.execute ~store:store_module
          ~store_handle:store ~command_log:command_log_module
          ~command_log_handle:command_log ~slippage_bps ~fee_rate ~participation_rate
-         ~next_trade_id ~publish_order_filled cmd
+         ~next_trade_id ~publish_trade_executed cmd
      with
     | Ok () -> ()
     | Error _ -> ());

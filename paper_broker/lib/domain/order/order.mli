@@ -62,7 +62,7 @@ val commit_fill :
   fill_price:Decimal.t ->
   fee:Decimal.t ->
   fill_ts:int64 ->
-  (t * Events.Order_filled.t, commit_fill_error) result
+  (t * Events.Trade_executed.t, commit_fill_error) result
 (** Applies a partial or full fill. The new status is
     [Partially_filled] when filled total is below [quantity], else
     [Filled]. *)

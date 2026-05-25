@@ -1,11 +1,10 @@
 open Core
 
 type t = {
-  trade_id : string;
   order_id : string;
   instrument : Core.Instrument.t;
   side : Core.Side.t;
-  trade : Broker_domain.Order.trade;
+  trade : Broker_domain.Order.Trade.t;
 }
 
 let of_json (j : Yojson.Safe.t) : t =
@@ -22,11 +21,17 @@ let of_json (j : Yojson.Safe.t) : t =
     | _ -> 0L
   in
   {
-    trade_id = str "trade_id";
     order_id = str "order_id";
     instrument = Instrument.of_qualified (str "symbol");
     side = Wire.finam_side_of_wire (str "side");
-    trade = { ts; quantity = dec "size"; price = dec "price"; fee = Decimal.zero };
+    trade =
+      {
+        trade_id = str "trade_id";
+        ts;
+        quantity = dec "size";
+        price = dec "price";
+        fee = Decimal.zero;
+      };
   }
 
 let list_of_json (j : Yojson.Safe.t) : t list =

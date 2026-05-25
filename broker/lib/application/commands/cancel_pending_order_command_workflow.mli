@@ -12,7 +12,7 @@
       [cancelled_ts] from broker's injected clock.
     - On [Cancel_refused] / [Unreachable]: no IE is emitted
       today. Terminal-on-venue placements drive the saga via
-      their own Order_filled / Order_rejected events; the
+      their own Trade_executed / Order_rejected events; the
       unreachable path is a follow-up once Account grows
       compensation semantics for stuck cancels.
     - On {!Placement_not_found}: surfaced through the [Rop.t]

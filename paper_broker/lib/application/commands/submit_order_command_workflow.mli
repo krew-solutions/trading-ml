@@ -5,7 +5,7 @@
     - records the submit's [correlation_id] in the
       {!Paper_broker_store.Order_command_log.S} (so downstream
       events that lack their own correlation context — notably
-      [Order_filled] emitted from per-bar matching — can recover
+      [Trade_executed] emitted from per-bar matching — can recover
       it).
     - publishes the
       {!Paper_broker_integration_events.Order_accepted_integration_event.t}

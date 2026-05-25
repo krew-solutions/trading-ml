@@ -7,6 +7,7 @@
    calling context. *)
 
 type t = {
+  trade_id <doc text="Venue-side execution identifier — the trade's identity."> : string;
   ts <doc text="ISO-8601 timestamp at which the venue reported this trade."> : string;
   quantity <doc text="Decimal string. Sum across trades equals the order's [filled]."> : string;
   price <doc text="Decimal string — broker's actual fill price, not the order's intended price."> : string;

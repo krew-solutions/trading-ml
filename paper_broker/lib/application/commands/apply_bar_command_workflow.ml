@@ -1,4 +1,4 @@
-module Order_filled = Paper_broker_integration_events.Order_filled_integration_event
+module Trade_executed = Paper_broker_integration_events.Trade_executed_integration_event
 
 module type Store = Paper_broker_store.Order_store.S
 module type Command_log = Paper_broker_store.Order_command_log.S
@@ -13,7 +13,7 @@ let execute
     ~(fee_rate : Paper_broker.Fee.Values.Fee_rate.t)
     ~(participation_rate : Paper_broker.Matching.Values.Participation_rate.t option)
     ~(next_trade_id : unit -> string)
-    ~(publish_order_filled : Order_filled.t -> unit)
+    ~(publish_trade_executed : Trade_executed.t -> unit)
     (cmd : Apply_bar_command.t) : (unit, Apply_bar_command_handler.handle_error) Rop.t =
   let module L = (val command_log : Command_log with type t = log) in
   match
@@ -34,8 +34,8 @@ let execute
                    sagas key by placement_id anyway. *)
                 ""
           in
-          Paper_broker_domain_event_handlers.Publish_integration_event_on_order_filled
-          .handle ~publish_order_filled ~correlation_id f.event)
+          Paper_broker_domain_event_handlers.Publish_integration_event_on_trade_executed
+          .handle ~publish_trade_executed ~correlation_id f.event)
         fills;
       Rop.succeed ()
   | Error errs -> Error errs

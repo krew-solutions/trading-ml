@@ -4,5 +4,5 @@ val handle :
   publish:(Execution_management.Order_ticket.event -> unit) ->
   now:(unit -> int64) ->
   ticket_id_of_placement_id:(int -> int) ->
-  Order_filled_integration_event.t ->
+  Trade_executed_integration_event.t ->
   unit

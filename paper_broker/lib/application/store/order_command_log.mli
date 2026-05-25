@@ -15,7 +15,7 @@
     the substitute. Consumers most commonly query
     {!origin_correlation_id} to recover the originating-Submit
     correlation when emitting an outbound event that has no
-    correlation context of its own (e.g. an [Order_filled] event
+    correlation context of its own (e.g. a [Trade_executed] event
     produced by per-bar matching, since the bar carries no
     correlation_id).
 
@@ -38,7 +38,7 @@ module type S = sig
       {!record_submit} for this aggregate. [None] if no Submit was
       logged (e.g. unknown aggregate, or a corrupted log).
 
-      Downstream events ([Order_filled]) that lack a direct
+      Downstream events ([Trade_executed]) that lack a direct
       command-in-scope use this to recover the originating saga. *)
 
   val cancel_correlation_id : t -> aggregate_id:string -> string option

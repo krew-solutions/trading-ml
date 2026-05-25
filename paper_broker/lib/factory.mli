@@ -9,8 +9,8 @@
     the [broker.submit-order-command] bus channel (published by the
     execution_management saga or any other client), bars enter via
     [broker.bar-updated], and outcomes (Order_accepted /
-    Order_filled / Order_cancelled / Order_rejected) leave on
-    [broker.order-*] channels. The {!t.http_handler} field is a
+    Trade_executed / Order_cancelled / Order_rejected) leave on
+    [broker.*] channels. The {!t.http_handler} field is a
     no-op stub kept for uniformity with the other BC factories. *)
 
 type t = { http_handler : Inbound_http.Route.handler }
@@ -27,7 +27,7 @@ val build :
 
     [bus] must already have an adapter registered for the
     [in-memory://] scheme used by paper_broker's outbound URIs
-    ([broker.order-accepted], [broker.order-filled],
+    ([broker.order-accepted], [broker.trade-executed],
     [broker.order-cancelled], [broker.order-rejected]) and inbound
     URIs ([broker.submit-order-command],
     [broker.cancel-order-command], [broker.bar-updated]).

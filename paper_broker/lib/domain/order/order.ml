@@ -75,18 +75,17 @@ let commit_fill t ~trade_id ~fill_quantity ~fill_price ~fee ~fill_ts =
         if Decimal.equal new_total_filled t.quantity then Filled else Partially_filled
       in
       let t' = { t with filled = new_total_filled; status = new_status } in
-      let event : Events.Order_filled.t =
+      let event : Events.Trade_executed.t =
         {
           id = t.id;
           placement_id = t.placement_id;
           trade_id;
           instrument = t.instrument;
           side = t.side;
-          fill_quantity;
-          fill_price;
+          quantity = fill_quantity;
+          price = fill_price;
           fee;
-          new_total_filled;
-          fill_ts;
+          ts = fill_ts;
         }
       in
       Ok (t', event)

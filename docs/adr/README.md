@@ -42,6 +42,9 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0027](0027-kalman-pair-mean-reversion.md) | Adaptive-β pair mean reversion as a sibling policy | Accepted | 2026-05-24 |
 | [0028](0028-account-progressive-reservation-drawdown.md) | Progressive reservation drawdown in Account | Superseded by 0029 | 2026-05-24 |
 | [0029](0029-single-terminal-commit-and-per-trade-execution.md) | Single terminal commit: per-trade Trade_executed, one fill_recorded at ticket close | Accepted | 2026-05-25 |
+| [0030](0030-alor-broker-adapter.md) | Alor broker ACL adapter | Accepted | 2026-05-25 |
+| [0031](0031-layered-runtime-configuration.md) | Layered runtime configuration precedence | Accepted | 2026-05-25 |
+| [0032](0032-order-flow-bounded-context.md) | Order_flow bounded context: footprint analysis on the public tape | Accepted | 2026-05-27 |
 
 ## Template
 

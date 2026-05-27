@@ -1,0 +1,24 @@
+(library
+ (name order_flow_integration_events)
+ (public_name trading.order_flow.integration_events)
+ (libraries yojson ppx_yojson_conv_lib atdgen-runtime core order_flow decimal
+            datetime order_flow_view_models)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard
+   -open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+   -open Order_flow
+   -open Order_flow_view_models)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/integration_events/footprint_completed_integration_event.atd))
+ (targets footprint_completed_integration_event_t.ml
+          footprint_completed_integration_event_t.mli
+          footprint_completed_integration_event_j.ml
+          footprint_completed_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o footprint_completed_integration_event %{atd})
+   (run atdgen -j -o footprint_completed_integration_event %{atd}))))

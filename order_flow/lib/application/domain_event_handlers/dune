@@ -1,0 +1,5 @@
+(library
+ (name order_flow_domain_event_handlers)
+ (public_name trading.order_flow.domain_event_handlers)
+ (libraries core decimal order_flow order_flow_view_models
+            order_flow_integration_events))

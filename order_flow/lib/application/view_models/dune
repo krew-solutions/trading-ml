@@ -1,0 +1,28 @@
+(library
+ (name order_flow_view_models)
+ (public_name trading.order_flow.view_models)
+ (libraries yojson ppx_yojson_conv_lib atdgen-runtime core order_flow decimal)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives -open Order_flow)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/view_models/instrument_view_model.atd))
+ (targets instrument_view_model_t.ml instrument_view_model_t.mli
+          instrument_view_model_j.ml instrument_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o instrument_view_model %{atd})
+   (run atdgen -j -o instrument_view_model %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/view_models/cluster_view_model.atd))
+ (targets cluster_view_model_t.ml cluster_view_model_t.mli
+          cluster_view_model_j.ml cluster_view_model_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o cluster_view_model %{atd})
+   (run atdgen -j -o cluster_view_model %{atd}))))

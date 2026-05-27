@@ -1,0 +1,12 @@
+(* Wire contract: order_flow/lib/application/view_models/instrument_view_model.ml
+
+   Duplicated per BC (ADR 0001): the same instrument shape is carried
+   independently by account, broker, order_flow, … so that no BC
+   depends on another's view-model code. Only this contract is shared. *)
+
+type t = {
+  ticker : string;
+  venue : string;
+  ?isin : string option;
+  ?board : string option;
+}

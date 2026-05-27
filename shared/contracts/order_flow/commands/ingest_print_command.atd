@@ -1,0 +1,19 @@
+(* Wire contract: order_flow/lib/application/commands/ingest_print_command.ml
+
+   Inbound command to the order_flow BC: ingest one public-tape print.
+   Produced by the broker-tape ACL (a public trade translated into the
+   BC's own command — ADR 0032), not by an arbitrary external actor.
+
+   No correlation_id: this is a market-data ingestion command, not a
+   saga step, mirroring the bar feed (Bar_updated carries none either).
+
+   [price]/[size] are Decimal strings (ADR 0007); [ts] is ISO-8601. *)
+
+type t = {
+  symbol <doc text="Qualified instrument: TICKER@MIC[/BOARD].">: string;
+  price <doc text="Decimal string (Decimal.of_string).">: string;
+  size <doc text="Decimal string; strictly positive traded quantity.">: string;
+  ts <doc text="ISO-8601 execution time (UTC 'Z').">: string;
+  aggressor
+    <doc text="'BUY' | 'SELL' | 'UNSPECIFIED' (case-insensitive). UNSPECIFIED for auction/negotiated prints with no initiator.">: string;
+}

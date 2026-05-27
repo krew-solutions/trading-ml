@@ -1,0 +1,35 @@
+(* Wire contract: order_flow/lib/application/integration_events/footprint_completed_integration_event.ml
+
+   Published by the order_flow BC when a footprint bar seals. Carries
+   objective facts only — OHLCV reconstructed from the bar's own prints,
+   the signed delta, the volume Point of Control, and the per-price
+   clusters. Thresholded interpretations (stacked imbalance, CVD
+   divergence) are NOT here; they belong to the strategy BC, which
+   consumes this event.
+
+   [timeframe] is the serialised bar boundary. Only Time bars exist in
+   this round, so a timeframe token (M1 … MN1) fully describes it; when
+   Volume/Tick boundaries land the shape gains a discriminator.
+
+   Idempotency: subscribers MUST upsert by (instrument, timeframe,
+   open_ts). Replay/reconnect re-publishes the same key; ordering and
+   deduplication are transport concerns, not payload concerns.
+
+   All amounts are Decimal strings (ADR 0007); [open_ts] is ISO-8601. *)
+
+type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
+type cluster_view_model <ocaml from="Cluster_view_model" t="t"> = abstract
+
+type t = {
+  instrument : instrument_view_model;
+  timeframe : string;
+  open_ts : string;
+  open_price : string;
+  high : string;
+  low : string;
+  close : string;
+  volume : string;
+  delta : string;
+  poc_price : string;
+  clusters : cluster_view_model list;
+}

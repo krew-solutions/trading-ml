@@ -1,0 +1,29 @@
+(library
+ (name order_flow_commands)
+ (public_name trading.order_flow.commands)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  atdgen-runtime
+  core
+  decimal
+  datetime
+  order_flow
+  order_flow_view_models
+  order_flow_integration_events
+  order_flow_domain_event_handlers
+  rop)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/commands/ingest_print_command.atd))
+ (targets ingest_print_command_t.ml ingest_print_command_t.mli
+          ingest_print_command_j.ml ingest_print_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o ingest_print_command %{atd})
+   (run atdgen -j -o ingest_print_command %{atd}))))

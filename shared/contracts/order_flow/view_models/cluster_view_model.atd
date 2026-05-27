@@ -1,0 +1,16 @@
+(* Wire contract: order_flow/lib/application/view_models/cluster_view_model.ml
+
+   One price level of a footprint bar: the volume traded at a single
+   price, split by aggressor. Raw buckets only — [total] (sum of all
+   three) and [delta] (buy - sell, excluding indeterminate) are
+   derivable downstream and are not carried, to keep the wire shape a
+   faithful projection rather than a denormalised cache.
+
+   All amounts are Decimal strings (ADR 0007). *)
+
+type t = {
+  price : string;
+  buy_volume : string;
+  sell_volume : string;
+  indeterminate_volume : string;
+}

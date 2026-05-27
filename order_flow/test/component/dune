@@ -1,0 +1,11 @@
+(test
+ (name order_flow_component_runner)
+ (libraries
+  core
+  decimal
+  rop
+  order_flow
+  order_flow_commands
+  order_flow_integration_events
+  gherkin_edsl
+  alcotest))

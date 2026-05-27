@@ -303,6 +303,42 @@ let test_decode_public_trades () =
       | _ -> Alcotest.fail "expected exactly 3 prints")
   | _ -> Alcotest.fail "expected Public_trades event"
 
+(** Full QUOTES frame (bid + ask present, [{"value": _}]-wrapped, with
+    the payload itself a JSON-encoded string as Finam sends it live). *)
+let test_decode_quotes_full () =
+  let j =
+    Yojson.Safe.from_string
+      {|
+    { "type": "DATA",
+      "subscription_type": "QUOTES",
+      "subscription_key": "SBER@MISX",
+      "payload": "{\"quote\":[{\"symbol\":\"SBER@MISX\",\"timestamp\":\"2026-05-27T17:32:23Z\",\"bid\":{\"value\":\"322.09\"},\"ask\":{\"value\":\"322.11\"}}]}" }
+  |}
+  in
+  match Finam.Ws.event_of_json j with
+  | Quote q ->
+      Alcotest.(check (float 1e-6)) "bid" 322.09 (Decimal.to_float q.bid);
+      Alcotest.(check (float 1e-6)) "ask" 322.11 (Decimal.to_float q.ask)
+  | _ -> Alcotest.fail "expected Quote event"
+
+(** Partial QUOTES frame (delta update: only size/last, no bid/ask).
+    Finam emits these live; the decoder must skip them (-> Other), not
+    raise on the missing decimal field. *)
+let test_decode_quotes_partial_is_skipped () =
+  let j =
+    Yojson.Safe.from_string
+      {|
+    { "type": "DATA",
+      "subscription_type": "QUOTES",
+      "subscription_key": "SBER@MISX",
+      "payload": "{\"quote\":[{\"symbol\":\"SBER@MISX\",\"timestamp\":\"2026-05-27T17:32:27Z\",\"askSize\":{\"value\":\"171.0\"},\"last\":{\"value\":\"322.11\"}}]}" }
+  |}
+  in
+  match Finam.Ws.event_of_json j with
+  | Other _ -> ()
+  | Quote _ -> Alcotest.fail "a partial quote frame must not yield a Quote"
+  | _ -> Alcotest.fail "expected Other for a partial quote frame"
+
 let tests =
   [
     ("subscribe BARS envelope", `Quick, test_subscribe_bars_envelope);
@@ -323,4 +359,8 @@ let tests =
     ( "decode INSTRUMENT_TRADES data (buy/sell/unspecified)",
       `Quick,
       test_decode_public_trades );
+    ("decode QUOTES full frame", `Quick, test_decode_quotes_full);
+    ( "decode QUOTES partial frame is skipped",
+      `Quick,
+      test_decode_quotes_partial_is_skipped );
   ]

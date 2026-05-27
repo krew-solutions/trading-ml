@@ -6,15 +6,23 @@ let parse (j : Yojson.Safe.t) : t option =
   let open Yojson.Safe.Util in
   let payload = Payload.unwrap (member "payload" j) in
   match member "quote" payload with
-  | `List (q :: _) ->
-      let instrument = Instrument.of_qualified (member "symbol" q |> to_string) in
-      let bid = Dto.decimal_field "bid" q in
-      let ask = Dto.decimal_field "ask" q in
-      let ts =
-        match member "timestamp" q with
-        | `String s -> Datetime.Iso8601.parse s
-        | `Int n -> Int64.of_int n
-        | _ -> 0L
-      in
-      Some { instrument; bid; ask; ts }
+  | `List (q :: _) -> (
+      (* Finam ships partial / delta QUOTES frames: a quote object omits
+         [bid] / [ask] when only size / last / volume changed (observed
+         live 2026-05-27). Such a frame is not a usable top-of-book
+         snapshot, so we skip it ([None]) rather than raise on the
+         missing field. *)
+      match (member "bid" q, member "ask" q) with
+      | `Null, _ | _, `Null -> None
+      | _ ->
+          let instrument = Instrument.of_qualified (member "symbol" q |> to_string) in
+          let bid = Dto.decimal_field "bid" q in
+          let ask = Dto.decimal_field "ask" q in
+          let ts =
+            match member "timestamp" q with
+            | `String s -> Datetime.Iso8601.parse s
+            | `Int n -> Int64.of_int n
+            | _ -> 0L
+          in
+          Some { instrument; bid; ask; ts })
   | _ -> None

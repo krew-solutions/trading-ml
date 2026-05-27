@@ -11,13 +11,14 @@
       in spread     -> ambiguous from L1 alone
 
     compared to the venue-reported [side]. This settles the ADR 0032
-    "to watch for" caveat directly (not by adjacent-trade inference):
-    if BUY prints sit at the ask and SELL prints at the bid, [side] is
-    the aggressor and the [of_domain] mapping is correct; if reversed,
-    it is inverted and must be flipped.
+    "to watch for" caveat directly: if BUY prints sit at the ask and
+    SELL prints at the bid, [side] is the aggressor and the [of_domain]
+    mapping is correct; if reversed, it is inverted and must be flipped.
+    (Confirmed correct on SBER@MISX, 2026-05-27.)
 
-    Caveat: quote/trade interleaving on the wire is mildly racy, so the
-    verdict is statistical over many prints, not per-trade. Skipped
+    Caveat: quote/trade interleaving on the wire is mildly racy, and
+    Finam emits partial QUOTES frames (no bid/ask) which carry no L1, so
+    the verdict is statistical over many prints, not per-trade. Skipped
     silently when [FINAM_SECRET] is absent. Best run during MOEX
     continuous trading.
 
@@ -28,9 +29,8 @@
 
 let pf fmt = Printf.printf (fmt ^^ "\n%!")
 
-let now_iso () =
-  let t = Unix.gettimeofday () in
-  let tm = Unix.gmtime t in
+let now () =
+  let tm = Unix.gmtime (Unix.gettimeofday ()) in
   Printf.sprintf "%02d:%02d:%02d" tm.Unix.tm_hour tm.tm_min tm.tm_sec
 
 let side_str = function
@@ -56,55 +56,54 @@ let run ~env ~clock ~cfg ~token =
     (Yojson.Safe.to_string (Finam.Ws.Requests.Quotes.subscribe ~token [ instrument ]));
   Websocket.Client.send_text c
     (Yojson.Safe.to_string (Finam.Ws.Requests.Public_trades.subscribe ~token instrument));
-  pf "[%s] subscribed QUOTES + INSTRUMENT_TRADES SBER@MISX — draining 60s..." (now_iso ());
+  pf "[%s] subscribed QUOTES + INSTRUMENT_TRADES SBER@MISX — draining 60s..." (now ());
   let bid = ref None and ask = ref None in
   let agree = ref 0 and disagree = ref 0 and ambiguous = ref 0 and no_quote = ref 0 in
+  let classify (u : Finam.Ws.Events.Public_trades.update) =
+    let l1, verdict =
+      match (!bid, !ask) with
+      | Some b, Some a ->
+          let l1 =
+            Printf.sprintf "[bid %s / ask %s]" (Decimal.to_string b) (Decimal.to_string a)
+          in
+          let at_ask = Decimal.compare u.price a >= 0 in
+          let at_bid = Decimal.compare u.price b <= 0 in
+          let v =
+            match (u.side, at_ask, at_bid) with
+            | Some Core.Side.Buy, true, _ ->
+                incr agree;
+                "ok (BUY at ask)"
+            | Some Core.Side.Sell, _, true ->
+                incr agree;
+                "ok (SELL at bid)"
+            | Some Core.Side.Buy, false, true ->
+                incr disagree;
+                "INVERTED (BUY at bid)"
+            | Some Core.Side.Sell, true, false ->
+                incr disagree;
+                "INVERTED (SELL at ask)"
+            | _, false, false ->
+                incr ambiguous;
+                "in-spread (ambiguous)"
+            | None, _, _ -> "unspecified side"
+          in
+          (l1, v)
+      | _ ->
+          incr no_quote;
+          ("[no quote yet]", "no L1 yet")
+    in
+    pf "[%s] %-6s %s @ %s %s -> %s" (now ()) (side_str u.side)
+      (Decimal.to_string u.quantity)
+      (Decimal.to_string u.price) l1 verdict
+  in
   let handle_text s =
-    match Finam.Ws.event_of_json (Yojson.Safe.from_string s) with
-    | Finam.Ws.Quote q ->
+    match
+      try Some (Finam.Ws.event_of_json (Yojson.Safe.from_string s)) with _ -> None
+    with
+    | Some (Finam.Ws.Quote q) ->
         bid := Some q.bid;
         ask := Some q.ask
-    | Finam.Ws.Public_trades { trades; _ } ->
-        List.iter
-          (fun (u : Finam.Ws.Events.Public_trades.update) ->
-            let l1, verdict =
-              match (!bid, !ask) with
-              | Some b, Some a ->
-                  let l1 =
-                    Printf.sprintf "[bid %s / ask %s]" (Decimal.to_string b)
-                      (Decimal.to_string a)
-                  in
-                  let at_ask = Decimal.compare u.price a >= 0 in
-                  let at_bid = Decimal.compare u.price b <= 0 in
-                  let v =
-                    match (u.side, at_ask, at_bid) with
-                    | Some Core.Side.Buy, true, _ ->
-                        incr agree;
-                        "ok (BUY at ask)"
-                    | Some Core.Side.Sell, _, true ->
-                        incr agree;
-                        "ok (SELL at bid)"
-                    | Some Core.Side.Buy, false, true ->
-                        incr disagree;
-                        "INVERTED (BUY at bid)"
-                    | Some Core.Side.Sell, true, false ->
-                        incr disagree;
-                        "INVERTED (SELL at ask)"
-                    | _, false, false ->
-                        incr ambiguous;
-                        "in-spread (ambiguous)"
-                    | None, _, _ -> "unspecified side"
-                  in
-                  (l1, v)
-              | _ ->
-                  incr no_quote;
-                  ("[no quote yet]", "no L1 yet")
-            in
-            pf "[%s] %-6s %s @ %s %s -> %s" (now_iso ()) (side_str u.side)
-              (Decimal.to_string u.quantity)
-              (Decimal.to_string u.price) l1 verdict)
-          trades
-    | Finam.Ws.Other j -> pf "[%s] (unparsed) %s" (now_iso ()) (Yojson.Safe.to_string j)
+    | Some (Finam.Ws.Public_trades { trades; _ }) -> List.iter classify trades
     | _ -> ()
   in
   (match
@@ -120,7 +119,7 @@ let run ~env ~clock ~cfg ~token =
          try loop () with End_of_file -> Ok ())
    with
   | Ok () -> ()
-  | Error `Timeout -> pf "[%s] (60s window elapsed)" (now_iso ()));
+  | Error `Timeout -> pf "[%s] (60s window elapsed)" (now ()));
   pf "";
   pf
     "VERDICT among L1-classifiable prints: agree=%d  INVERTED=%d  (ambiguous=%d, \

@@ -1,0 +1,31 @@
+(library
+ (name order_flow_external_integration_events)
+ (public_name trading.order_flow.acl.external_integration_events)
+ (libraries
+  yojson
+  ppx_yojson_conv_lib
+  atdgen-runtime
+  core
+  decimal
+  datetime
+  rop
+  order_flow
+  order_flow_integration_events
+  order_flow_commands)
+ (preprocess
+  (pps ppx_yojson_conv))
+ (flags
+  (:standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives)))
+
+; The wire shape is regenerated from the producer's (broker BC) .atd
+; contract — the order_flow BC mirrors it independently (ADR 0001), no
+; code-level dependency on the broker BC.
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/trade_printed_integration_event.atd))
+ (targets trade_printed_integration_event_t.ml trade_printed_integration_event_t.mli
+          trade_printed_integration_event_j.ml trade_printed_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o trade_printed_integration_event %{atd})
+   (run atdgen -j -o trade_printed_integration_event %{atd}))))

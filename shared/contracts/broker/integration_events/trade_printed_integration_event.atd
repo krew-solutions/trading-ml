@@ -1,0 +1,27 @@
+(* Wire contract: the broker BC's outbound public-tape integration event.
+
+   One executed trade observed on the public tape (all market
+   participants), distinct from trade_executed_integration_event which
+   reports fills of THIS account's own orders (ADR 0029). Published by
+   the broker BC from its venue trade stream (Finam INSTRUMENT_TRADES /
+   BCS dataType:2 / Alor AllTrades) — see ADR 0032.
+
+   [aggressor] is the venue-reported initiator side, normalised at the
+   broker's WS boundary to BUY | SELL | UNSPECIFIED. UNSPECIFIED is for
+   auction crosses and negotiated trades that have no initiator.
+
+   ADR 0032 ("to watch for"): the BUY/SELL mapping assumes the venue's
+   side marks the AGGRESSOR (crossed the spread). That assumption rests
+   on MOEX convention and is not yet empirically confirmed; the broker
+   WS parser is the single point to flip if it proves inverted.
+
+   [symbol] is the qualified instrument (TICKER@MIC[/BOARD]); price/size
+   are Decimal strings (ADR 0007); ts is ISO-8601. *)
+
+type t = {
+  symbol : string;
+  price : string;
+  size : string;
+  ts : string;
+  aggressor : string;
+}

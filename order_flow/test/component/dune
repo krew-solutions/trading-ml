@@ -7,5 +7,6 @@
   order_flow
   order_flow_commands
   order_flow_integration_events
+  order_flow_external_integration_events
   gherkin_edsl
   alcotest))

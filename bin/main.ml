@@ -80,12 +80,16 @@ let usage () =
       show registered indicators and strategies
 
   backtest <strategy> [--n N] [--symbol SBER@MISX]
-                      [--param KEY=VALUE ...]
+                      [--param KEY=VALUE ...] [--tape FILE]
       run a backtest on synthetic data and print summary.
       --param can be repeated; keys and types come from the
       strategy's registry entry (see `trading list`). Example:
         trading backtest GBT --param model_path=/tmp/sber.txt \
                              --param enter_threshold=0.6
+      --tape FILE replays a recorded public tape (one Trade_printed
+      JSON per line) through the footprint loop instead of generating
+      synthetic candles — record one live with the finam_public_trades
+      probe's --record flag (ADR 0032).
 
 Offline data / model tooling ships as separate binaries to keep
 this runtime CLI focused on live operations:
@@ -185,7 +189,7 @@ type backtest_summary = {
     [Backtest.run] domain function exists any more; equivalence to
     live is enforced by running the live composition itself. *)
 
-let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
+let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol ?tape () :
     backtest_summary =
   let bus = Bus.create () in
   let in_memory_broker = In_memory.create ~sw in
@@ -309,9 +313,6 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
     count "in-memory://pre-trade-risk.trade-submission-blocked" (fun _ ->
         incr submissions_blocked)
   in
-  let candles_list =
-    Synthetic.Generator.generate ~n ~start_ts:0L ~tf_seconds:300 ~start_price:100.0
-  in
   let publish_bar_updated =
     Bus.publish
       (Bus.producer bus ~uri:"in-memory://broker.bar-updated" ~serialize:(fun v ->
@@ -342,31 +343,54 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol :
       Eio.Fiber.yield ()
     done
   in
-  List.iter
-    (fun candle ->
-      publish_bar_updated
-        (Broker_integration_events.Bar_updated_integration_event.of_domain
-           {
-             Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument = symbol;
-             timeframe = Timeframe.M5;
-             candle;
-           });
-      List.iter
-        (fun tr ->
-          publish_trade_printed
-            (Broker_integration_events.Trade_printed_integration_event.of_domain tr))
-        (Synthetic.Trade_generator.generate ~instrument:symbol ~candle ~tf_seconds:300
-           ~n:10);
-      drain ())
-    candles_list;
-  drain ();
+  let processed =
+    match tape with
+    | Some prints ->
+        (* Replay a recorded real tape (ADR 0032): footprints built from
+           captured microstructure, not synthetic. No bars are published,
+           so the candle strategy is idle and only the footprint engine
+           runs; the virtual clock advances to each print's own ts. *)
+        let module Tp = Broker_integration_events.Trade_printed_integration_event in
+        List.iter
+          (fun (ie : Tp.t) ->
+            Datetime.Virtual_clock.set virtual_clock (Datetime.Iso8601.parse ie.Tp.ts);
+            publish_trade_printed ie;
+            drain ())
+          prints;
+        drain ();
+        List.length prints
+    | None ->
+        let candles_list =
+          Synthetic.Generator.generate ~n ~start_ts:0L ~tf_seconds:300 ~start_price:100.0
+        in
+        List.iter
+          (fun candle ->
+            publish_bar_updated
+              (Broker_integration_events.Bar_updated_integration_event.of_domain
+                 {
+                   Broker_domain.Remote_broker.Events.Remote_bar_updated.instrument =
+                     symbol;
+                   timeframe = Timeframe.M5;
+                   candle;
+                 });
+            List.iter
+              (fun tr ->
+                publish_trade_printed
+                  (Broker_integration_events.Trade_printed_integration_event.of_domain tr))
+              (Synthetic.Trade_generator.generate ~instrument:symbol ~candle
+                 ~tf_seconds:300 ~n:10);
+            drain ())
+          candles_list;
+        drain ();
+        n
+  in
   let portfolio = account.portfolio_snapshot () in
   let paper_cash = Some portfolio.cash in
   let realized_pnl = Some portfolio.realized_pnl in
   {
     strategy_name;
     symbol;
-    candles = n;
+    candles = processed;
     signals = !signals;
     footprint_signals = !footprint_signals;
     intents_planned = !intents_planned;
@@ -490,7 +514,7 @@ let make_backtest_handler ~env : Inbound_http.Route.handler =
         let strategy = spec.build params in
         let summary =
           Eio.Switch.run @@ fun sw ->
-          run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol
+          run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol ()
         in
         Some
           (200, `Response (Inbound_http.Response.json (backtest_summary_to_json summary)))
@@ -823,6 +847,26 @@ let cmd_serve args =
   let server = Server_factory.Factory.build ~bus ~bar_subscription in
   Server_factory.Factory.serve server ~bc_handlers ~sw ~env ~port ~broker:broker.client ()
 
+(** Read a recorded tape: one [Trade_printed_integration_event] JSON per
+    line (as written by the [--record] probe). Blank and malformed lines
+    are skipped. *)
+let read_tape (path : string) :
+    Broker_integration_events.Trade_printed_integration_event.t list =
+  In_channel.with_open_text path (fun ic ->
+      let rec loop acc =
+        match In_channel.input_line ic with
+        | None -> List.rev acc
+        | Some line when String.trim line = "" -> loop acc
+        | Some line -> (
+            match
+              Broker_integration_events.Trade_printed_integration_event.t_of_yojson
+                (Yojson.Safe.from_string line)
+            with
+            | ie -> loop (ie :: acc)
+            | exception _ -> loop acc)
+      in
+      loop [])
+
 let cmd_backtest args =
   let strategy_name =
     match List.find_opt (fun s -> String.length s > 0 && s.[0] <> '-') args with
@@ -831,6 +875,9 @@ let cmd_backtest args =
         prerr_endline "backtest: missing strategy name (see `trading list`)";
         exit 2
   in
+  (* [--tape FILE] replays a recorded real tape through the footprint
+     loop instead of generating a synthetic candle series (ADR 0032). *)
+  let tape = Option.map read_tape (arg_value "--tape" args) in
   let n =
     match arg_value "--n" args with
     | Some v -> int_of_string v
@@ -853,7 +900,9 @@ let cmd_backtest args =
   Eio_main.run @@ fun env ->
   Mirage_crypto_rng_unix.use_default ();
   Eio.Switch.run @@ fun sw ->
-  let s = run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol in
+  let s =
+    run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol ?tape ()
+  in
   Printf.printf "backtest: strategy=%s symbol=%s candles=%d\n" s.strategy_name
     (Instrument.to_qualified s.symbol)
     s.candles;

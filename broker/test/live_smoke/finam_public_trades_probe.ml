@@ -48,10 +48,31 @@ let connect ~env ~sw ~cfg =
   in
   Websocket.Client.connect ~env ~sw ~uri:cfg.Finam.Config.ws_url ?authenticator ()
 
-let run ~env ~clock ~cfg ~token =
+let run ~env ~clock ~cfg ~token ~record_oc =
   Eio.Switch.run @@ fun sw ->
   let c = connect ~env ~sw ~cfg in
   let instrument = Core.Instrument.of_qualified "SBER@MISX" in
+  (* When recording, write each print as one Trade_printed integration
+     event JSON per line — the exact wire shape [backtest --tape] replays. *)
+  let record (u : Finam.Ws.Events.Public_trades.update) =
+    match record_oc with
+    | None -> ()
+    | Some oc ->
+        let dom =
+          {
+            Remote_broker.Events.Remote_public_trade_updated.instrument;
+            side = u.side;
+            quantity = u.quantity;
+            price = u.price;
+            ts = u.ts;
+          }
+        in
+        output_string oc
+          (Yojson.Safe.to_string
+             (Broker_integration_events.Trade_printed_integration_event.yojson_of_t
+                (Broker_integration_events.Trade_printed_integration_event.of_domain dom)));
+        output_char oc '\n'
+  in
   Websocket.Client.send_text c
     (Yojson.Safe.to_string (Finam.Ws.Requests.Quotes.subscribe ~token [ instrument ]));
   Websocket.Client.send_text c
@@ -103,7 +124,12 @@ let run ~env ~clock ~cfg ~token =
     | Some (Finam.Ws.Quote q) ->
         bid := Some q.bid;
         ask := Some q.ask
-    | Some (Finam.Ws.Public_trades { trades; _ }) -> List.iter classify trades
+    | Some (Finam.Ws.Public_trades { trades; _ }) ->
+        List.iter
+          (fun u ->
+            classify u;
+            record u)
+          trades
     | _ -> ()
   in
   (match
@@ -145,6 +171,16 @@ let main () =
       pf "       Best run during MOEX trading hours so the tape flows.";
       exit 0
   | Some secret ->
+      (* [--record FILE] writes the live tape as a replayable JSONL file
+         for [trading backtest --tape FILE] (ADR 0032). *)
+      let record_path =
+        let rec find = function
+          | "--record" :: v :: _ -> Some v
+          | _ :: rest -> find rest
+          | [] -> None
+        in
+        find (Array.to_list Sys.argv)
+      in
       Eio_main.run @@ fun env ->
       Mirage_crypto_rng_unix.use_default ();
       let cfg = Finam.Config.make ~secret () in
@@ -153,8 +189,11 @@ let main () =
       let token = Finam.Auth.current auth in
       let clock = Eio.Stdenv.clock env in
       pf "Finam WS endpoint: %s" (Uri.to_string cfg.ws_url);
-      (try run ~env ~clock ~cfg ~token
+      let record_oc = Option.map open_out record_path in
+      Option.iter (fun p -> pf "recording tape -> %s" p) record_path;
+      (try run ~env ~clock ~cfg ~token ~record_oc
        with e -> pf "[probe crashed] %s" (Printexc.to_string e));
+      Option.iter close_out record_oc;
       pf "DONE."
 
 let () = main ()

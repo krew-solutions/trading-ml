@@ -252,6 +252,57 @@ let test_decode_lifecycle () =
       Alcotest.(check string) "reason" "ok" reason
   | _ -> Alcotest.fail "expected Lifecycle"
 
+let test_subscribe_public_trades_envelope () =
+  let inst = mk_inst "SBER" "MISX" in
+  let j = Finam.Ws.Requests.Public_trades.subscribe ~token:"T" inst in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string) "action" "SUBSCRIBE" (member "action" j |> to_string);
+  Alcotest.(check string) "type" "INSTRUMENT_TRADES" (member "type" j |> to_string);
+  Alcotest.(check string)
+    "data.symbol" "SBER@MISX"
+    (member "data" j |> member "symbol" |> to_string)
+
+(** Sample INSTRUMENT_TRADES DATA envelope (public tape). The side
+    mapping is the load-bearing bit: SIDE_BUY/SIDE_SELL become the
+    aggressor; SIDE_UNSPECIFIED (auction / negotiated, no initiator)
+    becomes [None]. *)
+let test_decode_public_trades () =
+  let j =
+    Yojson.Safe.from_string
+      {|
+    { "type": "DATA",
+      "subscription_type": "INSTRUMENT_TRADES",
+      "subscription_key": "SBER@MISX",
+      "timestamp": 1700000000,
+      "payload": {
+        "symbol": "SBER@MISX",
+        "trades": [
+          { "trade_id": "P-1", "mpid": "MM", "side": "SIDE_BUY",
+            "size": "10", "price": "302.5",
+            "timestamp": "2026-04-16T10:00:00Z" },
+          { "trade_id": "P-2", "mpid": "MM", "side": "SIDE_SELL",
+            "size": "4", "price": "302.4",
+            "timestamp": "2026-04-16T10:00:01Z" },
+          { "trade_id": "P-3", "mpid": "MM", "side": "SIDE_UNSPECIFIED",
+            "size": "7", "price": "302.5",
+            "timestamp": "2026-04-16T10:00:02Z" }
+        ] } }
+  |}
+  in
+  match Finam.Ws.event_of_json j with
+  | Public_trades { instrument; trades } -> (
+      Alcotest.(check string) "symbol" "SBER@MISX" (Instrument.to_qualified instrument);
+      Alcotest.(check int) "three prints" 3 (List.length trades);
+      match trades with
+      | [ a; b; c ] ->
+          Alcotest.(check bool) "buy -> Some Buy" true (a.side = Some Side.Buy);
+          Alcotest.(check bool) "sell -> Some Sell" true (b.side = Some Side.Sell);
+          Alcotest.(check bool) "unspecified -> None" true (c.side = None);
+          Alcotest.(check (float 1e-6)) "price" 302.5 (Decimal.to_float a.price);
+          Alcotest.(check (float 1e-6)) "size" 10.0 (Decimal.to_float a.quantity)
+      | _ -> Alcotest.fail "expected exactly 3 prints")
+  | _ -> Alcotest.fail "expected Public_trades event"
+
 let tests =
   [
     ("subscribe BARS envelope", `Quick, test_subscribe_bars_envelope);
@@ -268,4 +319,8 @@ let tests =
     ("subscribe TRADES envelope", `Quick, test_subscribe_trades_envelope);
     ("decode TRADES data", `Quick, test_decode_trades);
     ("decode TRADES sell side", `Quick, test_decode_trades_sell_side);
+    ("subscribe INSTRUMENT_TRADES envelope", `Quick, test_subscribe_public_trades_envelope);
+    ( "decode INSTRUMENT_TRADES data (buy/sell/unspecified)",
+      `Quick,
+      test_decode_public_trades );
   ]

@@ -6,6 +6,7 @@ type event =
   | Bars of Events.Bars.t
   | Quote of Events.Quote.t
   | Trades of Events.Trade.update list
+  | Public_trades of Events.Public_trades.t
   | Error_ev of Events.Error.t
   | Lifecycle of Events.Lifecycle.t
   | Other of Yojson.Safe.t
@@ -24,6 +25,13 @@ let event_of_json (j : Yojson.Safe.t) : event =
           match Events.Trade.parse j with
           | [] -> Other j
           | xs -> Trades xs)
+      | `String "INSTRUMENT_TRADES" -> (
+          match Events.Public_trades.parse j with
+          | t -> (
+              match t.Events.Public_trades.trades with
+              | [] -> Other j
+              | _ -> Public_trades t)
+          | exception _ -> Other j)
       | _ -> Other j)
   | `String "ERROR" -> Error_ev (Events.Error.parse j)
   | `String "EVENT" -> Lifecycle (Events.Lifecycle.parse j)

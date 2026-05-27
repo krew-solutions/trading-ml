@@ -325,6 +325,9 @@ let subscribe t (request : Broker.request) : unit =
                 ~dedup_accept ~on_candle
             with e ->
               Log.warn "[bcs ws] subscribe_bars failed: %s" (Printexc.to_string e))
+  | Subscribe_public_trades _ ->
+      Log.info
+        "[bcs] public-trade (INSTRUMENT_TRADES) subscription not supported — ignored"
 
 let unsubscribe t (request : Broker.request) : unit =
   match request with
@@ -346,6 +349,7 @@ let unsubscribe t (request : Broker.request) : unit =
             try Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
             with e ->
               Log.warn "[bcs ws] unsubscribe_bars failed: %s" (Printexc.to_string e))
+  | Subscribe_public_trades _ -> ()
 
 let as_broker (t : t) : Broker.client =
   Broker.make

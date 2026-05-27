@@ -323,6 +323,9 @@ let subscribe t (request : Broker.request) : unit =
                   Acl_common.Transport_supervisor.ws_came_up sup
                 with e ->
                   Log.warn "[alor ws] subscribe_bars failed: %s" (Printexc.to_string e)))
+  | Subscribe_public_trades _ ->
+      Log.info
+        "[alor ws] public-trade (AllTrades) subscription not yet supported — ignored"
 
 let unsubscribe t (request : Broker.request) : unit =
   match request with
@@ -357,6 +360,7 @@ let unsubscribe t (request : Broker.request) : unit =
             try Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
             with e ->
               Log.warn "[alor ws] unsubscribe_bars failed: %s" (Printexc.to_string e))
+  | Subscribe_public_trades _ -> ()
 
 let as_broker (t : t) : Broker.client =
   Broker.make

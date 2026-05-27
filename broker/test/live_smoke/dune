@@ -5,7 +5,7 @@
 ; credentials are absent from the environment.
 
 (executables
- (names live_smoke_runner finam_ws_subscription_key_probe)
+ (names live_smoke_runner finam_ws_subscription_key_probe finam_public_trades_probe)
  (libraries core broker_domain decimal finam bcs alor broker http_transport
             websocket
             eio eio_main mirage-crypto-rng.unix

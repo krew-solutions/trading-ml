@@ -178,6 +178,15 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
     produce ~uri:"in-memory://broker.trade-executed"
       ~yojson_of:Broker_integration_events.Trade_executed_integration_event.yojson_of_t
   in
+  (* Outbound publisher for [broker.trade-printed] — the public tape
+     (all market participants), consumed by the order_flow BC for
+     footprint analysis (ADR 0032). Stateless: tape prints carry no
+     per-key monotonicity invariant; ordering/dedup are the
+     subscriber inbox's concern. *)
+  let publish_trade_printed =
+    produce ~uri:"in-memory://broker.trade-printed"
+      ~yojson_of:Broker_integration_events.Trade_printed_integration_event.yojson_of_t
+  in
   (* Process-correlation log: [placement_id ↦ submit/cancel
      correlation_id]. Recorded by Submit on Accepted (and, when
      wired, Cancel); future fill-from-WS events that arrive
@@ -319,6 +328,9 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
         | Trade_executed domain_ev ->
             Broker_domain_event_handlers.Publish_integration_event_on_trade_executed
             .handle ~publish_trade_executed ~origin_correlation_id domain_ev
+        | Remote_public_trade_updated ev ->
+            Broker_domain_event_handlers.Publish_integration_event_on_public_trade_updated
+            .handle ~publish_trade_printed ev
       in
       Broker.start_live_feed client ~sw ~env ~on_event);
   (* Apply the operator-declared watchlist: each entry opens an

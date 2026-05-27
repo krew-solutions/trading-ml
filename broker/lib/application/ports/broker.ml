@@ -28,6 +28,11 @@ open Core
     missing handlers. *)
 type event =
   | Remote_bar_updated of Remote_broker.Events.Remote_bar_updated.t
+  | Remote_public_trade_updated of Remote_broker.Events.Remote_public_trade_updated.t
+      (** A public-tape print recognised from the venue's all-trades
+          feed (Finam INSTRUMENT_TRADES, …). Venue data with no order
+          linkage — distinct from [Trade_executed] (this account's own
+          fills). Consumed downstream by the order_flow BC (ADR 0032). *)
   | Trade_executed of Remote_broker.Events.Trade_executed.t
       (** The domain event — the adapter, acting as the
           recognizer of external venue facts (per Vernon's
@@ -49,7 +54,11 @@ type event =
     diagnostic and ignore — symmetric to how unrecognised
     {!event} variants would surface as exhaustivity warnings on
     the consumer side. *)
-type request = Subscribe_bars of { instrument : Instrument.t; timeframe : Timeframe.t }
+type request =
+  | Subscribe_bars of { instrument : Instrument.t; timeframe : Timeframe.t }
+  | Subscribe_public_trades of { instrument : Instrument.t }
+      (** Public-tape (all-trades) subscription for an instrument.
+          Adapters that don't support it log a diagnostic and no-op. *)
 
 module type S = sig
   type t

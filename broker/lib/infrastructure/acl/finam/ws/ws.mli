@@ -39,6 +39,9 @@ type event =
   | Bars of Events.Bars.t
   | Quote of Events.Quote.t
   | Trades of Events.Trade.update list
+  | Public_trades of Events.Public_trades.t
+      (** A batch of public-tape prints (INSTRUMENT_TRADES), distinct
+          from [Trades] (own-order fills on the account channel). *)
   | Error_ev of Events.Error.t
   | Lifecycle of Events.Lifecycle.t
   | Other of Yojson.Safe.t

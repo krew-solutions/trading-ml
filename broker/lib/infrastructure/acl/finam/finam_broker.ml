@@ -290,6 +290,15 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
               | Some raw -> Acl_common.Transport_supervisor.feed_ws sup raw
               | None -> ())
             trades)
+  | Public_trades pt ->
+      (* Public tape: WS-only, no supervisor. The footprint domain is
+         fold-order-independent and cross-BC duplicate delivery is the
+         inbox's concern, so no per-instrument dedup/REST-poll is wired
+         here (unlike bars/fills). REST-poll resilience via
+         [Rest.latest_trades] is a documented follow-up. *)
+      List.iter
+        (fun ev -> dispatch t (Broker.Remote_public_trade_updated ev))
+        (Ws.Events.Public_trades.to_domain pt)
   | Error_ev e -> Log.warn "[finam ws] error %d %s: %s" e.code e.type_ e.message
   | Lifecycle ev -> Log.info "[finam ws] %s (%d) %s" ev.event ev.code ev.reason
   | Quote _ | Other _ -> ()
@@ -448,6 +457,12 @@ let subscribe t (request : Broker.request) : unit =
                   Acl_common.Transport_supervisor.ws_came_up sup
                 with e ->
                   Log.warn "[finam ws] subscribe_bars failed: %s" (Printexc.to_string e)))
+  | Subscribe_public_trades { instrument } ->
+      with_bridge t (fun bridge ->
+          try Ws_bridge.subscribe_public_trades bridge ~instrument
+          with e ->
+            Log.warn "[finam ws] subscribe_public_trades failed: %s"
+              (Printexc.to_string e))
 
 let unsubscribe t (request : Broker.request) : unit =
   match request with
@@ -482,6 +497,12 @@ let unsubscribe t (request : Broker.request) : unit =
             try Ws_bridge.unsubscribe_bars bridge ~instrument ~timeframe
             with e ->
               Log.warn "[finam ws] unsubscribe_bars failed: %s" (Printexc.to_string e))
+  | Subscribe_public_trades { instrument } ->
+      with_bridge t (fun bridge ->
+          try Ws_bridge.unsubscribe_public_trades bridge ~instrument
+          with e ->
+            Log.warn "[finam ws] unsubscribe_public_trades failed: %s"
+              (Printexc.to_string e))
 
 let as_broker (t : t) : Broker.client =
   Broker.make

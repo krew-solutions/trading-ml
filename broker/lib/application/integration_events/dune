@@ -87,3 +87,13 @@
   (progn
    (run atdgen -t -o trade_executed_integration_event %{atd})
    (run atdgen -j -o trade_executed_integration_event %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/broker/integration_events/trade_printed_integration_event.atd))
+ (targets trade_printed_integration_event_t.ml trade_printed_integration_event_t.mli
+          trade_printed_integration_event_j.ml trade_printed_integration_event_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o trade_printed_integration_event %{atd})
+   (run atdgen -j -o trade_printed_integration_event %{atd}))))

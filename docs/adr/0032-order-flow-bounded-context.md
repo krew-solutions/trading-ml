@@ -240,12 +240,18 @@ behind the polymorphic seam, so step 1 is not throwaway.
   `broker/test/live_smoke/finam_public_trades_probe`): BUY prints sit at
   the ask and SELL prints at the bid against the L1 quote, so `side` is
   the aggressor and the `Trade_printed_integration_event.of_domain`
-  mapping is correct. The BCS and Alor relays are now built; a BCS
-  validation probe (`broker/test/live_smoke/bcs_public_trades_probe`)
-  is ready to run against a live token (it also dumps the raw
-  `LastTrades` frame, whose field layout is inferred rather than
-  documented), and Alor confirmation is deferred until the account
-  opens. Until each is run, those tapes are not yet trusted for delta.
+  mapping is correct. **Validated for BCS on 2026-05-28** (live
+  SBER@TQBR, via `broker/test/live_smoke/bcs_public_trades_probe`):
+  the `LastTrades` frame matches the inferred shape exactly
+  (top-level `ticker`/`classCode`/`price`/`quantity`/`dateTime`/`side`,
+  `responseType:"LastTrades"`), and BUY prints sit at the ask while
+  SELL prints hit the bid — `side` is the aggressor and the
+  `parse_side` mapping is correct. The few apparent "inversions"
+  observed are all the same quote/trade-race L1 staleness the Finam
+  probe documents (the next quote update brings the spread to match
+  the trade price), not actual side inversion. Alor confirmation is
+  deferred until the account opens; until then its tape is not
+  trusted for delta.
 - A Time footprint's reconstructed OHLC may diverge from the venue
   candle (auction prints, venue filtering). Treated as an observability
   concern, not a correctness one — the footprint owns its own OHLC,

@@ -249,9 +249,17 @@ behind the polymorphic seam, so step 1 is not throwaway.
   `parse_side` mapping is correct. The few apparent "inversions"
   observed are all the same quote/trade-race L1 staleness the Finam
   probe documents (the next quote update brings the spread to match
-  the trade price), not actual side inversion. Alor confirmation is
-  deferred until the account opens; until then its tape is not
-  trusted for delta.
+  the trade price), not actual side inversion. **Validated for Alor on
+  2026-05-29** (live SBER@MISX, via
+  `broker/test/live_smoke/alor_public_trades_probe`): the
+  `AllTradesGetAndSubscribe` frame matches the inferred shape exactly
+  (`symbol`/`board`/`qty`/`price`/`time`/`timestamp`/`side`, lowercase
+  `side:"buy"|"sell"`), and BUY prints lift the ask while SELL prints
+  hit the bid against the `OrderBookGetAndSubscribe` L1 — `side` is the
+  aggressor and the `parse_side` mapping is correct (agree=51,
+  inverted=0; the few "ambiguous" prints are kopeck-grid in-spread
+  trades, honestly classified, not inversions). **All three venues are
+  now confirmed live**, so every supported tape is trusted for delta.
 - A Time footprint's reconstructed OHLC may diverge from the venue
   candle (auction prints, venue filtering). Treated as an observability
   concern, not a correctness one — the footprint owns its own OHLC,

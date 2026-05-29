@@ -6,7 +6,7 @@
 
 (executables
  (names live_smoke_runner finam_ws_subscription_key_probe finam_public_trades_probe
-        bcs_public_trades_probe)
+        bcs_public_trades_probe alor_public_trades_probe)
  (libraries core broker_domain broker_integration_events decimal finam bcs alor broker
             broker_persistence
             http_transport

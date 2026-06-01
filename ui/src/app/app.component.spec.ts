@@ -29,6 +29,7 @@ const footprintStub: Partial<FootprintApi> = {
 class ChartStubComponent {
   readonly candles = input<Candle[]>([]);
   readonly overlays = input<IndicatorOverlay[]>([]);
+  readonly footprints = input<unknown[]>([]);
   readonly seriesKey = input<string>('');
 }
 

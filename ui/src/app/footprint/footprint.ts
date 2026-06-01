@@ -168,3 +168,79 @@ export function cellColor(cell: ClusterCell): string {
     : '120,120,120';                // balanced / directionless
   return `rgba(${rgb},${alpha.toFixed(3)})`;
 }
+
+/** A cell placed in pixel space, ready to fill. [x],[y] is the top-left
+ *  corner; [w],[h] the size; [color] the heatmap fill. */
+export interface CellRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+}
+
+/** Chart→pixel projections the painter injects. Each returns null when
+ *  the value falls outside the visible range (lightweight-charts'
+ *  contract), in which case the cell is skipped. */
+export interface GridProjection {
+  /** Bar open time → x pixel of the bar's centre. */
+  timeToX: (ts: number) => number | null;
+  /** Price → y pixel. */
+  priceToY: (price: number) => number | null;
+  /** Pixel width of one bar (lightweight-charts' barSpacing). */
+  barWidth: number;
+}
+
+/** Map grid cells to pixel rectangles using the injected projections —
+ *  the load-bearing geometry of the cluster overlay, kept pure (no
+ *  canvas, no chart object) so it is unit-testable.
+ *
+ *  Each cell is a [barWidth]-wide column centred on its bar, one price
+ *  level tall. The level height is inferred from the nearest price gap on
+ *  the same bar (the tick grid is uneven), falling back to [defaultPriceH]
+ *  pixels for a lone level. Cells outside the visible range (null
+ *  projection) are dropped. */
+export function cellRects(
+  cells: ClusterCell[],
+  proj: GridProjection,
+  defaultPriceH = 6,
+): CellRect[] {
+  // Per-bar sorted price ladder, to size each level by its neighbour gap.
+  const pricesByTs = new Map<number, number[]>();
+  for (const c of cells) {
+    const arr = pricesByTs.get(c.ts) ?? [];
+    arr.push(c.price);
+    pricesByTs.set(c.ts, arr);
+  }
+  for (const arr of pricesByTs.values()) arr.sort((a, b) => a - b);
+
+  const rects: CellRect[] = [];
+  for (const cell of cells) {
+    const xc = proj.timeToX(cell.ts);
+    const yc = proj.priceToY(cell.price);
+    if (xc === null || yc === null) continue;
+
+    // Height: distance in pixels to the adjacent price level on this bar.
+    const ladder = pricesByTs.get(cell.ts)!;
+    const i = ladder.indexOf(cell.price);
+    const neighbour =
+      i + 1 < ladder.length ? ladder[i + 1]
+      : i - 1 >= 0 ? ladder[i - 1]
+      : null;
+    let h = defaultPriceH;
+    if (neighbour !== null) {
+      const yn = proj.priceToY(neighbour);
+      if (yn !== null) h = Math.max(1, Math.abs(yn - yc));
+    }
+
+    const w = Math.max(1, proj.barWidth);
+    rects.push({
+      x: xc - w / 2,
+      y: yc - h / 2,
+      w,
+      h,
+      color: cellColor(cell),
+    });
+  }
+  return rects;
+}

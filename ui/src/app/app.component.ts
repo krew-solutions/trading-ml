@@ -202,6 +202,7 @@ let nextSlotId = 1;
       </section>
 
       <app-chart [candles]="candles()" [overlays]="overlays()"
+                 [footprints]="footprints()"
                  [seriesKey]="seriesKey()"></app-chart>
 
       @if (result(); as r) {

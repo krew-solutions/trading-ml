@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   cvdTrue, parseDelta, parseOpenTs, parseCluster,
-  clusterCells, cellColor,
-  type FootprintBar, type FootprintCluster,
+  clusterCells, cellColor, cellRects,
+  type FootprintBar, type FootprintCluster, type GridProjection,
 } from './footprint';
 
 const bar = (ts: number, delta: number): FootprintBar =>
@@ -98,5 +98,66 @@ describe('cellColor', () => {
     expect(Number(lo)).toBeCloseTo(0.15); // floor: light cells stay visible
     expect(Number(hi)).toBeCloseTo(0.8);  // cap < 1: candles stay legible
     expect(Number(hi)).toBeGreaterThan(Number(lo));
+  });
+});
+
+describe('cellRects', () => {
+  // Linear projections: price p → y = 1000 − p (higher price = smaller y,
+  // like a screen), ts → x = ts. barWidth 10.
+  const proj: GridProjection = {
+    timeToX: (ts) => ts,
+    priceToY: (p) => 1000 - p,
+    barWidth: 10,
+  };
+
+  it('centres a barWidth-wide column on the bar and the level on its price', () => {
+    const cells = clusterCells([barWith(50, [cluster(100, 5, 1)])]);
+    const [r] = cellRects(cells, proj);
+    // x centred on ts=50, width 10 → x = 45; y centred on price 100 → y=900±h/2
+    expect(r.w).toBe(10);
+    expect(r.x).toBe(45);
+    expect(r.y + r.h / 2).toBeCloseTo(900); // centre at priceToY(100)=900
+  });
+
+  it('sizes a level height by the gap to its neighbour on the same bar', () => {
+    // two levels 100 and 105 → y 900 and 895, gap 5px
+    const cells = clusterCells([
+      barWith(50, [cluster(100, 5, 0), cluster(105, 3, 0)]),
+    ]);
+    const rects = cellRects(cells, proj);
+    expect(rects).toHaveLength(2);
+    expect(rects[0].h).toBeCloseTo(5);
+    expect(rects[1].h).toBeCloseTo(5);
+  });
+
+  it('falls back to defaultPriceH for a lone level', () => {
+    const cells = clusterCells([barWith(50, [cluster(100, 5, 0)])]);
+    const [r] = cellRects(cells, proj, 7);
+    expect(r.h).toBe(7);
+  });
+
+  it('drops cells outside the visible range (null projection)', () => {
+    const offscreen: GridProjection = {
+      timeToX: (ts) => (ts === 50 ? 100 : null),
+      priceToY: (p) => 1000 - p,
+      barWidth: 10,
+    };
+    const cells = clusterCells([
+      barWith(50, [cluster(100, 5, 0)]),  // on-screen
+      barWith(99, [cluster(100, 5, 0)]),  // timeToX → null
+    ]);
+    const rects = cellRects(cells, offscreen);
+    expect(rects).toHaveLength(1);
+    expect(rects[0].x).toBe(95); // ts=50 → x 100, minus w/2
+  });
+
+  it('tints each rect by its cell colour', () => {
+    const cells = clusterCells([
+      barWith(50, [cluster(100, 10, 0)]),  // buy-dominant → green-ish
+      barWith(51, [cluster(100, 0, 10)]),  // sell-dominant → red-ish
+    ]);
+    const rects = cellRects(cells, proj);
+    expect(rects[0].color).toContain('38,166,154');
+    expect(rects[1].color).toContain('239,83,80');
   });
 });

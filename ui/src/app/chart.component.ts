@@ -2,6 +2,7 @@ import {
   AfterViewInit, ChangeDetectionStrategy, Component, ElementRef,
   OnDestroy, effect, input, signal, viewChild,
 } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import {
   createChart, IChartApi, IPriceLine, ISeriesApi,
   LineData, CandlestickData, HistogramData,
@@ -13,6 +14,10 @@ import {
   withOpacity, PRICE_PANE,
   type IndicatorOverlay, type LineStyle,
 } from './indicators';
+import {
+  clusterCells, cellRects,
+  type FootprintBar, type GridProjection,
+} from './footprint/footprint';
 export type { IndicatorOverlay };
 
 /** Map our string identifiers to lightweight-charts' numeric enum. */
@@ -27,15 +32,36 @@ const LINE_STYLE: Record<LineStyle, LwLineStyle> = {
 @Component({
   selector: 'app-chart',
   standalone: true,
+  imports: [FormsModule],
   template: `
     <div class="chart-wrap">
       <div #host class="chart-host"></div>
+      <canvas #grid class="cluster-grid"
+              [class.hidden]="!showClusters()"></canvas>
+      <label class="cluster-toggle">
+        <input type="checkbox" [ngModel]="showClusters()"
+               (ngModelChange)="showClusters.set($event)">
+        Footprint
+      </label>
       <div class="measure-hud">{{ measureLabel() || 'Shift+click — measure' }}</div>
     </div>
   `,
   styles: [`
     .chart-wrap { position: relative; }
     .chart-host { width: 100%; height: 720px; }
+    .cluster-grid {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; z-index: 5;
+    }
+    .cluster-grid.hidden { display: none; }
+    .cluster-toggle {
+      position: absolute; top: 8px; right: 12px; z-index: 10;
+      background: rgba(18,20,26,0.9); color: #d8dae0;
+      padding: 4px 8px; border: 1px solid #3a3f4a; border-radius: 4px;
+      font: 12px/1.4 ui-monospace, monospace; cursor: pointer;
+      user-select: none;
+    }
     .measure-hud {
       position: absolute; top: 8px; left: 12px; z-index: 10;
       background: rgba(18,20,26,0.9); color: #ffcc00;
@@ -48,8 +74,13 @@ const LINE_STYLE: Record<LineStyle, LwLineStyle> = {
 })
 export class ChartComponent implements AfterViewInit, OnDestroy {
   readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
+  readonly grid = viewChild.required<ElementRef<HTMLCanvasElement>>('grid');
   readonly candles = input<Candle[]>([]);
   readonly overlays = input<IndicatorOverlay[]>([]);
+  /** Sealed footprints for the visible feed, drawn as a price×time
+   *  cluster heatmap over the price pane when [showClusters] is on. */
+  readonly footprints = input<FootprintBar[]>([]);
+  readonly showClusters = signal(false);
   /** Opaque key identifying the current data series (e.g.
    *  [symbol/timeframe/n]). When it changes the chart auto-fits;
    *  otherwise the user's pan/zoom is preserved across live
@@ -83,7 +114,18 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
       const ov = this.overlays();
       if (this.chart && this.candleSeries) this.render(cs, ov);
     });
+    // Repaint the cluster grid when its data, the candles (price scale),
+    // or the toggle change. Pan/zoom repaints come from the time-scale
+    // subscription wired in ngAfterViewInit.
+    effect(() => {
+      this.footprints();
+      this.candles();
+      this.showClusters();
+      this.paintClusters();
+    });
   }
+
+  private repaint = () => this.paintClusters();
 
   ngAfterViewInit(): void {
     this.chart = createChart(this.host().nativeElement, {
@@ -114,15 +156,62 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
       wickUpColor: '#26a69a', wickDownColor: '#ef5350',
     });
     this.chart.subscribeClick((param) => this.handleMeasureClick(param));
+    // Repaint the cluster grid on pan/zoom (visible logical range change).
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.repaint);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('resize', this.repaint);
     this.render(this.candles(), this.overlays());
+    this.paintClusters();
   }
 
   ngOnDestroy(): void {
+    this.chart?.timeScale().unsubscribeVisibleLogicalRangeChange(this.repaint);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('resize', this.repaint);
     this.chart?.remove();
+  }
+
+  /** Paint the footprint cluster heatmap onto the overlay canvas. Pure
+   *  geometry ([clusterCells] + [cellRects]) decides what to draw; this
+   *  method only sizes the canvas to the host and fills the rects. The
+   *  price→y projection comes from the candle series, time→x from the
+   *  time scale, so cells track the chart through pan/zoom. */
+  private paintClusters(): void {
+    const canvas = this.grid?.()?.nativeElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Match the canvas backing store to the host's CSS pixels (×DPR for
+    // crispness). Always clear, even when hidden / empty.
+    const hostEl = this.host().nativeElement;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = hostEl.clientWidth;
+    const cssH = hostEl.clientHeight;
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    if (!this.showClusters() || !this.chart || !this.candleSeries) return;
+    const cells = clusterCells(this.footprints());
+    if (!cells.length) return;
+
+    const ts = this.chart.timeScale();
+    const series = this.candleSeries;
+    const proj: GridProjection = {
+      timeToX: (t) => ts.timeToCoordinate(Math.floor(t) as Time),
+      priceToY: (p) => series.priceToCoordinate(p),
+      barWidth: ts.options().barSpacing,
+    };
+    for (const r of cellRects(cells, proj)) {
+      ctx.fillStyle = r.color;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
   }
 
   /** Two-click price-delta tool. Shift+click #1 sets the anchor;
@@ -268,5 +357,8 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
       console.debug(
         `[chart] render (no fit): key=${key}, len=${candles.length}`);
     }
+
+    // Candle data changed the price scale → repaint the grid to match.
+    this.paintClusters();
   }
 }

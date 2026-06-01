@@ -17,8 +17,17 @@
 
    All amounts are Decimal strings (ADR 0007); [open_ts] is ISO-8601. *)
 
-type instrument_view_model <ocaml from="Instrument_view_model" t="t"> = abstract
-type cluster_view_model <ocaml from="Cluster_view_model" t="t"> = abstract
+(* The <ts from=...> annotations are additive to <ocaml from=...>:
+   atdgen ignores <ts> (OCaml output unchanged), atdts ignores <ocaml>
+   and uses <ts> to emit a typed cross-file import for the TypeScript
+   client (ui/scripts/gen-contracts.sh) rather than degrading the nested
+   type to `any`. *)
+type instrument_view_model
+  <ocaml from="Instrument_view_model" t="t">
+  <ts from="Instrument_view_model" t="t"> = abstract
+type cluster_view_model
+  <ocaml from="Cluster_view_model" t="t">
+  <ts from="Cluster_view_model" t="t"> = abstract
 
 type t = {
   instrument : instrument_view_model;

@@ -7,7 +7,8 @@
  *    GET  /api/strategies
  *    GET  /api/exchanges
  *    GET  /api/candles?symbol=TICKER@MIC[/BOARD]&n=...&timeframe=...
- *    GET  /api/stream?symbol=TICKER@MIC[/BOARD]&timeframe=...   (SSE)
+ *    GET  /api/footprints?symbol=TICKER@MIC[/BOARD]&n=...&timeframe=...
+ *    GET  /api/stream?bars=SYM:TF,...&footprints=SYM:TOKEN,...        (SSE)
  *    POST /api/backtest   { symbol: "TICKER@MIC[/BOARD]", ... }
  *
  *  Run:  node mock-server.mjs   (or `npm run mock`)
@@ -169,6 +170,72 @@ function generateCandles({
   return out;
 }
 
+/** Split a qualified symbol TICKER@MIC[/BOARD] into the instrument view
+ *  model the footprint DTO nests. */
+function parseInstrument(symbol) {
+  const [base, board] = symbol.split('/');
+  const [ticker, venue] = base.split('@');
+  const inst = { ticker: ticker || 'SBER', venue: venue || 'MISX' };
+  if (board) inst.board = board;
+  return inst;
+}
+
+/** One synthetic footprint bar from a generated candle: spread the bar's
+ *  volume across a few price levels between low and high, split by
+ *  aggressor with a seeded bias, so the UI's cluster grid and true-CVD
+ *  line have plausible (deterministic) data without the OCaml backend.
+ *  Shape mirrors `footprint_completed_integration_event` exactly — the
+ *  UI validates it through the atdts-generated reader. */
+function footprintOfCandle(candle, instrument, timeframe, rng) {
+  const low = Number(candle.low);
+  const high = Number(candle.high);
+  const vol = Number(candle.volume);
+  const levels = 5 + Math.floor(rng() * 5);   // 5..9 price levels
+  const step = (high - low) / Math.max(1, levels - 1);
+  const clusters = [];
+  let buyTotal = 0, sellTotal = 0;
+  let poc = { price: low, total: -1 };
+  for (let i = 0; i < levels; i++) {
+    const price = round(low + i * step);
+    const levelVol = (vol / levels) * (0.5 + rng());
+    const buyFrac = 0.3 + rng() * 0.4;          // 0.3..0.7 to buyers
+    const buy = round(levelVol * buyFrac);
+    const sell = round(levelVol * (1 - buyFrac));
+    const indet = i === 0 ? round(levelVol * 0.1 * rng()) : 0; // a little auction at the low
+    buyTotal += buy; sellTotal += sell;
+    const total = buy + sell + indet;
+    if (total > poc.total) poc = { price, total };
+    clusters.push({
+      price: moneyStr(price),
+      buy_volume: moneyStr(buy),
+      sell_volume: moneyStr(sell),
+      indeterminate_volume: moneyStr(indet),
+    });
+  }
+  return {
+    instrument,
+    timeframe,
+    open_ts: new Date(candle.ts * 1000).toISOString(),
+    open_price: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume,
+    delta: moneyStr(buyTotal - sellTotal),
+    poc_price: moneyStr(poc.price),
+    clusters,
+  };
+}
+
+/** Deterministic footprint history for a feed, oldest-first — the shape
+ *  GET /api/footprints returns and the SSE footprint channel streams. */
+function generateFootprints({ symbol = 'SBER@MISX', n = 200, timeframe = 'M5' } = {}) {
+  const candles = generateCandles({ symbol, n, timeframe });
+  const instrument = parseInstrument(symbol);
+  const rng = mulberry32(hash(`fp:${symbol}:${timeframe}:${n}`));
+  return candles.map(c => footprintOfCandle(c, instrument, timeframe, rng));
+}
+
 const round = (x) => Math.round(x * 100) / 100;
 
 /** Canonical decimal string matching the OCaml `Core.Decimal.to_string`
@@ -250,15 +317,28 @@ function json(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
-/** SSE stream. Seeds with the current deterministic candles, then every
- *  `interval` seconds mutates the last bar's close/high/low with a small
- *  random walk and pushes a `bar_update`. Useful only for eyeballing
- *  real-time behaviour in the UI without running OCaml. */
+/** Parse a `SYM@MIC[/BOARD]:TOKEN` feed spec. The token (timeframe, or a
+ *  "VOL:1000" volume cap) may itself contain a colon, so split on the
+ *  FIRST one — matching the backend's bars / footprints param parsing. */
+function parseFeed(spec) {
+  const i = spec.indexOf(':');
+  if (i < 0) return null;
+  const symbol = spec.slice(0, i);
+  const token = spec.slice(i + 1);
+  return symbol && token ? { symbol, token } : null;
+}
+
+/** SSE stream mirroring the OCaml server's named channels. Subscriptions
+ *  come as `?bars=SYM:TF,...` (event: bar) and `?footprints=SYM:TOKEN,...`
+ *  (event: footprint), each framed with an explicit `event:` line so the
+ *  browser's addEventListener('bar' | 'footprint') fires — a bare `data:`
+ *  would only trigger the default message handler. Bars seed + live-mutate
+ *  the trailing candle; footprints emit one new sealed bar per tick. */
 function serveSse(req, res, url) {
-  const symbol = url.searchParams.get('symbol') || 'SBER@MISX';
-  const timeframe = url.searchParams.get('timeframe') || 'H1';
-  const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
-  const interval = Math.min(30_000, Math.max(2_000, tfSeconds * 1000 / 12));
+  const barFeeds = (url.searchParams.get('bars') || '')
+    .split(',').map(s => s.trim()).filter(Boolean).map(parseFeed).filter(Boolean);
+  const fpFeeds = (url.searchParams.get('footprints') || '')
+    .split(',').map(s => s.trim()).filter(Boolean).map(parseFeed).filter(Boolean);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -268,29 +348,54 @@ function serveSse(req, res, url) {
     ...CORS,
   });
 
-  const send = (kind, payload) => {
-    res.write(`data: ${JSON.stringify({ kind, ...payload })}\n\n`);
+  /** Named-channel SSE frame: `event: <ch>\ndata: <json>\n\n`. */
+  const send = (channel, data) => {
+    res.write(`event: ${channel}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  let candles = generateCandles({ symbol, n: 500, timeframe });
-  send('seed', { candles });
+  const timers = [];
 
-  const rngState = mulberry32(hash(`sse:${symbol}:${timeframe}`));
-  const timer = setInterval(() => {
-    const last = candles[candles.length - 1];
-    const drift = (rngState() - 0.5) * 0.6;
-    const close = Math.max(1, round(last.close + drift));
-    const high = Math.max(last.high, close);
-    const low = Math.min(last.low, close);
-    const updated = {
-      ...last, high: round(high), low: round(low), close,
-      volume: last.volume + Math.floor(rngState() * 200),
-    };
-    candles = [...candles.slice(0, -1), updated];
-    send('bar_update', { candle: updated });
-  }, interval);
+  // ── bar feeds ──────────────────────────────────────────────────────
+  for (const { symbol, token: timeframe } of barFeeds) {
+    const tfSeconds = TIMEFRAME_SECONDS[timeframe] ?? 3600;
+    const interval = Math.min(30_000, Math.max(2_000, tfSeconds * 1000 / 12));
+    let candles = generateCandles({ symbol, n: 500, timeframe });
+    send('bar', { kind: 'seed', symbol, timeframe, candles });
+    const rng = mulberry32(hash(`sse:${symbol}:${timeframe}`));
+    timers.push(setInterval(() => {
+      const last = candles[candles.length - 1];
+      const close = Math.max(1, round(Number(last.close) + (rng() - 0.5) * 0.6));
+      const candle = {
+        ...last,
+        high: moneyStr(Math.max(Number(last.high), close)),
+        low: moneyStr(Math.min(Number(last.low), close)),
+        close: moneyStr(close),
+        volume: intStr(Number(last.volume) + Math.floor(rng() * 200)),
+      };
+      candles = [...candles.slice(0, -1), candle];
+      send('bar', { kind: 'updated', symbol, timeframe, candle });
+    }, interval));
+  }
 
-  req.on('close', () => clearInterval(timer));
+  // ── footprint feeds ────────────────────────────────────────────────
+  for (const { symbol, token } of fpFeeds) {
+    const tfSeconds = TIMEFRAME_SECONDS[token] ?? 300;
+    const interval = Math.min(30_000, Math.max(2_000, tfSeconds * 1000 / 12));
+    const instrument = parseInstrument(symbol);
+    const rng = mulberry32(hash(`sse-fp:${symbol}:${token}`));
+    // Continue the series after the seeded history so live seals don't
+    // collide with what /api/footprints already returned.
+    let ts = 1_704_067_200 + 200 * tfSeconds;
+    timers.push(setInterval(() => {
+      const candles = generateCandles({ symbol, n: 1, timeframe: token });
+      const candle = { ...candles[0], ts };
+      const payload = footprintOfCandle(candle, instrument, token, rng);
+      send('footprint', { kind: 'footprint', payload });
+      ts += tfSeconds;
+    }, interval));
+  }
+
+  req.on('close', () => timers.forEach(clearInterval));
 }
 
 function readBody(req) {
@@ -391,6 +496,13 @@ const server = createServer(async (req, res) => {
       return json(res, { candles:
         generateCandles({ symbol, n, timeframe }) });
     }
+    if (req.method === 'GET' && path === '/api/footprints') {
+      const symbol = url.searchParams.get('symbol') || 'SBER@MISX';
+      const n = Number(url.searchParams.get('n') ?? 200);
+      const timeframe = url.searchParams.get('timeframe') || 'M5';
+      return json(res, { footprints:
+        generateFootprints({ symbol, n, timeframe }) });
+    }
     if (req.method === 'POST' && path === '/api/backtest') {
       const body = await readBody(req);
       return json(res, runBacktest(body));
@@ -427,6 +539,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('  GET  /api/indicators');
   console.log('  GET  /api/strategies');
   console.log('  GET  /api/candles?symbol=SBER@MISX&n=500&timeframe=H1');
-  console.log('  GET  /api/stream?symbol=SBER@MISX&timeframe=H1   (SSE)');
+  console.log('  GET  /api/footprints?symbol=SBER@MISX&n=200&timeframe=M5');
+  console.log('  GET  /api/stream?bars=SBER@MISX:H1&footprints=SBER@MISX:M5   (SSE)');
   console.log('  POST /api/backtest   { symbol: "SBER@MISX[/BOARD]", strategy, params, n }');
 });

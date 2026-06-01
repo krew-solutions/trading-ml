@@ -40,6 +40,7 @@ ui/node_modules
 ui/.angular
 ui/dist
 
+.env
 docs/_site
 docs/.soupault-cache
 config/local.config.json

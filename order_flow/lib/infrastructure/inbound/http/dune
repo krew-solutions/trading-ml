@@ -1,0 +1,13 @@
+(library
+ (name order_flow_inbound_http)
+ (public_name trading.order_flow.inbound_http)
+ (libraries
+  core
+  order_flow_integration_events
+  order_flow_view_models
+  inbound_http
+  cohttp
+  cohttp-eio
+  eio
+  yojson
+  uri))

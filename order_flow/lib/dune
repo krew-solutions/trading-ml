@@ -6,6 +6,8 @@
   bus
   core
   yojson
+  inbound_http
   order_flow
   order_flow_integration_events
-  order_flow_external_integration_events))
+  order_flow_external_integration_events
+  order_flow_inbound_http))

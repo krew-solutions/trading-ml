@@ -1,6 +1,7 @@
 (test
  (name order_flow_unit_runner)
- (libraries core decimal order_flow alcotest qcheck-core))
+ (libraries core decimal order_flow order_flow_integration_events
+            order_flow_view_models order_flow_inbound_http alcotest qcheck-core))
 
 ; Flat namespace across the domain/ subdir; filenames globally unique.
 (include_subdirs unqualified)

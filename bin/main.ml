@@ -247,8 +247,10 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol ?tape 
   in
   (* order_flow BC (ADR 0032): consumes the synthetic tape published
      below on broker.public-trade-printed and builds footprints; the strategy
-     factory's always-on footprint engine turns them into signals. *)
-  let () = Order_flow_factory.Factory.build ~bus () in
+     factory's always-on footprint engine turns them into signals.
+     Backtest needs no HTTP surface, so the BC's inbound handler is
+     discarded here. *)
+  let (_ : Order_flow_factory.Factory.t) = Order_flow_factory.Factory.build ~bus () in
   (* Outcome counters. The saga publishes its progression through
      these topics; tallying their cardinality yields the post-run
      summary that used to come from [Engine.Backtest.run]. *)
@@ -820,9 +822,10 @@ let cmd_serve args =
   let order_management = Order_management_factory.Factory.build ~bus in
   let execution_management = Execution_management_factory.Factory.build ~bus ~now in
   (* order_flow BC (ADR 0032): subscribes to broker.public-trade-printed and
-     builds footprints, publishing footprint-completed for strategy. No
-     HTTP surface yet, so it adds no bc_handler — a pure bus consumer. *)
-  let () = Order_flow_factory.Factory.build ~bus () in
+     builds footprints, publishing footprint-completed for strategy. It
+     also exposes [GET /api/footprints] (the pull side of the footprint
+     stream), so its inbound handler joins [bc_handlers]. *)
+  let order_flow = Order_flow_factory.Factory.build ~bus () in
   let bc_handlers =
     [
       account.http_handler;
@@ -832,6 +835,7 @@ let cmd_serve args =
       order_management.http_handler;
       execution_management.http_handler;
       strategy.http_handler;
+      order_flow.http_handler;
       make_backtest_handler ~env;
     ]
   in

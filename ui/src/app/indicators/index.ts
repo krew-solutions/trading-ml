@@ -34,6 +34,5 @@ export { stochastic, stochasticOverlay, type Stoch } from './stochastic';
 export { mfi, mfiOverlay } from './mfi';
 export { cmf, cmfOverlay } from './cmf';
 export { cvi, cviOverlay } from './cvi';
-export { cvd, cvdOverlay } from './cvd';
 export { volume, volumeOverlay } from './volume';
 export { volumeMa, volumeMaOverlay } from './volume_ma';

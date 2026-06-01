@@ -21,7 +21,6 @@ import { atrOverlay } from './atr';
 import { mfiOverlay } from './mfi';
 import { obvOverlay } from './obv';
 import { adOverlay } from './ad';
-import { cvdOverlay } from './cvd';
 import { cmfOverlay } from './cmf';
 import { cviOverlay } from './cvi';
 import { chaikinOscillatorOverlay } from './chaikin_oscillator';
@@ -117,7 +116,6 @@ export const overlayRegistry: Record<string, OverlayRenderer> = {
   'ATR': atrOverlay,
   'OBV': obvOverlay,
   'A/D': adOverlay,
-  'CVD': cvdOverlay,
   'CMF': cmfOverlay,
   'CVI': cviOverlay,
   'ChaikinOscillator': chaikinOscillatorOverlay,

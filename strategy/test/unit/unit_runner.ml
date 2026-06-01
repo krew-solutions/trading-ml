@@ -23,7 +23,6 @@ let () =
       ("mfi", Mfi_test.tests);
       ("cmf", Cmf_test.tests);
       ("cvi", Cvi_test.tests);
-      ("cvd", Cvd_test.tests);
       ("volume", Volume_test.tests);
       ("volume ma", Volume_ma_test.tests);
       (* Strategies *)

@@ -104,7 +104,6 @@ let specs : spec list =
       params = [ ("period", Int 10) ];
       build = (fun p -> Cvi.make ~period:(get_int p "period" 10));
     };
-    { name = "CVD"; params = []; build = (fun _ -> Cvd.make ()) };
     { name = "Volume"; params = []; build = (fun _ -> Volume.make ()) };
     {
       name = "VolumeMA";

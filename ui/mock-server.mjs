@@ -57,7 +57,6 @@ const indicatorsCatalog = [
   { name: 'MFI', params: [{ name: 'period', type: 'int', default: 14 }] },
   { name: 'CMF', params: [{ name: 'period', type: 'int', default: 20 }] },
   { name: 'CVI', params: [{ name: 'period', type: 'int', default: 10 }] },
-  { name: 'CVD', params: [] },
   { name: 'Volume',   params: [] },
   { name: 'VolumeMA', params: [{ name: 'period', type: 'int', default: 20 }] },
 ];

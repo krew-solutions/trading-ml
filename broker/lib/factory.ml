@@ -309,31 +309,32 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
     let module CL = (val command_log_module) in
     CL.origin_correlation_id command_log ~placement_id
   in
-  (* Spin up the live adapter's WS / poll machinery for Finam /
-     BCS on the host switch. Synthetic has no live feed.
+  (* Spin up the live adapter's event machinery on the host switch —
+     Finam / BCS / Alor WS+poll, and now Synthetic's clock-driven
+     generator (a live source symmetric to the real adapters through
+     this port, so [serve --broker synthetic] drives bars and the
+     footprint tape with no special casing here).
 
      [on_event] is the single seam through which all events flow
      from adapter to application. Bars route to the OHS publisher
      (the bus is the sole live-bar surface — SSE, strategy, paper,
      etc. all consume from there). [Trade_executed] events get
-     correlation-id stamping and IE construction here, then
-     publish on [broker.trade-executed]. *)
-  (match opened with
-  | Opened.Synthetic _ -> ()
-  | Opened.Finam _ | Opened.Bcs _ | Opened.Alor _ ->
-      let on_event (event : Broker.event) =
-        match event with
-        | Bar_updated ev ->
-            Broker_domain_event_handlers.Publish_integration_event_on_bar_updated.handle
-              ~publish_bar_updated ev
-        | Trade_executed domain_ev ->
-            Broker_domain_event_handlers.Publish_integration_event_on_trade_executed
-            .handle ~publish_trade_executed ~origin_correlation_id domain_ev
-        | Public_trade_printed ev ->
-            Broker_domain_event_handlers.Publish_integration_event_on_public_trade_printed
-            .handle ~publish_trade_printed ev
-      in
-      Broker.start_live_feed client ~sw ~env ~on_event);
+     correlation-id stamping and IE construction here, then publish
+     on [broker.trade-executed]; [Public_trade_printed] prints
+     publish on [broker.public-trade-printed]. *)
+  let on_event (event : Broker.event) =
+    match event with
+    | Bar_updated ev ->
+        Broker_domain_event_handlers.Publish_integration_event_on_bar_updated.handle
+          ~publish_bar_updated ev
+    | Trade_executed domain_ev ->
+        Broker_domain_event_handlers.Publish_integration_event_on_trade_executed.handle
+          ~publish_trade_executed ~origin_correlation_id domain_ev
+    | Public_trade_printed ev ->
+        Broker_domain_event_handlers.Publish_integration_event_on_public_trade_printed
+        .handle ~publish_trade_printed ev
+  in
+  Broker.start_live_feed client ~sw ~env ~on_event;
   (* Apply the operator-declared watchlist: each entry opens an
      always-on bar subscription on the upstream adapter. The
      adapter's per-key refcount means a later SSE subscriber

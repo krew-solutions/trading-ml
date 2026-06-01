@@ -42,4 +42,5 @@ ui/dist
 
 docs/_site
 docs/.soupault-cache
+config/local.config.json
 CLAUDE.md

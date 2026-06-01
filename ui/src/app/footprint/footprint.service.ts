@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import type { Timeframe } from '../api.service';
-import { type FootprintBar, parseDelta, parseOpenTs } from './footprint';
+import { type FootprintBar, parseCluster, parseDelta, parseOpenTs } from './footprint';
 import {
   readT as readFootprint,
   type T as WireFootprint,
@@ -15,6 +15,7 @@ import {
 const toBar = (w: WireFootprint): FootprintBar => ({
   ts: parseOpenTs(w.open_ts),
   delta: parseDelta(w.delta),
+  clusters: w.clusters.map(parseCluster),
 });
 
 /** A live footprint seal, with the feed key the server echoes so a

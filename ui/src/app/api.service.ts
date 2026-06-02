@@ -290,8 +290,8 @@ export class Api {
   strategies(): Observable<StrategySpec[]> {
     return this.http.get<StrategySpec[]>('/api/strategies');
   }
-  exchanges(): Observable<{ exchanges: Mic[] }> {
-    return this.http.get<{ exchanges: Mic[] }>('/api/exchanges');
+  exchanges(): Observable<{ exchanges: Mic[]; default_board?: string }> {
+    return this.http.get<{ exchanges: Mic[]; default_board?: string }>('/api/exchanges');
   }
   candles(symbol: string, n: number, timeframe: Timeframe = 'H1')
     : Observable<{ candles: Candle[] }> {

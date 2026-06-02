@@ -408,5 +408,18 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
         Log.warn "watchlist: public-trades %s failed: %s"
           (Instrument.to_qualified instrument)
           (Printexc.to_string e));
-  let http_handler = Broker_inbound_http.Http.make_handler ~broker:client in
+  (* The board this broker addresses instruments by, surfaced on
+     /api/exchanges so the UI subscribes with the board-qualified id by
+     default. BCS and Alor tag the board into the instrument identity
+     (SBER@MISX/TQBR); Finam and Synthetic do not. Read from the opened
+     adapter's config so it is not duplicated here. *)
+  let default_board : string option =
+    match opened with
+    | Opened.Bcs { rest; _ } -> Some (Bcs.Rest.cfg rest).Bcs.Config.default_class_code
+    | Opened.Alor { rest; _ } -> (Alor.Rest.cfg rest).Alor.Config.default_board
+    | Opened.Finam _ | Opened.Synthetic _ -> None
+  in
+  let http_handler =
+    Broker_inbound_http.Http.make_handler ~broker:client ~default_board
+  in
   { client; market_price; http_handler }

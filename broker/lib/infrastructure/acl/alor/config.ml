@@ -49,7 +49,11 @@ let make
     ?(oauth_base = Uri.of_string "https://oauth.alor.ru")
     ?(ws_url = Uri.of_string "wss://api.alor.ru/ws")
     ?(default_exchange = "MOEX")
-    ?default_board
+    (* TQBR — MOEX T+ equities, the retail-trading norm and the board our
+       public tape stamps onto every print (the AllTrades frame carries it).
+       Surfaced through /api/exchanges so the UI subscribes with the
+       board-qualified id by default, matching the published identity. *)
+    ?(default_board = Some "TQBR")
     ~refresh_token
     ~portfolio
     () =

@@ -363,6 +363,12 @@ export class AppComponent {
       .subscribe({
         next: r => {
           if (r.exchanges?.length) this.venues.set(r.exchanges);
+          // Canonical board for the running broker (BCS/Alor → "TQBR";
+          // Finam/synthetic → absent): pre-fill it so the symbol the UI
+          // subscribes with is board-qualified and matches the identity
+          // those brokers publish. Only when the user hasn't set one.
+          if (r.default_board && !this.board().trim())
+            this.board.set(r.default_board as Board);
         },
         error: () => { /* keep the static fallback */ },
       });

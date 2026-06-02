@@ -120,6 +120,10 @@ export interface ClusterCell {
   total: number;
   /** buy − sell (directionless excluded). */
   delta: number;
+  /** ask-aggressor (lifted-the-offer) volume at this level. */
+  buy: number;
+  /** bid-aggressor (hit-the-bid) volume at this level. */
+  sell: number;
   /** [0, 1]: total / max-total across all cells in the grid. */
   intensity: number;
 }
@@ -147,6 +151,8 @@ export function clusterCells(bars: FootprintBar[]): ClusterCell[] {
         price: c.price,
         total,
         delta: c.buy - c.sell,
+        buy: c.buy,
+        sell: c.sell,
         intensity: total / maxTotal,
       });
     }
@@ -170,13 +176,29 @@ export function cellColor(cell: ClusterCell): string {
 }
 
 /** A cell placed in pixel space, ready to fill. [x],[y] is the top-left
- *  corner; [w],[h] the size; [color] the heatmap fill. */
+ *  corner; [w],[h] the size; [color] the heatmap fill; [buy]/[sell]/[delta]
+ *  the per-level volumes the painter prints inside the cell when it is
+ *  large enough. */
 export interface CellRect {
   x: number;
   y: number;
   w: number;
   h: number;
   color: string;
+  buy: number;
+  sell: number;
+  delta: number;
+}
+
+/** Compact volume label for an in-cell footprint number: a plain integer
+ *  up to 9999, then ["12k"], then ["3.4M"]. Keeps cells legible without
+ *  the digits overflowing the column. Pure. */
+export function fmtVol(v: number): string {
+  const r = Math.round(v);
+  const a = Math.abs(r);
+  if (a >= 1_000_000) return (r / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (a >= 10_000) return Math.round(r / 1000) + 'k';
+  return String(r);
 }
 
 /** Chart→pixel projections the painter injects. Each returns null when
@@ -240,6 +262,9 @@ export function cellRects(
       w,
       h,
       color: cellColor(cell),
+      buy: cell.buy,
+      sell: cell.sell,
+      delta: cell.delta,
     });
   }
   return rects;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   cvdTrue, parseDelta, parseOpenTs, parseCluster,
-  clusterCells, cellColor, cellRects,
+  clusterCells, cellColor, cellRects, fmtVol,
   type FootprintBar, type FootprintCluster, type GridProjection,
 } from './footprint';
 
@@ -70,10 +70,12 @@ describe('clusterCells', () => {
     expect(byKey.get('2:100')!.intensity).toBe(1);           // 20/20
   });
 
-  it('carries total and signed delta per cell', () => {
+  it('carries total, signed delta and the raw buy/sell per cell', () => {
     const [c] = clusterCells([barWith(1, [cluster(100, 7, 3, 2)])]);
     expect(c.total).toBe(12);   // 7 + 3 + 2
     expect(c.delta).toBe(4);    // 7 − 3 (indeterminate excluded)
+    expect(c.buy).toBe(7);      // raw, for the in-cell labels
+    expect(c.sell).toBe(3);
   });
 
   it('drops empty levels and yields nothing for an all-empty grid', () => {
@@ -84,7 +86,10 @@ describe('clusterCells', () => {
 
 describe('cellColor', () => {
   const cell = (delta: number, intensity: number) =>
-    ({ ts: 0, price: 0, total: 1, delta, intensity });
+    ({
+      ts: 0, price: 0, total: 1, delta, intensity,
+      buy: Math.max(delta, 0), sell: Math.max(-delta, 0),
+    });
 
   it('is green-ish when buyers dominate, red-ish when sellers do', () => {
     expect(cellColor(cell(5, 0.5))).toContain('38,166,154');
@@ -159,5 +164,30 @@ describe('cellRects', () => {
     const rects = cellRects(cells, proj);
     expect(rects[0].color).toContain('38,166,154');
     expect(rects[1].color).toContain('239,83,80');
+  });
+
+  it('carries the raw buy/sell/delta so the painter can label the cell', () => {
+    const cells = clusterCells([barWith(50, [cluster(100, 12, 5, 1)])]);
+    const [r] = cellRects(cells, proj);
+    expect(r.buy).toBe(12);
+    expect(r.sell).toBe(5);
+    expect(r.delta).toBe(7);
+  });
+});
+
+describe('fmtVol', () => {
+  it('shows small volumes as plain integers (rounded)', () => {
+    expect(fmtVol(0)).toBe('0');
+    expect(fmtVol(7)).toBe('7');
+    expect(fmtVol(223.69)).toBe('224');
+    expect(fmtVol(9999)).toBe('9999');
+    expect(fmtVol(-42)).toBe('-42');
+  });
+
+  it('abbreviates thousands and millions to keep cells narrow', () => {
+    expect(fmtVol(10_000)).toBe('10k');
+    expect(fmtVol(12_345)).toBe('12k');
+    expect(fmtVol(1_500_000)).toBe('1.5M');
+    expect(fmtVol(2_000_000)).toBe('2M');
   });
 });

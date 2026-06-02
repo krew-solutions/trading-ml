@@ -15,8 +15,8 @@ import {
   type IndicatorOverlay, type LineStyle,
 } from './indicators';
 import {
-  clusterCells, cellRects,
-  type FootprintBar, type GridProjection,
+  clusterCells, cellRects, fmtVol,
+  type FootprintBar, type GridProjection, type CellRect,
 } from './footprint/footprint';
 export type { IndicatorOverlay };
 
@@ -208,9 +208,63 @@ export class ChartComponent implements AfterViewInit, OnDestroy {
       priceToY: (p) => series.priceToCoordinate(p),
       barWidth: ts.options().barSpacing,
     };
-    for (const r of cellRects(cells, proj)) {
+    const rects = cellRects(cells, proj);
+    for (const r of rects) {
       ctx.fillStyle = r.color;
       ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+    this.paintClusterLabels(ctx, rects);
+  }
+
+  /** Print the per-level volumes inside each cell, where it is large
+   *  enough to stay legible. Classic footprint layout: bid-aggressor
+   *  ([sell]) on the left of centre, ask-aggressor ([buy]) on the right.
+   *  When the column is too narrow for both, fall back to the signed
+   *  [delta] alone; when it is shorter than one line of text, draw nothing
+   *  (the heatmap colour already carries the dominance) — so numbers
+   *  appear as the user zooms in, the standard footprint behaviour.
+   *
+   *  Light text with a dark outline keeps it readable over any cell
+   *  colour. Pure geometry was decided in [cellRects]; this only renders. */
+  private paintClusterLabels(
+    ctx: CanvasRenderingContext2D,
+    rects: CellRect[],
+  ): void {
+    const minH = 11; // shorter cells: heatmap only
+    const gap = 3; // px between the two numbers / around centre
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const r of rects) {
+      if (r.h < minH) continue;
+      const fontPx = Math.min(11, Math.max(8, Math.floor(r.h * 0.72)));
+      ctx.font = `${fontPx}px ui-monospace, monospace`;
+      const cy = r.y + r.h / 2;
+      const cx = r.x + r.w / 2;
+      const sell = fmtVol(r.sell);
+      const buy = fmtVol(r.buy);
+      const bothW = ctx.measureText(sell).width + ctx.measureText(buy).width + gap * 2;
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(8,10,14,0.85)';
+      if (bothW <= r.w) {
+        // Bid volume left of centre, ask volume right of centre.
+        ctx.fillStyle = '#e6e8ec';
+        ctx.textAlign = 'right';
+        ctx.strokeText(sell, cx - gap, cy);
+        ctx.fillText(sell, cx - gap, cy);
+        ctx.textAlign = 'left';
+        ctx.strokeText(buy, cx + gap, cy);
+        ctx.fillText(buy, cx + gap, cy);
+      } else {
+        // Too narrow for both — show the signed delta, tinted by sign.
+        const d = (r.delta > 0 ? '+' : '') + fmtVol(r.delta);
+        if (ctx.measureText(d).width > r.w) continue;
+        ctx.fillStyle =
+          r.delta > 0 ? '#9be7d8' : r.delta < 0 ? '#ffb3b1' : '#d8dae0';
+        ctx.textAlign = 'center';
+        ctx.strokeText(d, cx, cy);
+        ctx.fillText(d, cx, cy);
+      }
     }
   }
 

@@ -303,6 +303,40 @@ let test_decode_public_trades () =
       | _ -> Alcotest.fail "expected exactly 3 prints")
   | _ -> Alcotest.fail "expected Public_trades event"
 
+(** REST [/trades/latest] body (the live spot-tape source). Differs from
+    the WS envelope: no [payload] wrapper, [{"value": _}]-wrapped price/size,
+    snake_case [trade_id] (Finam's monotonic sequence number) used for
+    high-water dedup. The lone [{"trade_id":"0"}] heartbeat stub carries no
+    price/size/side and must be dropped. *)
+let test_parse_rest_latest () =
+  let j =
+    Yojson.Safe.from_string
+      {|
+    { "symbol": "SBER@MISX",
+      "trades": [
+        { "trade_id": "16632678503", "mpid": "", "side": "SIDE_BUY",
+          "size": {"value": "1.0"}, "price": {"value": "324.16"},
+          "open_interest": {"value": "0"},
+          "timestamp": "2026-06-02T09:12:28.358Z" },
+        { "trade_id": "16632678504", "side": "SIDE_SELL",
+          "size": {"value": "5.0"}, "price": {"value": "324.15"},
+          "timestamp": "2026-06-02T09:12:28.359Z" },
+        { "trade_id": "0" }
+      ] }
+  |}
+  in
+  match Finam.Ws.Events.Public_trades.parse_rest_latest j with
+  | [ (id1, a); (id2, b) ] ->
+      Alcotest.(check (option int64)) "trade_id 1" (Some 16632678503L) id1;
+      Alcotest.(check (option int64)) "trade_id 2" (Some 16632678504L) id2;
+      Alcotest.(check bool) "buy -> Some Buy" true (a.side = Some Side.Buy);
+      Alcotest.(check bool) "sell -> Some Sell" true (b.side = Some Side.Sell);
+      Alcotest.(check (float 1e-6)) "price 1" 324.16 (Decimal.to_float a.price);
+      Alcotest.(check (float 1e-6)) "size 1" 1.0 (Decimal.to_float a.quantity)
+  | other ->
+      Alcotest.failf "expected exactly 2 parsed prints (stub dropped), got %d"
+        (List.length other)
+
 (** Full QUOTES frame (bid + ask present, [{"value": _}]-wrapped, with
     the payload itself a JSON-encoded string as Finam sends it live). *)
 let test_decode_quotes_full () =
@@ -359,6 +393,7 @@ let tests =
     ( "decode INSTRUMENT_TRADES data (buy/sell/unspecified)",
       `Quick,
       test_decode_public_trades );
+    ("parse REST /trades/latest (trade_id, stub dropped)", `Quick, test_parse_rest_latest);
     ("decode QUOTES full frame", `Quick, test_decode_quotes_full);
     ( "decode QUOTES partial frame is skipped",
       `Quick,

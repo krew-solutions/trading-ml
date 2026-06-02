@@ -25,3 +25,19 @@ val parse : Yojson.Safe.t -> t
 
 val to_domain : t -> Broker_domain.Remote_broker.Events.Public_trade_printed.t list
 (** Fans the batch into one {!Public_trade_printed} per print. *)
+
+val update_to_domain :
+  instrument:Instrument.t ->
+  update ->
+  Broker_domain.Remote_broker.Events.Public_trade_printed.t
+(** Lift one print to a {!Public_trade_printed} for a known instrument —
+    shared by {!to_domain} (WS tape) and the REST poller, which knows the
+    instrument from its subscription rather than the payload. *)
+
+val parse_rest_latest : Yojson.Safe.t -> (int64 option * update) list
+(** Parse a REST [/trades/latest] response body into [(trade_id, print)]
+    pairs. [trade_id] is Finam's monotonic per-instrument sequence number,
+    the REST poller's high-water dedup key ([None] when absent / non-numeric;
+    the [{"trade_id":"0"}] heartbeat stub is dropped by the shared print
+    parser before reaching here). Distinct from {!parse}, which decodes the
+    WS DATA envelope. *)

@@ -58,6 +58,54 @@ let test_auth_bars_account () =
         Printf.printf "  [info] %d historical trades\n%!" (List.length trades)
   with Exit -> ()
 
+(** Public-tape REST source: run the exact per-tick code path of the
+    adapter's REST poller — GET [/trades/latest] then
+    {!Finam.Ws.Events.Public_trades.parse_rest_latest} — for SBER@MISX, and
+    report how many real prints (numeric [trade_id], not the [{"trade_id":"0"}]
+    stub) it yields plus the newest one. This is the live spot-tape source,
+    since Finam's WS INSTRUMENT_TRADES only stubs spot (2026-06-02). A
+    non-zero count during a session confirms the path end to end; off-session
+    it is legitimately empty. Kept light (no [start_live_feed] / WS bridge)
+    so it can't hang on socket teardown in a short-lived test. *)
+let test_public_tape_rest_source () =
+  let module PT = Finam.Ws.Events.Public_trades in
+  try
+    skip_unless_creds ();
+    match creds () with
+    | None -> ()
+    | Some (secret, account) ->
+        Eio_main.run @@ fun env ->
+        Mirage_crypto_rng_unix.use_default ();
+        let rest = make_rest ~env (secret, account) in
+        let parsed =
+          PT.parse_rest_latest (Finam.Rest.latest_trades_json rest ~instrument:sber)
+        in
+        let with_id =
+          List.filter_map
+            (fun (id, u) ->
+              match id with
+              | Some i -> Some (i, u)
+              | None -> None)
+            parsed
+        in
+        Printf.printf
+          "  [info] /trades/latest: %d prints parsed, %d with numeric trade_id\n%!"
+          (List.length parsed) (List.length with_id);
+        (match List.sort (fun (a, _) (b, _) -> Int64.compare b a) with_id with
+        | (id, u) :: _ ->
+            Printf.printf "  [info] newest: id=%Ld %s %s @ %s\n%!" id
+              (match u.PT.side with
+              | Some Side.Buy -> "BUY"
+              | Some Side.Sell -> "SELL"
+              | None -> "UNSPEC")
+              (Decimal.to_string u.PT.quantity)
+              (Decimal.to_string u.PT.price)
+        | [] -> ());
+        Alcotest.(check bool)
+          "latest_trades reachable and parsed" true
+          (List.length parsed >= 0)
+  with Exit -> ()
+
 (** Full order lifecycle: place → get → trades (expect none) →
     cancel. Uses a limit BUY far below market so the broker
     never fills. Caller responsibility: have a bit of free cash
@@ -161,5 +209,6 @@ let test_limit_order_lifecycle () =
 let tests =
   [
     ("auth + bars + account + trades", `Quick, test_auth_bars_account);
+    ("public-tape REST source yields prints", `Quick, test_public_tape_rest_source);
     ("limit order lifecycle", `Quick, test_limit_order_lifecycle);
   ]

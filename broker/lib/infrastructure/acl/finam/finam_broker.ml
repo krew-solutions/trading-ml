@@ -40,6 +40,7 @@ module SubKey = struct
 end
 
 module SubMap = Map.Make (SubKey)
+module InstrMap = Map.Make (Instrument)
 
 type t = {
   rest : Rest.t;
@@ -90,6 +91,21 @@ type t = {
           under the same switch as the bridge. None until
           start_live_feed has fired; subscribe before that is
           a programmer error (the broker is not live yet). *)
+  mutable public_trade_refcount : int InstrMap.t;
+      (** Per-instrument refcount for the public-tape REST poller, so
+          concurrent footprint subscribers on one instrument share a
+          single poller. *)
+  mutable public_trade_pollers :
+    Broker_domain.Remote_broker.Events.Public_trade_printed.t
+    Acl_common.Transport_supervisor.t
+    InstrMap.t;
+      (** One REST poller ([Rest.latest_trades_json]) per subscribed
+          instrument — the active public-tape source. Finam's WS
+          INSTRUMENT_TRADES streams the derivatives market but only a
+          stub for spot (verified 2026-06-02), so the spot tape is
+          polled. The WS public-trade path ({!Ws_bridge.subscribe_public_trades},
+          the [Public_trades] branch of {!dispatch_ws_event}) is retained
+          but dormant, for when Finam restores spot streaming. *)
 }
 
 let name = "finam"
@@ -115,6 +131,8 @@ let make ~account_id (rest : Rest.t) : t =
     bar_supervisor_listeners = [];
     fill_supervisor = None;
     live_feed_ctx = None;
+    public_trade_refcount = InstrMap.empty;
+    public_trade_pollers = InstrMap.empty;
   }
 
 let bars t ~n ~instrument ~timeframe = Rest.bars t.rest ~n ~instrument ~timeframe
@@ -291,11 +309,16 @@ let dispatch_ws_event t (ev : Ws.event) : unit =
               | None -> ())
             trades)
   | Public_trades pt ->
-      (* Public tape: WS-only, no supervisor. The footprint domain is
-         fold-order-independent and cross-BC duplicate delivery is the
-         inbox's concern, so no per-instrument dedup/REST-poll is wired
-         here (unlike bars/fills). REST-poll resilience via
-         [Rest.latest_trades] is a documented follow-up. *)
+      (* Public tape. RETAINED but DORMANT: the active source is now the
+         per-instrument REST poller ([Rest.latest_trades_json], wired in
+         [subscribe]) because Finam's WS INSTRUMENT_TRADES streams the
+         derivatives market but emits only a [{"trade_id":"0"}] stub for
+         spot equities (verified 2026-06-02). We no longer issue the WS
+         INSTRUMENT_TRADES subscription, so this branch sees no frames; it
+         stays here so the WS path lights up again unchanged if Finam
+         restores spot streaming. The footprint domain is
+         fold-order-independent, so even concurrent WS + REST delivery
+         would be tolerable. *)
       List.iter
         (fun ev -> dispatch t (Broker.Public_trade_printed ev))
         (Ws.Events.Public_trades.to_domain pt)
@@ -421,6 +444,62 @@ let make_bar_supervisor t bridge ~sw ~env ~instrument ~timeframe :
   in
   (sup, listener_id)
 
+(** Per-instrument public-tape REST poller. Polls
+    [Rest.latest_trades_json] every second, dedups by Finam's monotonic
+    [trade_id] kept as a high-water mark (one sub-second [ts] can carry
+    many prints, so ts-based dedup would lose trades), and emits each new
+    print as a [Public_trade_printed] event. The first poll only
+    establishes the high-water mark — it does not replay the last 1000
+    trades into past footprint buckets; the feed wants prints from
+    subscription time onward.
+
+    Built on {!Acl_common.Transport_supervisor} for its poll-fiber and
+    teardown machinery, but run REST-only: {!Acl_common.Transport_supervisor.ws_came_up}
+    is never called, so the supervisor stays in its polling state.
+    [dedup_accept] is the identity because [poll_window] already returns
+    only fresh prints. *)
+let make_public_trade_poller t ~sw ~env ~instrument :
+    Broker_domain.Remote_broker.Events.Public_trade_printed.t
+    Acl_common.Transport_supervisor.t =
+  let module PT = Ws.Events.Public_trades in
+  let high_water = ref None in
+  let max_id ~init pairs = List.fold_left (fun m (i, _) -> Int64.max m i) init pairs in
+  let ts_now () = Int64.of_float (Unix.gettimeofday ()) in
+  let poll_window ~since_ts:_ ~to_ts:_ =
+    let ided =
+      try
+        Rest.latest_trades_json t.rest ~instrument
+        |> PT.parse_rest_latest
+        |> List.filter_map (fun (id, u) ->
+            match id with
+            | Some i -> Some (i, u)
+            | None -> None)
+      with e ->
+        Log.warn "[finam] public-tape poll %s failed: %s"
+          (Instrument.to_qualified instrument)
+          (Printexc.to_string e);
+        []
+    in
+    match !high_water with
+    | None ->
+        if ided <> [] then high_water := Some (max_id ~init:Int64.min_int ided);
+        []
+    | Some prev ->
+        let fresh = List.filter (fun (i, _) -> Int64.compare i prev > 0) ided in
+        if fresh <> [] then high_water := Some (max_id ~init:prev fresh);
+        fresh
+        |> List.sort (fun (a, _) (b, _) -> Int64.compare a b)
+        |> List.map (fun (_, u) -> PT.update_to_domain ~instrument u)
+  in
+  Acl_common.Transport_supervisor.start ~env ~sw
+    ~label:(Printf.sprintf "finam public-tape %s" (Instrument.to_qualified instrument))
+    ~poll_interval:1.0 ~ts_now ~poll_window
+    ~ts_of_event:(fun (ev : Broker_domain.Remote_broker.Events.Public_trade_printed.t) ->
+      ev.ts)
+    ~dedup_accept:(fun _ -> true)
+    ~emit:(fun ev -> dispatch t (Broker.Public_trade_printed ev))
+    ~initial_since_ts:(ts_now ())
+
 let subscribe t (request : Broker.request) : unit =
   match request with
   | Subscribe_bars { instrument; timeframe } ->
@@ -453,12 +532,33 @@ let subscribe t (request : Broker.request) : unit =
                   Acl_common.Transport_supervisor.ws_came_up sup
                 with e ->
                   Log.warn "[finam ws] subscribe_bars failed: %s" (Printexc.to_string e)))
-  | Subscribe_public_trades { instrument } ->
-      with_bridge t (fun bridge ->
-          try Ws_bridge.subscribe_public_trades bridge ~instrument
-          with e ->
-            Log.warn "[finam ws] subscribe_public_trades failed: %s"
-              (Printexc.to_string e))
+  | Subscribe_public_trades { instrument } -> (
+      (* Active source is the REST poller (Finam WS spot tape is stub-only,
+         see [public_trade_pollers]). Refcounted per instrument: only the
+         0->1 transition starts a poller; the dormant WS path
+         ([Ws_bridge.subscribe_public_trades]) is intentionally not called. *)
+      let should_start =
+        Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+            let prev =
+              Option.value ~default:0
+                (InstrMap.find_opt instrument t.public_trade_refcount)
+            in
+            t.public_trade_refcount <-
+              InstrMap.add instrument (prev + 1) t.public_trade_refcount;
+            prev = 0)
+      in
+      if should_start then
+        match t.live_feed_ctx with
+        | None ->
+            Log.warn
+              "[finam] subscribe_public_trades before start_live_feed ctx — ignored"
+        | Some (sw, env) ->
+            let sup = make_public_trade_poller t ~sw ~env ~instrument in
+            Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+                t.public_trade_pollers <-
+                  InstrMap.add instrument sup t.public_trade_pollers);
+            Log.info "[finam] public-tape REST poller started for %s"
+              (Instrument.to_qualified instrument))
 
 let unsubscribe t (request : Broker.request) : unit =
   match request with
@@ -494,11 +594,31 @@ let unsubscribe t (request : Broker.request) : unit =
             with e ->
               Log.warn "[finam ws] unsubscribe_bars failed: %s" (Printexc.to_string e))
   | Subscribe_public_trades { instrument } ->
-      with_bridge t (fun bridge ->
-          try Ws_bridge.unsubscribe_public_trades bridge ~instrument
-          with e ->
-            Log.warn "[finam ws] unsubscribe_public_trades failed: %s"
-              (Printexc.to_string e))
+      (* Mirror of [subscribe]: only the last release (1->0) stops the
+         per-instrument REST poller. *)
+      let should_stop =
+        Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+            match InstrMap.find_opt instrument t.public_trade_refcount with
+            | None | Some 0 -> false
+            | Some 1 ->
+                t.public_trade_refcount <-
+                  InstrMap.remove instrument t.public_trade_refcount;
+                true
+            | Some n ->
+                t.public_trade_refcount <-
+                  InstrMap.add instrument (n - 1) t.public_trade_refcount;
+                false)
+      in
+      if should_stop then (
+        let sup_opt =
+          Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+              let s = InstrMap.find_opt instrument t.public_trade_pollers in
+              t.public_trade_pollers <- InstrMap.remove instrument t.public_trade_pollers;
+              s)
+        in
+        Option.iter Acl_common.Transport_supervisor.stop sup_opt;
+        Log.info "[finam] public-tape REST poller stopped for %s"
+          (Instrument.to_qualified instrument))
 
 let as_broker (t : t) : Broker.client =
   Broker.make

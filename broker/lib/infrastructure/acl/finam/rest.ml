@@ -188,6 +188,20 @@ let get_trades ?from_ts ?to_ts t ~account_id : Dto.Trade.t list =
   in
   Dto.Trade.list_of_json (get_json t path q)
 
+(** GET /v1/instruments/{symbol}/trades/latest — the public trade tape
+    (Finam returns up to the last 1000 prints). Returned raw; the adapter
+    parses via {!Ws.Events.Public_trades.parse_rest_latest} and dedups by
+    the monotonic [trade_id]. This is the live public-tape source for the
+    spot market: Finam's WS INSTRUMENT_TRADES streams the derivatives
+    market but emits only a [{"trade_id":"0"}] stub for spot equities
+    (verified live 2026-06-02), while this endpoint returns the real spot
+    tape. Same [{symbol}]-in-path shape as {!bars}. *)
+let latest_trades_json t ~instrument : Yojson.Safe.t =
+  let path =
+    Printf.sprintf "/v1/instruments/%s/trades/latest" (qualify_instrument instrument)
+  in
+  get_json t path []
+
 (** DELETE /v1/accounts/{account_id}/orders/{order_id} — cancel. *)
 let cancel_order t ~account_id ~order_id : Dto.Order.t =
   let path = Printf.sprintf "/v1/accounts/%s/orders/%s" account_id order_id in

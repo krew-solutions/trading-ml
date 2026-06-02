@@ -1,8 +1,10 @@
-(** Synthetic broker adapter. Implements {!Broker.S} by generating a
-    deterministic random-walk via {!Generator}, with an intrabar
-    wobble applied to the trailing candle on each [bars] call so that
-    polling consumers (SSE stream, UI) see visible ticks without the
-    rest of the history rewriting itself.
+(** Synthetic broker adapter. Implements {!Broker.S} from a deterministic
+    price that is a pure function of the absolute bar bucket index — a
+    fractal value-noise walk (see {!price_at}) anchored to the injected
+    clock. The bar history ([bars]) and the live generator ([run_feed])
+    evaluate the same function, so the candle series and the footprint
+    tape share one timeline and join seamlessly, with no shared mutable
+    state and no jitter between re-polls.
 
     Its role is symmetric to Finam and BCS — a legitimate
     [Broker.client] the inbound layer routes to without
@@ -54,30 +56,64 @@ let name = "synthetic"
    seamlessly because both evaluate the same function. Re-polling [bars]
    is stable (same k -> same candle) — no jitter between requests. *)
 
-(* Smooth-ish random-ish walk: superposed sines of the bucket index plus
-   a hash-based jitter, centred near 100. Bounded and continuous in [k]
-   so adjacent candles connect (close[k] ≈ open[k+1]). *)
-let price_at ~tf_seconds k =
-  let kf = Int64.to_float k in
-  let scale = 1.0 +. (float_of_int tf_seconds /. 600.0) in
-  let trend = 100.0 +. (10.0 *. sin (kf /. 50.0)) +. (4.0 *. sin (kf /. 11.0)) in
-  let jitter =
-    let h = Int64.to_int (Int64.logand (Int64.mul k 2654435761L) 0xffffL) in
-    float_of_int (h - 0x8000) /. 32768.0 *. 1.5 *. scale
+(* A deterministic hash of an integer to a float in [0,1) — the source
+   of all randomness below. Pure: same input, same output. *)
+let hash01 (n : int64) : float =
+  let h = Int64.mul (Int64.logxor n 0x9E3779B97F4A7C15L) 0xBF58476D1CE4E5B9L in
+  let h =
+    Int64.mul (Int64.logxor h (Int64.shift_right_logical h 27)) 0x94D049BB133111EBL
   in
-  Float.max 1.0 (trend +. jitter)
+  let h = Int64.logxor h (Int64.shift_right_logical h 31) in
+  Int64.to_float (Int64.logand h 0xFFFFFFFFL) /. 4294967296.0
+
+(* Value noise at an integer lattice [i], smoothly interpolated between
+   lattice points by [frac] ∈ [0,1). Adjacent samples are correlated
+   (they share lattice points), which is exactly what avoids the
+   "every other candle reverts" zebra: the walk drifts, it doesn't
+   alternate. Smoothstep easing gives a natural, non-linear glide. *)
+let value_noise ~salt (x : float) : float =
+  let i = Int64.of_float (Float.floor x) in
+  let frac = x -. Float.floor x in
+  let at j = hash01 (Int64.add (Int64.mul j 2L) salt) in
+  let a = at i and b = at (Int64.add i 1L) in
+  let t = frac *. frac *. (3.0 -. (2.0 *. frac)) in
+  (* smoothstep *)
+  a +. ((b -. a) *. t)
+
+(* Price at bucket [k]: fractal (multi-octave) value noise — low octaves
+   give slow trends (so SMA crossovers actually cross), high octaves give
+   bar-to-bar detail, all CORRELATED between neighbours so the series
+   wanders like a real tape instead of alternating up/down. A pure
+   function of [k]: the bar history and the live feed evaluate the same
+   thing, so they join seamlessly and re-polls are stable. *)
+let price_at ~tf_seconds:_ k =
+  let kf = Int64.to_float k in
+  let octave ~salt ~period ~amp =
+    amp *. ((value_noise ~salt (kf /. period) *. 2.0) -. 1.0)
+  in
+  let p =
+    100.0
+    +. octave ~salt:1L ~period:160.0 ~amp:14.0 (* slow trend *)
+    +. octave ~salt:2L ~period:40.0 ~amp:5.0 (* medium swings *)
+    +. octave ~salt:3L ~period:9.0 ~amp:2.0 (* fast wiggle *)
+    +. octave ~salt:4L ~period:3.0 ~amp:0.7 (* bar detail *)
+  in
+  Float.max 1.0 p
 
 (* Candle for absolute bucket [k]: open = price_at k, close = price_at
-   (k+1) (so it joins the next bar), high/low bracket them with a small
-   deterministic wick. Volume from the same hash so it's stable. *)
+   (k+1) (so it joins the next bar). High/low extend beyond the body by a
+   deterministic wick, and the body is split by an intrabar mid so the
+   wick can poke past both ends like a real candle — keyed off [k] so it
+   stays stable across re-polls. *)
 let candle_at ~tf_seconds k : Candle.t =
   let ts = Int64.mul k (Int64.of_int tf_seconds) in
   let o = price_at ~tf_seconds k and c = price_at ~tf_seconds (Int64.add k 1L) in
-  let h64 = Int64.to_int (Int64.logand (Int64.mul k 40503L) 0xffffL) in
-  let wick = float_of_int h64 /. 65535.0 *. 0.6 in
-  let high = Float.max o c +. wick in
-  let low = Float.max 0.5 (Float.min o c -. wick) in
-  let volume = 200.0 +. (float_of_int (Int64.to_int (Int64.logand k 0x3ffL)) *. 2.0) in
+  let body = Float.abs (c -. o) in
+  let wick_up = (0.3 +. hash01 (Int64.add (Int64.mul k 7L) 11L)) *. (0.4 +. body) in
+  let wick_dn = (0.3 +. hash01 (Int64.add (Int64.mul k 7L) 23L)) *. (0.4 +. body) in
+  let high = Float.max o c +. wick_up in
+  let low = Float.max 0.5 (Float.min o c -. wick_dn) in
+  let volume = 200.0 +. (hash01 (Int64.add (Int64.mul k 13L) 5L) *. 1800.0) in
   Candle.make ~ts ~open_:(Decimal.of_float o) ~high:(Decimal.of_float high)
     ~low:(Decimal.of_float low) ~close:(Decimal.of_float c)
     ~volume:(Decimal.of_float volume)

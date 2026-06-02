@@ -34,10 +34,8 @@ let test_push_reaches_only_interested () =
   let a = Stream.connect reg in
   let b = Stream.connect reg in
   (* a wants SBER M5; b wants GAZP M5 *)
-  Stream.subscribe_footprint reg a
-    ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"M5");
-  Stream.subscribe_footprint reg b
-    ~key:(Stream.footprint_key ~symbol:"GAZP@MISX" ~token:"M5");
+  Stream.subscribe_footprint reg a ~symbol:"SBER@MISX" ~token:"M5";
+  Stream.subscribe_footprint reg b ~symbol:"GAZP@MISX" ~token:"M5";
   Stream.push_footprint reg
     ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"M5")
     (fp_payload ~symbol:"SBER@MISX" ~token:"M5");
@@ -64,10 +62,8 @@ let test_volume_token_key_isolation () =
   let reg = Stream.create () in
   let vol = Stream.connect reg in
   let m5 = Stream.connect reg in
-  Stream.subscribe_footprint reg vol
-    ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"VOL:1000");
-  Stream.subscribe_footprint reg m5
-    ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"M5");
+  Stream.subscribe_footprint reg vol ~symbol:"SBER@MISX" ~token:"VOL:1000";
+  Stream.subscribe_footprint reg m5 ~symbol:"SBER@MISX" ~token:"M5";
   Stream.push_footprint reg
     ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"VOL:1000")
     (fp_payload ~symbol:"SBER@MISX" ~token:"VOL:1000");
@@ -79,8 +75,7 @@ let test_no_subscriber_is_noop () =
   let reg = Stream.create () in
   let s = Stream.connect reg in
   (* s declares interest in a DIFFERENT key than the push *)
-  Stream.subscribe_footprint reg s
-    ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"M1");
+  Stream.subscribe_footprint reg s ~symbol:"SBER@MISX" ~token:"M1";
   Stream.push_footprint reg
     ~key:(Stream.footprint_key ~symbol:"SBER@MISX" ~token:"M5")
     (fp_payload ~symbol:"SBER@MISX" ~token:"M5");
@@ -114,8 +109,7 @@ let test_publisher_derives_key_with_board () =
   Eio_main.run @@ fun _env ->
   let reg = Stream.create () in
   let s = Stream.connect reg in
-  Stream.subscribe_footprint reg s
-    ~key:(Stream.footprint_key ~symbol:"SBER@MISX/TQBR" ~token:"M5");
+  Stream.subscribe_footprint reg s ~symbol:"SBER@MISX/TQBR" ~token:"M5";
   Server.Publish_footprint_events.handle ~registry:reg
     (board_ie ~ticker:"SBER" ~venue:"MISX" ~board:"TQBR" ~token:"M5" ());
   let chunks = drain s in
@@ -123,6 +117,41 @@ let test_publisher_derives_key_with_board () =
   Alcotest.(check bool)
     "delta carried through publisher" true
     (contains ~needle:"\"delta\":\"5\"" (List.hd chunks))
+
+(* Demand wiring: the first watcher of a footprint feed must fire
+   [on_first_footprint] (the host turns that into a Watch_footprints_command);
+   a second watcher of the SAME feed must not re-fire it; and the feed's
+   [on_last_footprint] must fire only when the LAST watcher drops it
+   (including via disconnect). This refcount is what lets the order_flow
+   default boundary stay untouched while extra UI-requested boundaries
+   come and go. *)
+let test_lifecycle_hooks_refcount_per_feed () =
+  Eio_main.run @@ fun _env ->
+  let watched = ref [] and unwatched = ref [] in
+  let reg =
+    Stream.create
+      ~on_first_footprint:(fun ~symbol ~boundary ->
+        watched := (symbol, boundary) :: !watched)
+      ~on_last_footprint:(fun ~symbol ~boundary ->
+        unwatched := (symbol, boundary) :: !unwatched)
+      ()
+  in
+  let a = Stream.connect reg in
+  let b = Stream.connect reg in
+  Stream.subscribe_footprint reg a ~symbol:"SBER@MISX" ~token:"M1";
+  Stream.subscribe_footprint reg b ~symbol:"SBER@MISX" ~token:"M1";
+  Alcotest.(check (list (pair string string)))
+    "on_first fired exactly once for the feed"
+    [ ("SBER@MISX", "M1") ]
+    !watched;
+  Stream.unsubscribe_footprint reg a ~symbol:"SBER@MISX" ~token:"M1";
+  Alcotest.(check int)
+    "no on_last while another watcher holds it" 0 (List.length !unwatched);
+  Stream.disconnect reg b;
+  Alcotest.(check (list (pair string string)))
+    "on_last fired once when the last watcher dropped"
+    [ ("SBER@MISX", "M1") ]
+    !unwatched
 
 let tests =
   [
@@ -132,4 +161,7 @@ let tests =
     ( "publisher derives feed key (with board)",
       `Quick,
       test_publisher_derives_key_with_board );
+    ( "footprint lifecycle hooks refcount per feed",
+      `Quick,
+      test_lifecycle_hooks_refcount_per_feed );
   ]

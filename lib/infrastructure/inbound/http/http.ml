@@ -76,11 +76,11 @@ let parse_bars_param s =
               try Some (Instrument.of_qualified sym, Timeframe.of_string tf)
               with _ -> None))
 
-(** Parse [?footprints=SYMBOL@MIC[/BOARD]:TOKEN,...] into footprint feed
-    keys. The boundary [TOKEN] can itself contain a colon ("VOL:1000"),
-    so unlike the bars param this splits on the FIRST colon: the symbol
-    never contains one, the token may. Empty entries skipped; the key is
-    canonicalised through {!Stream.footprint_key}. *)
+(** Parse [?footprints=SYMBOL@MIC[/BOARD]:TOKEN,...] into [(symbol, token)]
+    footprint feeds. The boundary [TOKEN] can itself contain a colon
+    ("VOL:1000"), so unlike the bars param this splits on the FIRST colon:
+    the symbol never contains one, the token may. Empty entries skipped.
+    The registry joins the pair into its canonical feed key. *)
 let parse_footprints_param s =
   if s = "" then []
   else
@@ -92,14 +92,13 @@ let parse_footprints_param s =
         | Some i ->
             let symbol = String.sub raw 0 i in
             let token = String.sub raw (i + 1) (String.length raw - i - 1) in
-            if symbol = "" || token = "" then None
-            else Some (Stream.footprint_key ~symbol ~token))
+            if symbol = "" || token = "" then None else Some (symbol, token))
 
 (** SSE handler returned in [`Expert] mode. Writes pre-formatted chunks
     directly to the buffered output with an explicit flush after each
     one — cohttp-eio's default [Response] path batches the body into a
     single response, which would never push live events. *)
-let sse_expert (registry : Stream.t) ~bar_keys ~footprint_keys =
+let sse_expert (registry : Stream.t) ~bar_keys ~footprint_feeds =
   let subscriber = Stream.connect registry in
   let seeds =
     List.map
@@ -109,10 +108,12 @@ let sse_expert (registry : Stream.t) ~bar_keys ~footprint_keys =
       bar_keys
   in
   (* Footprint feeds carry no seed — the chart pulls /api/footprints
-     first; here we only register interest so live seals fan out. *)
+     first; here we only register interest (which, on the first watcher
+     of a feed, asks order_flow to start building that boundary) so live
+     seals fan out. *)
   List.iter
-    (fun key -> Stream.subscribe_footprint registry subscriber ~key)
-    footprint_keys;
+    (fun (symbol, token) -> Stream.subscribe_footprint registry subscriber ~symbol ~token)
+    footprint_feeds;
   Log.info "SSE open id=%d bars=[%s]" subscriber.id
     (String.concat ","
        (List.map
@@ -199,8 +200,8 @@ let route ~broker ~bc_handlers ~registry request body :
                  (Api.candles_json (fetch_candles broker ~instrument ~n ~timeframe)))
         | `GET, "/api/stream" ->
             let bar_keys = parse_bars_param (get_query uri "bars") in
-            let footprint_keys = parse_footprints_param (get_query uri "footprints") in
-            (200, `Expert (sse_expert registry ~bar_keys ~footprint_keys))
+            let footprint_feeds = parse_footprints_param (get_query uri "footprints") in
+            (200, `Expert (sse_expert registry ~bar_keys ~footprint_feeds))
         | `GET, "/" | `GET, "/health" ->
             ok (string_response ("ok (" ^ Broker.name broker ^ ")"))
         | _ -> (404, `Response (string_response ~status:`Not_found "not found")))

@@ -78,9 +78,10 @@ module SSet = Set.Make (String)
     rather than [(Instrument.t * Timeframe.t)]: the boundary token can be
     a timeframe ("M5") or a volume cap ("VOL:1000"), which a [Timeframe.t]
     cannot hold. The footprint channel needs no registry-side feed state
-    (no cache, no seed — clients pull [/api/footprints] first; no
-    lifecycle hooks — order_flow builds footprints unconditionally from
-    the tape), so a per-subscriber interest set is all it carries. *)
+    (no cache, no seed — clients pull [/api/footprints] first), so a
+    per-subscriber interest set, plus the per-key 0->1 / 1->0 transitions
+    that drive [on_first_footprint] / [on_last_footprint], is all it
+    carries. *)
 
 type subscriber = {
   id : int;
@@ -98,9 +99,18 @@ type feed = {
 
 type lifecycle_hook = instrument:Instrument.t -> timeframe:Timeframe.t -> unit
 
+type footprint_lifecycle_hook = symbol:string -> boundary:string -> unit
+(** Footprint feeds are keyed by [(symbol, boundary-token)] strings, not
+    [(Instrument.t, Timeframe.t)] — the boundary may be a volume cap
+    ([VOL:1000]) a [Timeframe.t] cannot hold — so their lifecycle hooks
+    carry the raw strings. The caller forwards them into a
+    {!Watch_footprints_command} whose fields are likewise strings. *)
+
 type t = {
   on_first : lifecycle_hook;
   on_last : lifecycle_hook;
+  on_first_footprint : footprint_lifecycle_hook;
+  on_last_footprint : footprint_lifecycle_hook;
   mutable feeds : feed KMap.t;
   mutable subscribers : subscriber list;
   mutex : Eio.Mutex.t;
@@ -187,14 +197,27 @@ let push_bar t ~instrument ~timeframe (candle : Candle.t) =
     when the last interested subscriber drops the key, symmetric
     for {!Unwatch_bars_command}. The composition-root watchlist
     issues the same commands for keys it cares about; they coexist
-    via the broker adapter's per-key refcount. *)
+    via the broker adapter's per-key refcount.
+
+    [on_first_footprint] / [on_last_footprint] are the footprint
+    counterparts: they fire on the 0->1 / 1->0 transitions of interest
+    in a [(symbol, boundary-token)] feed so the caller can publish the
+    matching {!Watch_footprints_command} / {!Unwatch_footprints_command}
+    to the order_flow BC, which starts / stops fanning the tape into that
+    boundary. The operator's default boundary is always built regardless,
+    so dropping the last footprint watcher never blinds headless consumers
+    (e.g. the strategy BC). *)
 let create
     ?(on_first_subscriber : lifecycle_hook = fun ~instrument:_ ~timeframe:_ -> ())
     ?(on_last_unsubscriber : lifecycle_hook = fun ~instrument:_ ~timeframe:_ -> ())
+    ?(on_first_footprint : footprint_lifecycle_hook = fun ~symbol:_ ~boundary:_ -> ())
+    ?(on_last_footprint : footprint_lifecycle_hook = fun ~symbol:_ ~boundary:_ -> ())
     () =
   {
     on_first = on_first_subscriber;
     on_last = on_last_unsubscriber;
+    on_first_footprint;
+    on_last_footprint;
     feeds = KMap.empty;
     subscribers = [];
     mutex = Eio.Mutex.create ();
@@ -271,19 +294,62 @@ let unsubscribe_bar t (subscriber : subscriber) ~instrument ~timeframe =
     try t.on_last ~instrument ~timeframe
     with e -> Log.warn "stream on_last_unsubscriber failed: %s" (Printexc.to_string e)
 
+(** The single definition of how a footprint feed key is spelled, so the
+    subscribe side (the [?footprints=] query parser) and the push side
+    (the bus consumer decoding a footprint integration event) cannot
+    drift apart. [symbol] is the qualified instrument; [token] is the
+    boundary token ("M5", "VOL:1000"). *)
+let footprint_key ~symbol ~token = symbol ^ "|" ^ token
+
+(** Inverse of {!footprint_key}: split a stored key back into its
+    [(symbol, token)] on the first ['|']. Total over keys produced by
+    {!footprint_key} — a qualified symbol contains no ['|'] and a
+    boundary token contains no ['|'], so the first separator is the only
+    one. Used to recover the arguments for the lifecycle hook from a key
+    held in a subscriber's set (e.g. at [disconnect]). *)
+let split_footprint_key key =
+  match String.index_opt key '|' with
+  | None -> None
+  | Some i -> Some (String.sub key 0 i, String.sub key (i + 1) (String.length key - i - 1))
+
+(** Drop [key] from [subscriber]'s [footprint_keys]; return [true] iff no
+    other subscriber still holds it (the 1->0 transition). Caller holds
+    [t.mutex] and must ensure [SSet.mem key subscriber.footprint_keys]. *)
+let drop_footprint_key_locked t (subscriber : subscriber) key =
+  subscriber.footprint_keys <- SSet.remove key subscriber.footprint_keys;
+  not
+    (List.exists
+       (fun s -> s.id <> subscriber.id && SSet.mem key s.footprint_keys)
+       t.subscribers)
+
 let disconnect t (subscriber : subscriber) =
-  let lasts =
+  let bar_lasts, footprint_lasts =
     Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-        let keys = KSet.elements subscriber.bar_keys in
-        let lasts = List.filter (fun k -> drop_bar_key_locked t subscriber k) keys in
+        let bar_keys = KSet.elements subscriber.bar_keys in
+        let bar_lasts =
+          List.filter (fun k -> drop_bar_key_locked t subscriber k) bar_keys
+        in
+        let footprint_keys = SSet.elements subscriber.footprint_keys in
+        let footprint_lasts =
+          List.filter (fun k -> drop_footprint_key_locked t subscriber k) footprint_keys
+        in
         t.subscribers <- List.filter (fun s -> s.id <> subscriber.id) t.subscribers;
-        lasts)
+        (bar_lasts, footprint_lasts))
   in
   List.iter
     (fun (instrument, timeframe) ->
       try t.on_last ~instrument ~timeframe
       with e -> Log.warn "stream on_last_unsubscriber failed: %s" (Printexc.to_string e))
-    lasts
+    bar_lasts;
+  List.iter
+    (fun key ->
+      match split_footprint_key key with
+      | Some (symbol, boundary) -> (
+          try t.on_last_footprint ~symbol ~boundary
+          with e ->
+            Log.warn "stream on_last_footprint failed: %s" (Printexc.to_string e))
+      | None -> ())
+    footprint_lasts
 
 (** Broadcast publish for the [order] SSE channel.
 
@@ -304,22 +370,47 @@ let publish_order t (data : Yojson.Safe.t) : unit =
   let subscribers = Eio.Mutex.use_rw ~protect:true t.mutex (fun () -> t.subscribers) in
   List.iter (fun s -> Eio.Stream.add s.queue chunk) subscribers
 
-(** The single definition of how a footprint feed key is spelled, so the
-    subscribe side (the [?footprints=] query parser) and the push side
-    (the bus consumer decoding a footprint integration event) cannot
-    drift apart. [symbol] is the qualified instrument; [token] is the
-    boundary token from the event's [timeframe] field ("M5", "VOL:1000"). *)
-let footprint_key ~symbol ~token = symbol ^ "|" ^ token
+(** Declare interest in a footprint feed for [(symbol, token)] (the
+    qualified symbol and the boundary token, e.g. ["M5"], ["VOL:1000"]).
+    Unlike bars there is no seed — the chart pulls recent footprints
+    through [/api/footprints] before opening the stream. On the 0->1
+    transition (no subscriber held this feed before) [on_first_footprint]
+    fires so the caller can publish a {!Watch_footprints_command}; the
+    order_flow BC then starts fanning the tape into that boundary on top
+    of the always-on default. *)
+let subscribe_footprint t (subscriber : subscriber) ~symbol ~token : unit =
+  let key = footprint_key ~symbol ~token in
+  let first =
+    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+        if SSet.mem key subscriber.footprint_keys then false
+        else begin
+          let already_owned =
+            List.exists (fun s -> SSet.mem key s.footprint_keys) t.subscribers
+          in
+          subscriber.footprint_keys <- SSet.add key subscriber.footprint_keys;
+          not already_owned
+        end)
+  in
+  if first then
+    try t.on_first_footprint ~symbol ~boundary:token
+    with e -> Log.warn "stream on_first_footprint failed: %s" (Printexc.to_string e)
 
-(** Declare interest in a footprint feed keyed by [symbol|boundary-token]
-    (the qualified symbol and the token the integration event carries in
-    its [timeframe] field). Unlike bars there is no seed: the chart pulls
-    recent footprints through [/api/footprints] before opening the
-    stream, and no upstream watch command is needed since order_flow
-    builds footprints unconditionally. *)
-let subscribe_footprint t (subscriber : subscriber) ~key : unit =
-  Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
-      subscriber.footprint_keys <- SSet.add key subscriber.footprint_keys)
+(** Release [subscriber]'s interest in the [(symbol, token)] footprint
+    feed; on the 1->0 transition (no other subscriber holds it)
+    [on_last_footprint] fires so the caller can publish an
+    {!Unwatch_footprints_command}. Symmetric to {!subscribe_footprint};
+    [disconnect] releases any feeds still held. *)
+let unsubscribe_footprint t (subscriber : subscriber) ~symbol ~token : unit =
+  let key = footprint_key ~symbol ~token in
+  let was_last =
+    Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
+        if SSet.mem key subscriber.footprint_keys then
+          drop_footprint_key_locked t subscriber key
+        else false)
+  in
+  if was_last then
+    try t.on_last_footprint ~symbol ~boundary:token
+    with e -> Log.warn "stream on_last_footprint failed: %s" (Printexc.to_string e)
 
 (** Fan one sealed-footprint payload out to subscribers that declared
     interest in its [key]. [data] is the already-decoded footprint DTO;

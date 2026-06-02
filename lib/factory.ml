@@ -30,13 +30,19 @@ module Order_unreachable_ie =
 module Footprint_completed_ie =
   Order_flow_integration_events.Footprint_completed_integration_event
 module Bar_subscription = Server_application_ports.Bar_subscription
+module Footprint_subscription = Server_application_ports.Footprint_subscription
 
 type t = { registry : Stream.t }
 
-let build ~bus ~(bar_subscription : Bar_subscription.t) : t =
+let build
+    ~bus
+    ~(bar_subscription : Bar_subscription.t)
+    ~(footprint_subscription : Footprint_subscription.t) : t =
   let registry =
     Stream.create ~on_first_subscriber:bar_subscription.watch
-      ~on_last_unsubscriber:bar_subscription.unwatch ()
+      ~on_last_unsubscriber:bar_subscription.unwatch
+      ~on_first_footprint:footprint_subscription.watch
+      ~on_last_footprint:footprint_subscription.unwatch ()
   in
   let consumer (type a) ~uri ~group ~(t_of_yojson : Yojson.Safe.t -> a) : a Bus.consumer =
     Bus.consumer bus ~uri ~group ~deserialize:(fun s ->

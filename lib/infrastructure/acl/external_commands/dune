@@ -35,3 +35,26 @@
   (progn
    (run atdgen -t -o unwatch_bars_command %{atd})
    (run atdgen -j -o unwatch_bars_command %{atd}))))
+
+; order_flow footprint-subscription commands — same source of truth as
+; the order_flow BC's inbound deserializer (ADR 0032), mirrored here.
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/commands/watch_footprints_command.atd))
+ (targets watch_footprints_command_t.ml watch_footprints_command_t.mli
+          watch_footprints_command_j.ml watch_footprints_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o watch_footprints_command %{atd})
+   (run atdgen -j -o watch_footprints_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/commands/unwatch_footprints_command.atd))
+ (targets unwatch_footprints_command_t.ml unwatch_footprints_command_t.mli
+          unwatch_footprints_command_j.ml unwatch_footprints_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o unwatch_footprints_command %{atd})
+   (run atdgen -j -o unwatch_footprints_command %{atd}))))

@@ -864,7 +864,19 @@ let cmd_serve args =
       unwatch = Server_external_commands.Unwatch_bars_command_sender.make ~bus;
     }
   in
-  let server = Server_factory.Factory.build ~bus ~bar_subscription in
+  (* Footprint-subscription port: an SSE client subscribing to a footprint
+     feed publishes [Watch_footprints_command] on the bus; the order_flow
+     BC starts fanning the tape into that boundary on top of its always-on
+     default, so a UI can pick a footprint timeframe of its own (ADR 0032). *)
+  let footprint_subscription : Server_application_ports.Footprint_subscription.t =
+    {
+      watch = Server_external_commands.Watch_footprints_command_sender.make ~bus;
+      unwatch = Server_external_commands.Unwatch_footprints_command_sender.make ~bus;
+    }
+  in
+  let server =
+    Server_factory.Factory.build ~bus ~bar_subscription ~footprint_subscription
+  in
   Server_factory.Factory.serve server ~bc_handlers ~sw ~env ~port ~broker:broker.client ()
 
 (** Read a recorded tape: one [Public_trade_printed_integration_event] JSON per

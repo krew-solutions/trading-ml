@@ -144,13 +144,25 @@ buy/sell would corrupt POC and delta.
 > boundary, in the ACL. The boundary's wire spelling is centralised in
 > `Bar_boundary.to_token` / `of_token` (`"M5"`, `"VOL:1000"`), the one
 > token shared by the command and the `Footprint_completed` integration
-> event so demand and published fact name a boundary identically. Two
-> pieces remain follow-ups: the public tape is still started by the
-> operator watchlist (a UI watching an instrument outside it gets no
-> prints until broker grows a `Watch_public_trades_command`), and the SSE
-> footprint channel does not yet emit these commands on first/last
-> subscriber — so today the default boundary is always on and the command
-> is exercised by callers, not yet by the chart.
+> event so demand and published fact name a boundary identically.
+
+> **Update (2026-06-02, cont.): the SSE footprint channel now drives the
+> demand.** The host's SSE registry gained per-`(symbol, boundary-token)`
+> footprint lifecycle hooks mirroring its bar hooks: the first subscriber
+> to a footprint feed fires `on_first_footprint` and the last to drop it
+> (including on disconnect) fires `on_last_footprint`, refcounted so
+> intermediate joins/leaves are silent. A `Footprint_subscription` port
+> (string-typed — the boundary token may be a volume cap no `Timeframe.t`
+> holds) is wired to a `Watch_footprints_command_sender` /
+> `Unwatch_footprints_command_sender` (the order_flow contract mirrored on
+> the host side, same as the bar senders), so a chart opening
+> `/api/stream?footprints=SBER@MISX:M1` makes the host publish
+> `Watch_footprints_command` and order_flow starts building M1 on top of
+> the always-on default. The default stays on by design: dropping the last
+> footprint watcher must not blind headless consumers (the strategy BC).
+> One follow-up remains: the public tape is still started by the operator
+> watchlist, so a UI watching an instrument outside it gets no prints until
+> broker grows a `Watch_public_trades_command`.
 
 `Bar_boundary` is a variant; only `Time of Core.Timeframe.t` is
 implemented now. `Volume` / `Tick` boundaries are the planned additions

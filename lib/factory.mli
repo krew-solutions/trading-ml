@@ -20,7 +20,10 @@
 type t
 
 val build :
-  bus:Bus.bus -> bar_subscription:Server_application_ports.Bar_subscription.t -> t
+  bus:Bus.bus ->
+  bar_subscription:Server_application_ports.Bar_subscription.t ->
+  footprint_subscription:Server_application_ports.Footprint_subscription.t ->
+  t
 
 val serve :
   t ->

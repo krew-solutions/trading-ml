@@ -125,6 +125,33 @@ buy/sell would corrupt POC and delta.
 > per-bucket conservation obligation for the signed split) remains the
 > documented follow-up. `Tick` is still pending.
 
+> **Update (2026-06-02): the boundary is demand-selectable, not fixed at
+> composition time.** The original framing held one boundary constant per
+> BC instance (the operator's configured timeframe). That made the
+> footprint timeframe an operator decision a UI could not override: a
+> client wanting M1 footprints while the watchlist ran M5 got nothing.
+> We now mirror broker's bar-subscription port. A
+> `Watch_footprints_command` / `Unwatch_footprints_command` (the footprint
+> analogue of `Watch_bars_command`, primitives-only, ATD-backed,
+> fire-and-forget) lets any caller — a UI, a strategy — declare interest
+> in footprints for an `(instrument, boundary)`, refcounted so concurrent
+> watchers share one forming bar and a boundary stops aggregating only on
+> the last release. The forming-bar store is keyed by
+> `(instrument, boundary)`, and one relayed print fans into the operator's
+> default boundary (always on, so headless behaviour is preserved) plus
+> every watched boundary, each an independent aggregate on its own clock —
+> the single-boundary ingest workflow is reused unchanged, once per
+> boundary, in the ACL. The boundary's wire spelling is centralised in
+> `Bar_boundary.to_token` / `of_token` (`"M5"`, `"VOL:1000"`), the one
+> token shared by the command and the `Footprint_completed` integration
+> event so demand and published fact name a boundary identically. Two
+> pieces remain follow-ups: the public tape is still started by the
+> operator watchlist (a UI watching an instrument outside it gets no
+> prints until broker grows a `Watch_public_trades_command`), and the SSE
+> footprint channel does not yet emit these commands on first/last
+> subscriber — so today the default boundary is always on and the command
+> is exercised by callers, not yet by the chart.
+
 `Bar_boundary` is a variant; only `Time of Core.Timeframe.t` is
 implemented now. `Volume` / `Tick` boundaries are the planned additions
 and drop in as new cases, not a rewrite — the seam lives in the type,

@@ -5,4 +5,5 @@ let () =
     [
       ("footprint", Footprint_test.tests);
       ("footprint_history", Footprint_history_test.tests);
+      ("bar_boundary token codec", Bar_boundary_token_test.tests);
     ]

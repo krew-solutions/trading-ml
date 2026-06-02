@@ -12,7 +12,8 @@
   order_flow_view_models
   order_flow_integration_events
   order_flow_domain_event_handlers
-  rop)
+  rop
+  log)
  (preprocess
   (pps ppx_yojson_conv))
  (flags
@@ -27,3 +28,23 @@
   (progn
    (run atdgen -t -o ingest_print_command %{atd})
    (run atdgen -j -o ingest_print_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/commands/watch_footprints_command.atd))
+ (targets watch_footprints_command_t.ml watch_footprints_command_t.mli
+          watch_footprints_command_j.ml watch_footprints_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o watch_footprints_command %{atd})
+   (run atdgen -j -o watch_footprints_command %{atd}))))
+
+(rule
+ (deps
+  (:atd %{project_root}/shared/contracts/order_flow/commands/unwatch_footprints_command.atd))
+ (targets unwatch_footprints_command_t.ml unwatch_footprints_command_t.mli
+          unwatch_footprints_command_j.ml unwatch_footprints_command_j.mli)
+ (action
+  (progn
+   (run atdgen -t -o unwatch_footprints_command %{atd})
+   (run atdgen -j -o unwatch_footprints_command %{atd}))))

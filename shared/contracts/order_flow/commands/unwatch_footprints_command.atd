@@ -1,0 +1,17 @@
+(* Wire contract: order_flow/lib/application/commands/unwatch_footprints_command.ml
+
+   The release counterpart of watch_footprints_command. The sender drops
+   its interest in footprints for this [(instrument, boundary)]; the
+   order_flow BC's handler decrements the per-key refcount and stops
+   aggregating the boundary only on the 1->0 transition, leaving other
+   callers' watches on the same key untouched.
+
+   Symmetric to broker's unwatch_bars_command. Same primitives-only,
+   fire-and-forget shape as its watch counterpart; an unwatch with no
+   matching prior watch is a benign no-op. *)
+
+type t = {
+  symbol <doc text="Qualified instrument: TICKER@MIC[/BOARD] — Core.Instrument.of_qualified round-trips it."> : string;
+
+  boundary <doc text="Boundary token (Order_flow.Footprint.Values.Bar_boundary.of_token): a timeframe code ('M1' | 'M5' | … | 'MN1') for a time bar, or 'VOL:<decimal>' for a volume bar."> : string;
+}

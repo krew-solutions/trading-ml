@@ -45,6 +45,21 @@ val period_seconds : t -> int
     requires match b with Time _ -> true | Volume _ -> false
     ensures r > 0 *)
 
+val to_token : t -> string
+(** Canonical wire token for a boundary — the single spelling shared by
+    the footprint integration event's [timeframe] field and the
+    [Watch_footprints_command] boundary field, so the demand command and
+    the published fact name the same boundary identically. [Time tf] is
+    its timeframe code ([M1] … [MN1]); [Volume cap] is [VOL:<cap>] with
+    [cap] rendered by {!Decimal.to_string}. A string codec, outside the
+    Why3 arithmetic model (which covers only [Time] bucketing). *)
+
+val of_token : string -> t
+(** Inverse of {!to_token}: ["M5"] → [Time M5], ["VOL:1000"] →
+    [Volume 1000]. Partial — raises [Invalid_argument] on a token that is
+    neither a known timeframe nor a well-formed [VOL:<decimal>]. Round-trips
+    with {!to_token}: [of_token (to_token b) = b]. *)
+
 val bucket_start : t -> ts:int64 -> int64
 (** Canonical open timestamp of the bar containing [ts]. For [Time tf],
     [ts] floored to the period: [ts - (ts mod period)]. Two prints

@@ -1,0 +1,22 @@
+(* Wire contract: order_flow/lib/application/commands/watch_footprints_command.ml
+
+   Async, fire-and-forget. The sender expresses "I am interested in
+   footprints for this [(instrument, boundary)]; keep them being built
+   while I (or any other caller) say so." The order_flow BC's handler
+   registers the interest in a per-(instrument, boundary) refcount — many
+   concurrent watchers on the same key share one forming bar; the boundary
+   starts being aggregated only on the 0->1 transition.
+
+   This is the footprint analogue of broker's watch_bars_command: it is
+   what lets a UI subscribe to a footprint timeframe of its own choosing
+   instead of being limited to the single boundary the operator configured.
+   There is no correlation id and no response IE: the only observable
+   effect is footprints appearing on [order-flow.footprint-completed] for
+   the key while interest is held; loss of a single command produces a
+   silent gap the sender recovers by re-watching on its own schedule. *)
+
+type t = {
+  symbol <doc text="Qualified instrument: TICKER@MIC[/BOARD] — Core.Instrument.of_qualified round-trips it."> : string;
+
+  boundary <doc text="Boundary token (Order_flow.Footprint.Values.Bar_boundary.of_token): a timeframe code ('M1' | 'M5' | … | 'MN1') for a time bar, or 'VOL:<decimal>' for a volume bar."> : string;
+}

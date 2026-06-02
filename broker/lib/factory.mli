@@ -88,7 +88,10 @@ module Opened : sig
       overrides the default venue ([MOEX]) used for account-wide
       calls. *)
 
-  val open_synthetic : unit -> t
+  val open_synthetic : now:(unit -> int64) -> unit -> t
+  (** [~now] is the composition root's clock; the synthetic adapter
+      anchors its bar history and live feed to it so the candle and
+      footprint series share one timeline. *)
 end
 
 type t = {

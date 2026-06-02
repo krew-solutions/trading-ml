@@ -216,7 +216,7 @@ let run_backtest_composition ~env ~sw ~strategy ~strategy_name ~n ~symbol ?tape 
             | _ -> ())
         | _ -> ())
   in
-  let opened = Broker_factory.Factory.Opened.open_synthetic () in
+  let opened = Broker_factory.Factory.Opened.open_synthetic ~now () in
   let broker =
     Broker_factory.Factory.build ~bus ~env ~sw ~now ~opened ~paper_mode:true ~watchlist:[]
   in
@@ -688,9 +688,14 @@ let cmd_serve args =
     | Some v -> Instrument.of_qualified v
     | None -> Instrument.of_qualified "SBER@MISX"
   in
+  (* Live deployment: wall-clock for any Application-Layer caller that
+     needs ambient time, and for the synthetic adapter to anchor its bar
+     history + live feed to the same timeline. See ADR 0013. *)
+  let clock = Datetime.Unix_clock.make () in
+  let now () = Datetime.Clock.now clock in
   let opened =
     match broker_id with
-    | "synthetic" -> Broker_factory.Factory.Opened.open_synthetic ()
+    | "synthetic" -> Broker_factory.Factory.Opened.open_synthetic ~now ()
     | "finam" ->
         let account_id =
           match account with
@@ -747,10 +752,6 @@ let cmd_serve args =
   let bus = Bus.create () in
   let in_memory_broker = In_memory.create ~sw in
   Bus.register bus ~scheme:"in-memory" (In_memory.adapter in_memory_broker);
-  (* Live deployment: wall-clock for any Application-Layer caller
-     that needs ambient time. See ADR 0013. *)
-  let clock = Datetime.Unix_clock.make () in
-  let now () = Datetime.Clock.now clock in
   (* Parse the operator-declared watchlist from config strings into
      domain types here at the composition root; the broker factory
      consumes already-typed (instrument, timeframe) pairs and is the

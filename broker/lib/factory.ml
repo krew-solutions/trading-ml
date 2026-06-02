@@ -124,8 +124,13 @@ module Opened = struct
     let adapter = Alor.Alor_broker.make rest in
     Alor { client = Alor.Alor_broker.as_broker adapter; rest; adapter }
 
-  let open_synthetic () : t =
-    let adapter = Synthetic.Synthetic_broker.make () in
+  (* [~now] is the composition root's clock (Unix in live, Virtual in
+     backtest). The synthetic adapter anchors both its bar history and
+     its live generator to it so the candle series and the footprint
+     tape share one timeline — the right edges coincide, as they do on a
+     real broker. *)
+  let open_synthetic ~now () : t =
+    let adapter = Synthetic.Synthetic_broker.make ~now () in
     Synthetic { client = Synthetic.Synthetic_broker.as_broker adapter }
 end
 

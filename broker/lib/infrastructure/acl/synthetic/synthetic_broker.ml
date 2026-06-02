@@ -24,11 +24,11 @@ type feed = { mutable refs : int; stop : unit -> unit }
 module InstrMap = Map.Make (Instrument)
 
 type t = {
-  start_ts : int64;
-  start_price : float;
-  (* Per-instance RNG so concurrent clients don't race on global
-     state and so tests can seed it deterministically. *)
-  wobble : unit -> float;
+  now : unit -> int64;
+      (** Composition-root clock (Unix live / Virtual backtest). Anchors
+          both the bar history and the live feed to one timeline so the
+          candle series and the footprint tape share an X axis — their
+          right edges land on the same "current" bucket. *)
   mutex : Eio.Mutex.t;
   (* Live-feed context captured at [start_live_feed]: the switch the
      generator fibers run under, the clock to sleep on, and the sink
@@ -39,53 +39,57 @@ type t = {
   mutable feeds : feed InstrMap.t;
 }
 
-let make ?(start_ts = 1_704_067_200L) ?(start_price = 100.0) () =
-  let state = Random.State.make_self_init () in
-  {
-    start_ts;
-    start_price;
-    wobble = (fun () -> Random.State.float state 1.0);
-    mutex = Eio.Mutex.create ();
-    live = None;
-    feeds = InstrMap.empty;
-  }
-
-(** Demo cadence: one candle every [tick_seconds] of wall time,
-    independent of the bar's nominal timeframe. Short so an M1 footprint
-    seals within a couple of ticks when eyeballing the UI; the candle's
-    own [ts] still advances by the real timeframe period so the chart's
-    time axis stays sane. *)
-let tick_seconds = 2.0
+let make ~now () =
+  { now; mutex = Eio.Mutex.create (); live = None; feeds = InstrMap.empty }
 
 let prints_per_candle = 10
-
 let name = "synthetic"
 
-(** Drift the trailing bar's close/high/low/volume a little so poll
-    consumers observe the chart moving. Only the tail is touched —
-    the historical body stays identical across calls, preserving
-    backtest determinism. *)
-let wobble_last ~rng candles =
-  match List.rev candles with
-  | [] -> []
-  | last :: rest_rev ->
-      let f = Decimal.to_float last.Candle.close in
-      let drift = ((rng () *. 2.0) -. 1.0) *. 0.3 in
-      let close = Float.max 1.0 (f +. drift) in
-      let high = Float.max (Decimal.to_float last.high) close in
-      let low = Float.min (Decimal.to_float last.low) close in
-      let updated =
-        Candle.make ~ts:last.ts ~open_:last.open_ ~high:(Decimal.of_float high)
-          ~low:(Decimal.of_float low) ~close:(Decimal.of_float close)
-          ~volume:(Decimal.add last.volume (Decimal.of_int 100))
-      in
-      List.rev (updated :: rest_rev)
+(* ---- Deterministic walk indexed by absolute bucket number ----------
+   The price at bucket [k] (= ts / tf_seconds) is a pure function of [k]
+   and [tf_seconds], so the bar history ([bars]) and the live feed
+   ([run_feed]) agree on every bucket without sharing mutable state:
+   [bars] returns the last n buckets up to "now", the live feed appends
+   the next bucket as wall-time crosses its edge, and they join
+   seamlessly because both evaluate the same function. Re-polling [bars]
+   is stable (same k -> same candle) — no jitter between requests. *)
+
+(* Smooth-ish random-ish walk: superposed sines of the bucket index plus
+   a hash-based jitter, centred near 100. Bounded and continuous in [k]
+   so adjacent candles connect (close[k] ≈ open[k+1]). *)
+let price_at ~tf_seconds k =
+  let kf = Int64.to_float k in
+  let scale = 1.0 +. (float_of_int tf_seconds /. 600.0) in
+  let trend = 100.0 +. (10.0 *. sin (kf /. 50.0)) +. (4.0 *. sin (kf /. 11.0)) in
+  let jitter =
+    let h = Int64.to_int (Int64.logand (Int64.mul k 2654435761L) 0xffffL) in
+    float_of_int (h - 0x8000) /. 32768.0 *. 1.5 *. scale
+  in
+  Float.max 1.0 (trend +. jitter)
+
+(* Candle for absolute bucket [k]: open = price_at k, close = price_at
+   (k+1) (so it joins the next bar), high/low bracket them with a small
+   deterministic wick. Volume from the same hash so it's stable. *)
+let candle_at ~tf_seconds k : Candle.t =
+  let ts = Int64.mul k (Int64.of_int tf_seconds) in
+  let o = price_at ~tf_seconds k and c = price_at ~tf_seconds (Int64.add k 1L) in
+  let h64 = Int64.to_int (Int64.logand (Int64.mul k 40503L) 0xffffL) in
+  let wick = float_of_int h64 /. 65535.0 *. 0.6 in
+  let high = Float.max o c +. wick in
+  let low = Float.max 0.5 (Float.min o c -. wick) in
+  let volume = 200.0 +. (float_of_int (Int64.to_int (Int64.logand k 0x3ffL)) *. 2.0) in
+  Candle.make ~ts ~open_:(Decimal.of_float o) ~high:(Decimal.of_float high)
+    ~low:(Decimal.of_float low) ~close:(Decimal.of_float c)
+    ~volume:(Decimal.of_float volume)
+
+(* The bucket index of the candle currently forming at the clock's now. *)
+let current_bucket t ~tf_seconds = Int64.div (t.now ()) (Int64.of_int tf_seconds)
 
 let bars t ~n ~instrument:_ ~timeframe =
-  Generator.generate ~n ~start_ts:t.start_ts
-    ~tf_seconds:(Timeframe.to_seconds timeframe)
-    ~start_price:t.start_price
-  |> wobble_last ~rng:t.wobble
+  let tf_seconds = Timeframe.to_seconds timeframe in
+  let last_k = current_bucket t ~tf_seconds in
+  let first_k = Int64.sub last_k (Int64.of_int (max 0 (n - 1))) in
+  List.init n (fun i -> candle_at ~tf_seconds (Int64.add first_k (Int64.of_int i)))
 
 (** Synthetic has no real venue list; surface a single placeholder so
     the UI dropdown still renders. Using MOEX keeps the qualified
@@ -133,43 +137,71 @@ let get_trades _ ~placement_id:_ = unsupported "get_trades"
     casing in the composition root. A replay fiber (from a recorded
     tape) is the next planned source on the same seam. *)
 
-(** One generator loop for [instrument]: sleeps [tick_seconds], emits a
-    fresh closed candle and its reconstructed prints through [on_event],
-    repeats until [stopped] is set (by the last unsubscribe) or the host
-    switch is cancelled. The walk state (price, ts) is loop-local; [ts]
-    advances by the real timeframe period each tick so each candle lands
-    in a new bucket and the footprint of the previous one seals. *)
+(* How many closed footprint buckets to backfill at subscribe, so the
+   footprint history covers the same recent window the candle chart shows
+   (instead of starting empty and trailing). Capped — footprint history is
+   transitional in-memory and this is just enough to fill the view. *)
+let backfill_buckets = 300
+
+(** Generator loop for [instrument], anchored to the injected clock so it
+    stays on the SAME timeline as [bars]:
+
+    1. Backfill — replay the last [backfill_buckets] CLOSED buckets
+       (everything strictly before the forming bucket) as Bar_updated +
+       prints, so a footprint exists for each and the footprint series
+       immediately spans the candle window. Each [candle_at k] equals
+       what [bars] returns for the same k, so the two series agree
+       point-for-point.
+    2. Live — wait until wall-time crosses the next bucket edge, then
+       emit that now-closed bucket. The footprint of bucket k seals when
+       the first print of bucket k+1 arrives (lazy close), so emitting
+       each newly-closed bucket advances the footprint right edge in
+       lockstep with real time, matching the candles.
+
+    Stops when [stopped] is set (last unsubscribe) or the host switch is
+    torn down. *)
 let run_feed t ~clock ~on_event ~instrument ~timeframe ~(stopped : bool ref) : unit =
   let tf_seconds = Timeframe.to_seconds timeframe in
-  let rng = Random.State.make_self_init () in
-  let rec loop price ts =
-    if !stopped then ()
-    else begin
-      Eio.Time.sleep clock tick_seconds;
-      let drift = (Random.State.float rng 2.0 -. 1.0) *. 0.5 in
-      let close = Float.max 1.0 (price +. drift) in
-      let high = Float.max price close +. Random.State.float rng 0.5 in
-      let low = Float.max 0.5 (Float.min price close -. Random.State.float rng 0.5) in
-      let volume = 100.0 +. Random.State.float rng 1000.0 in
-      let candle =
-        Candle.make ~ts ~open_:(Decimal.of_float price) ~high:(Decimal.of_float high)
-          ~low:(Decimal.of_float low) ~close:(Decimal.of_float close)
-          ~volume:(Decimal.of_float volume)
-      in
-      on_event
-        (Broker.Bar_updated
-           {
-             Broker_domain.Remote_broker.Events.Bar_updated.instrument;
-             timeframe;
-             candle;
-           });
-      List.iter
-        (fun pt -> on_event (Broker.Public_trade_printed pt))
-        (Trade_generator.generate ~instrument ~candle ~tf_seconds ~n:prints_per_candle);
-      loop close (Int64.add ts (Int64.of_int tf_seconds))
-    end
+  let tf64 = Int64.of_int tf_seconds in
+  let emit k =
+    let candle = candle_at ~tf_seconds k in
+    on_event
+      (Broker.Bar_updated
+         { Broker_domain.Remote_broker.Events.Bar_updated.instrument; timeframe; candle });
+    List.iter
+      (fun pt -> on_event (Broker.Public_trade_printed pt))
+      (Trade_generator.generate ~instrument ~candle ~tf_seconds ~n:prints_per_candle)
   in
-  loop t.start_price t.start_ts
+  (* 1. Backfill closed buckets [forming - backfill .. forming - 1]. *)
+  let forming = current_bucket t ~tf_seconds in
+  let first = Int64.sub forming (Int64.of_int backfill_buckets) in
+  let k = ref first in
+  while Int64.compare !k forming < 0 do
+    emit !k;
+    k := Int64.add !k 1L
+  done;
+  (* 2. Live: sleep to each next bucket edge, then emit the bucket that
+     just closed. [emitted] is the last bucket we've emitted. *)
+  let emitted = ref (Int64.sub forming 1L) in
+  while not !stopped do
+    let now = t.now () in
+    let cur = Int64.div now tf64 in
+    if Int64.compare cur !emitted > 0 then begin
+      (* One or more buckets closed since we last looked; emit them. *)
+      let kk = ref (Int64.add !emitted 1L) in
+      while Int64.compare !kk cur <= 0 do
+        emit !kk;
+        kk := Int64.add !kk 1L
+      done;
+      emitted := cur
+    end
+    else begin
+      (* Sleep until the current bucket's edge (when it will have closed). *)
+      let edge = Int64.mul (Int64.add cur 1L) tf64 in
+      let dt = Float.max 0.2 (Int64.to_float (Int64.sub edge now)) in
+      Eio.Time.sleep clock dt
+    end
+  done
 
 let start_live_feed t ~sw ~env ~on_event : unit =
   let clock = Eio.Stdenv.clock env in

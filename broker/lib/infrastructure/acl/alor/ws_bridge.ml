@@ -72,8 +72,8 @@ let handle_frame t ({ guid; data } : Ws.frame) : unit =
   | Some Trades -> (
       try t.on_event (Ws.Trade (Ws.Events.Trade.parse data))
       with e -> Log.warn "[alor ws] trade decode failed: %s" (Printexc.to_string e))
-  | Some (Public_trades _) -> (
-      try t.on_event (Ws.Public_trades (Ws.Events.Public_trades.parse data))
+  | Some (Public_trades instrument) -> (
+      try t.on_event (Ws.Public_trades (Ws.Events.Public_trades.parse ~instrument data))
       with e ->
         Log.warn "[alor ws] public-trade decode failed: %s" (Printexc.to_string e))
   | None -> Log.info "[alor ws] frame for unknown guid %s — dropping" guid

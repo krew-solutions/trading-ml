@@ -82,32 +82,36 @@ let test_public_trades_subscribe_envelope () =
     | `Bool b -> b
     | _ -> true)
 
-(* AllTradesGetAndSubscribe data frame. Fields (symbol/exchange/board/
-   qty/price/side/timestamp) are the documented Alor shape; validation
-   is deferred until the account opens (ADR 0032). *)
+(* AllTradesGetAndSubscribe data frame in the "Simple" format the bridge
+   subscribes with: it carries NO [exchange] field (only symbol/qty/price/
+   side/timestamp), which is exactly why the instrument must come from the
+   subscription, not from the frame — reconstructing it would default the
+   venue to the XXXX placeholder. *)
 let trade_data side =
   Yojson.Safe.from_string
     (Printf.sprintf
-       {|{"symbol":"SBER","exchange":"MOEX","board":"TQBR","qty":7,"price":250.5,"side":"%s","timestamp":1716800000000}|}
+       {|{"symbol":"SBER","qty":7,"price":250.5,"side":"%s","timestamp":1716800000000}|}
        side)
 
 let test_decode_public_trade_buy () =
-  let pt = Ws.Events.Public_trades.parse (trade_data "buy") in
+  let pt = Ws.Events.Public_trades.parse ~instrument:sber (trade_data "buy") in
   Alcotest.(check bool) "side = Buy" true (pt.side = Some Side.Buy);
   Alcotest.(check (float 1e-6)) "qty" 7.0 (Decimal.to_float pt.quantity);
   Alcotest.(check (float 1e-6)) "price" 250.5 (Decimal.to_float pt.price);
+  (* Instrument is the subscribed one verbatim — venue MISX, not the XXXX
+     placeholder a frame-only reconstruction would yield. *)
   Alcotest.(check string)
-    "instrument ticker" "SBER"
-    (Ticker.to_string (Instrument.ticker pt.instrument));
+    "instrument is the subscribed one" "SBER@MISX/TQBR"
+    (Instrument.to_qualified pt.instrument);
   Alcotest.(check bool) "timestamp carried" true (pt.ts = 1716800000000L)
 
 let test_decode_public_trade_sell () =
-  let pt = Ws.Events.Public_trades.parse (trade_data "sell") in
+  let pt = Ws.Events.Public_trades.parse ~instrument:sber (trade_data "sell") in
   Alcotest.(check bool) "side = Sell" true (pt.side = Some Side.Sell)
 
 let test_decode_public_trade_unmarked_has_no_side () =
   (* The public tape must not fabricate a side for an unmarked print. *)
-  let pt = Ws.Events.Public_trades.parse (trade_data "") in
+  let pt = Ws.Events.Public_trades.parse ~instrument:sber (trade_data "") in
   Alcotest.(check bool) "side = None" true (pt.side = None)
 
 let tests =

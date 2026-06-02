@@ -11,7 +11,12 @@ let parse_side = function
   | "sell" | "Sell" | "SELL" -> Some Side.Sell
   | _ -> None
 
-let parse (data : Yojson.Safe.t) : t =
+(* The instrument is the one the caller subscribed for (the bridge tracks
+   it per guid), NOT one reconstructed from the frame: Alor's "Simple"
+   AllTrades frame omits [exchange], so [Dto.Wire.instrument_of_json] would
+   default the venue to the XXXX placeholder. Mirrors the bars path, which
+   already stamps the subscribed (instrument, timeframe). *)
+let parse ~instrument (data : Yojson.Safe.t) : t =
   let open Yojson.Safe.Util in
   let str k =
     match member k data with
@@ -32,8 +37,7 @@ let parse (data : Yojson.Safe.t) : t =
         | _ -> 0L)
   in
   {
-    Broker_domain.Remote_broker.Events.Public_trade_printed.instrument =
-      Dto.Wire.instrument_of_json data;
+    Broker_domain.Remote_broker.Events.Public_trade_printed.instrument;
     side = parse_side (str "side");
     quantity = dec "qty";
     price = dec "price";

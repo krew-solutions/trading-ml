@@ -176,7 +176,9 @@ let run ~env ~clock ~cfg ~token ~instrument ~record_oc =
       incr t_dumped;
       pf "[%s] RAW TRADE #%d: %s" (now ()) !t_dumped (truncate ~max:400 raw)
     end;
-    match try Some (Alor.Ws.Events.Public_trades.parse data) with _ -> None with
+    match
+      try Some (Alor.Ws.Events.Public_trades.parse ~instrument data) with _ -> None
+    with
     | Some pt ->
         classify pt;
         record pt

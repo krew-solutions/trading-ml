@@ -39,11 +39,23 @@ module Opened = struct
                 supervisor reaches the per-adapter placement map to
                 reverse-lookup [order_id → placement_id]. *)
       }
+    | Finam_grpc of {
+        client : Broker.client;
+        adapter : Finam_grpc.Finam_grpc_broker.t;
+            (** Pure-gRPC Finam adapter (ADR 0033). No separate REST handle: gRPC
+                multiplexes unary + streaming over one channel, and the live feed
+                is driven through {!Broker.start_live_feed} like every other
+                adapter. Kept alongside the abstract client for symmetry / direct
+                reach, as the Finam/BCS/Alor variants do. *)
+      }
     | Synthetic of { client : Broker.client }
 
   let client : t -> Broker.client = function
-    | Finam { client; _ } | Bcs { client; _ } | Alor { client; _ } | Synthetic { client }
-      -> client
+    | Finam { client; _ }
+    | Bcs { client; _ }
+    | Alor { client; _ }
+    | Finam_grpc { client; _ }
+    | Synthetic { client } -> client
 
   (** Selects the env-var prefix per broker. Keeps CLI invocations
       single-flagged while letting users park credentials for several
@@ -73,6 +85,16 @@ module Opened = struct
     let rest = Finam.Rest.make ~transport ~cfg in
     let adapter = Finam.Finam_broker.make ~account_id rest in
     Finam { client = Finam.Finam_broker.as_broker adapter; rest; adapter }
+
+  (** Pure-gRPC Finam adapter (ADR 0033). Reuses the same credentials as the REST
+      [open_finam] (portal [secret] + [account_id], i.e. the FINAM env prefix):
+      it is the same venue over a different transport. The gRPC channel binds the
+      host switch lazily at [start_live_feed], so no [~sw] is needed here. *)
+  let open_finam_grpc ~env ~secret ~account_id : t =
+    let cfg = Finam_grpc.Config.make ~secret () in
+    let client = Finam_grpc.Client.create ~env cfg in
+    let adapter = Finam_grpc.Finam_grpc_broker.make ~account_id client in
+    Finam_grpc { client = Finam_grpc.Finam_grpc_broker.as_broker adapter; adapter }
 
   (** Credential sources, in precedence order:
       1. [?secret] — when present, seeds the persistent file
@@ -417,7 +439,7 @@ let build ~bus ~env ~sw ~now ~(opened : Opened.t) ~paper_mode ~watchlist : t =
     match opened with
     | Opened.Bcs { rest; _ } -> Some (Bcs.Rest.cfg rest).Bcs.Config.default_class_code
     | Opened.Alor { rest; _ } -> (Alor.Rest.cfg rest).Alor.Config.default_board
-    | Opened.Finam _ | Opened.Synthetic _ -> None
+    | Opened.Finam _ | Opened.Finam_grpc _ | Opened.Synthetic _ -> None
   in
   let http_handler =
     Broker_inbound_http.Http.make_handler ~broker:client ~default_board

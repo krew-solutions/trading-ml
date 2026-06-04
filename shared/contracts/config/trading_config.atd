@@ -25,7 +25,8 @@ type log_level = [
 ]
 
 type broker = [
-  | Finam of finam_credentials <doc text="Live Finam Trade API. Requires account_id + secret (or FINAM_ACCOUNT_ID/FINAM_SECRET env vars).">
+  | Finam of finam_credentials <doc text="Live Finam Trade API over REST+WS. Requires account_id + secret (or FINAM_ACCOUNT_ID/FINAM_SECRET env vars).">
+  | Finam_grpc of finam_credentials <doc text="Live Finam Trade API over gRPC (ADR 0033). Same credentials as Finam (account_id + secret, FINAM_ACCOUNT_ID/FINAM_SECRET env vars) — the same venue over a different transport.">
   | Bcs of bcs_credentials <doc text="Live BCS Trade API. account_id + client_id optional in config; secret resolved from BCS_SECRET env var + persistent token store.">
   | Alor of alor_credentials <doc text="Live Alor Trade API. Requires portfolio + a long-lived refresh token (or ALOR_PORTFOLIO not used at config level; ALOR_SECRET env var for the token).">
   | Synthetic <doc text="No live source. Order placement, bars, and quotes all generated in-process. Default for development and tests.">

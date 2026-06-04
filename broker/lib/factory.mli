@@ -46,6 +46,8 @@ module Opened : sig
       }
     | Bcs of { client : Broker.client; rest : Bcs.Rest.t; adapter : Bcs.Bcs_broker.t }
     | Alor of { client : Broker.client; rest : Alor.Rest.t; adapter : Alor.Alor_broker.t }
+    | Finam_grpc of { client : Broker.client; adapter : Finam_grpc.Finam_grpc_broker.t }
+        (** Pure-gRPC Finam adapter (ADR 0033). No REST handle. *)
     | Synthetic of { client : Broker.client }
 
   val client : t -> Broker.client
@@ -60,6 +62,12 @@ module Opened : sig
       [_SECRET] / [_ACCOUNT_ID] env vars consistently across binaries. *)
 
   val open_finam : env:Eio_unix.Stdenv.base -> secret:string -> account_id:string -> t
+
+  val open_finam_grpc :
+    env:Eio_unix.Stdenv.base -> secret:string -> account_id:string -> t
+  (** Pure-gRPC Finam adapter (ADR 0033). Same credentials as {!open_finam} —
+      the same venue over a different transport. The gRPC channel binds the host
+      switch lazily at [start_live_feed], so no [~sw] is needed here. *)
 
   val open_bcs :
     env:Eio_unix.Stdenv.base ->

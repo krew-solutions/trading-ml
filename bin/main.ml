@@ -37,7 +37,7 @@ let usage () =
   prerr_endline
     {|trading <command> [options]
 
-  serve [--port 8080] [--broker synthetic|finam|bcs|alor] [--paper]
+  serve [--port 8080] [--broker synthetic|finam|finam-grpc|bcs|alor] [--paper]
         [--strategy NAME] [--engine-symbol SBER@MISX]
         [--secret SECRET] [--account ACCOUNT_ID]
         [--client-id CLIENT_ID] [--exchange MOEX|SPBX]
@@ -576,6 +576,13 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
           { account_id = arg_value "--account" args; secret = arg_value "--secret" args }
         in
         Some (`Finam creds)
+    | Some "finam-grpc" ->
+        (* Same credentials as Finam (ADR 0033): the gRPC transport of the same
+           venue. *)
+        let creds : Trading_config.finam_credentials =
+          { account_id = arg_value "--account" args; secret = arg_value "--secret" args }
+        in
+        Some (`Finam_grpc creds)
     | Some "bcs" ->
         let creds : Trading_config.bcs_credentials =
           {
@@ -597,7 +604,9 @@ let cli_overlay_of_args (args : string list) : Trading_config.t =
         in
         Some (`Alor creds)
     | Some other ->
-        failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs|alor)")
+        failwith
+          ("unknown --broker: " ^ other
+         ^ " (expected synthetic|finam|finam-grpc|bcs|alor)")
   in
   (* CLI overlay never declares a watchlist — the operator should
      express bar subscriptions in a config file, not on the
@@ -636,13 +645,14 @@ let cmd_serve args =
     match broker_choice with
     | `Synthetic -> "synthetic"
     | `Finam _ -> "finam"
+    | `Finam_grpc _ -> "finam-grpc"
     | `Bcs _ -> "bcs"
     | `Alor _ -> "alor"
   in
   let secret, account, client_id =
     match broker_choice with
     | `Synthetic -> (None, None, None)
-    | `Finam creds -> (creds.secret, creds.account_id, None)
+    | `Finam creds | `Finam_grpc creds -> (creds.secret, creds.account_id, None)
     | `Bcs creds -> (creds.secret_seed, None, creds.client_id)
     (* BCS has no account_id parameter at the API level; the
        middle slot here is uniformly None so the surrounding
@@ -705,6 +715,17 @@ let cmd_serve args =
               exit 2
         in
         Broker_factory.Factory.Opened.open_finam ~env ~secret:(need_secret ()) ~account_id
+    | "finam-grpc" ->
+        let account_id =
+          match account with
+          | Some a -> a
+          | None ->
+              Printf.eprintf
+                "--broker finam-grpc requires --account (or FINAM_ACCOUNT_ID)\n";
+              exit 2
+        in
+        Broker_factory.Factory.Opened.open_finam_grpc ~env ~secret:(need_secret ())
+          ~account_id
     | "bcs" ->
         Broker_factory.Factory.Opened.open_bcs ~env ?secret ?account_id:account ?client_id
           ()
@@ -721,7 +742,9 @@ let cmd_serve args =
         Broker_factory.Factory.Opened.open_alor ~env ?secret ?exchange:alor_exchange
           ~portfolio ()
     | other ->
-        failwith ("unknown --broker: " ^ other ^ " (expected synthetic|finam|bcs|alor)")
+        failwith
+          ("unknown --broker: " ^ other
+         ^ " (expected synthetic|finam|finam-grpc|bcs|alor)")
   in
   let source_client = Broker_factory.Factory.Opened.client opened in
   (* Resolve [--strategy] CLI arg into a built [Strategies.Strategy.t].

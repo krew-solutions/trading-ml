@@ -237,6 +237,9 @@ let make_tape_handler t ~instrument =
 let start_live_feed t ~sw ~env ~on_event : unit =
   t.on_event <- Some on_event;
   t.live_ctx <- Some (sw, env);
+  (* The gRPC channel's HTTP/2 fiber lives under the host switch; bind it here,
+     before any unary call or stream is issued. *)
+  Client.set_switch t.client sw;
   (* Always-on own-fills stream, account-wide. *)
   let run () =
     Client.subscribe_trades t.client ~account_id:t.account_id ~on_trade:(handle_fill t)

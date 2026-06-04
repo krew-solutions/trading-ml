@@ -16,6 +16,7 @@
   broker_store
   broker_persistence
   finam
+  finam_grpc
   bcs
   alor
   synthetic

@@ -23,14 +23,23 @@ module Accounts = Finam_grpc_proto.Accounts_service.Grpc.Tradeapi.V1.Accounts
 type t = {
   cfg : Config.t;
   env : Eio_unix.Stdenv.base;
-  sw : Eio.Switch.t;
-  mutex : Eio.Mutex.t;  (** guards [channel] and [jwt] *)
+  mutex : Eio.Mutex.t;  (** guards [channel], [jwt] and [sw] *)
+  mutable sw : Eio.Switch.t option;
+      (** Host switch the HTTP/2 connection fiber runs under. Injected by the
+          adapter at [start_live_feed] via {!set_switch} rather than at
+          construction: the composition root opens the broker before its host
+          switch exists (the switch wraps the serve loop), while every gRPC call
+          happens later, under that switch. *)
   mutable channel : Channel.t option;
   mutable jwt : (string * float) option;  (** token, expiry (unix epoch s) *)
 }
 
-let create ~sw ~env (cfg : Config.t) : t =
-  { cfg; env; sw; mutex = Eio.Mutex.create (); channel = None; jwt = None }
+let create ~env (cfg : Config.t) : t =
+  { cfg; env; mutex = Eio.Mutex.create (); sw = None; channel = None; jwt = None }
+
+(** Bind the host switch the channel lives under. Called once, from the
+    adapter's [start_live_feed]. *)
+let set_switch t sw = Eio.Mutex.use_rw ~protect:true t.mutex (fun () -> t.sw <- Some sw)
 
 let now () = Unix.gettimeofday ()
 
@@ -43,10 +52,15 @@ let conn t : Channel.t =
   Eio.Mutex.use_rw ~protect:true t.mutex (fun () ->
       match t.channel with
       | Some c when not (Channel.is_closed c) -> c
-      | _ ->
-          let c = Channel.connect ~sw:t.sw ~env:t.env ~host:t.cfg.host ~port:t.cfg.port in
-          t.channel <- Some c;
-          c)
+      | _ -> (
+          match t.sw with
+          | None ->
+              failwith
+                "finam-grpc: channel used before start_live_feed wired the host switch"
+          | Some sw ->
+              let c = Channel.connect ~sw ~env:t.env ~host:t.cfg.host ~port:t.cfg.port in
+              t.channel <- Some c;
+              c))
 
 (* ---- JWT auth ---------------------------------------------------------- *)
 

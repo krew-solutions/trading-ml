@@ -60,6 +60,19 @@ let resolve_finam ~(cli : T.finam_credentials option) ~(file : T.finam_credentia
       secret = pick3 (c (fun x -> x.secret)) "FINAM_SECRET" (g (fun x -> x.secret));
     }
 
+(* gRPC Finam shares Finam's credential fields and env vars — same venue, same
+   secret/account, different transport (ADR 0033). *)
+let resolve_finam_grpc
+    ~(cli : T.finam_credentials option)
+    ~(file : T.finam_credentials option) : T.broker =
+  let c f = Option.bind cli f and g f = Option.bind file f in
+  `Finam_grpc
+    {
+      T.account_id =
+        pick3 (c (fun x -> x.account_id)) "FINAM_ACCOUNT_ID" (g (fun x -> x.account_id));
+      secret = pick3 (c (fun x -> x.secret)) "FINAM_SECRET" (g (fun x -> x.secret));
+    }
+
 let resolve_bcs ~(cli : T.bcs_credentials option) ~(file : T.bcs_credentials option) :
     T.broker =
   let c f = Option.bind cli f and g f = Option.bind file f in
@@ -90,12 +103,16 @@ let resolve_broker ~(file : T.broker option) ~(cli : T.broker option) : T.broker
   match (cli, file) with
   | Some (`Finam c), Some (`Finam f) -> Some (resolve_finam ~cli:(Some c) ~file:(Some f))
   | Some (`Finam c), _ -> Some (resolve_finam ~cli:(Some c) ~file:None)
+  | Some (`Finam_grpc c), Some (`Finam_grpc f) ->
+      Some (resolve_finam_grpc ~cli:(Some c) ~file:(Some f))
+  | Some (`Finam_grpc c), _ -> Some (resolve_finam_grpc ~cli:(Some c) ~file:None)
   | Some (`Bcs c), Some (`Bcs f) -> Some (resolve_bcs ~cli:(Some c) ~file:(Some f))
   | Some (`Bcs c), _ -> Some (resolve_bcs ~cli:(Some c) ~file:None)
   | Some (`Alor c), Some (`Alor f) -> Some (resolve_alor ~cli:(Some c) ~file:(Some f))
   | Some (`Alor c), _ -> Some (resolve_alor ~cli:(Some c) ~file:None)
   | Some `Synthetic, _ -> Some `Synthetic
   | None, Some (`Finam f) -> Some (resolve_finam ~cli:None ~file:(Some f))
+  | None, Some (`Finam_grpc f) -> Some (resolve_finam_grpc ~cli:None ~file:(Some f))
   | None, Some (`Bcs f) -> Some (resolve_bcs ~cli:None ~file:(Some f))
   | None, Some (`Alor f) -> Some (resolve_alor ~cli:None ~file:(Some f))
   | None, Some `Synthetic -> Some `Synthetic

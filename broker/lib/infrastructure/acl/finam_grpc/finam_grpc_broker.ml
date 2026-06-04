@@ -129,12 +129,15 @@ let resolve_order_id t ~client_order_id =
             (Printf.sprintf "finam-grpc: no order with client_order_id=%s" client_order_id)
       )
 
-(** UUID v4 with dashes stripped — Finam's validator returns 400 on dashes
-    ("letters, numbers and space" only); 32 hex digits satisfy that while
-    keeping UUIDv4 collision resistance. *)
+(** UUID v4, dashes stripped, truncated to 20 hex chars. The Finam gRPC
+    [Order.client_order_id] is capped at 20 characters (verified live: a longer
+    id is rejected with INVALID_ARGUMENT) — narrower than the REST sibling, whose
+    validator only constrains the charset. 20 hex digits keep 80 bits of
+    entropy, ample collision resistance for in-flight orders. *)
 let mint_client_order_id () =
   Uuidm.v4_gen (Random.State.make_self_init ()) ()
   |> Uuidm.to_string |> String.split_on_char '-' |> String.concat ""
+  |> fun s -> String.sub s 0 20
 
 (* ---- unary port methods ----------------------------------------------- *)
 

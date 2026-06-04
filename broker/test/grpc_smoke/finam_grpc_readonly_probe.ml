@@ -37,7 +37,7 @@ let () =
       Eio.Switch.run @@ fun sw ->
       (* --- diagnostic: two raw Auth calls on ONE channel --- *)
       pf "[..] connecting to api.finam.ru:443";
-      let ch = Finam_grpc.Channel.connect ~sw ~env ~host:"api.finam.ru" ~port:443 in
+      let ch = Grpc_client.Channel.connect ~sw ~env ~host:"api.finam.ru" ~port:443 in
       pf "[ok] connected";
       let raw_auth label =
         let req =
@@ -46,7 +46,7 @@ let () =
         in
         let bytes =
           timed ~clock ~label ~secs:20.0 (fun () ->
-              Finam_grpc.Channel.unary ch ~rpc:A.AuthService.Auth.name ~metadata:[]
+              Grpc_client.Channel.unary ch ~rpc:A.AuthService.Auth.name ~metadata:[]
                 ~request:req)
         in
         match
@@ -57,7 +57,7 @@ let () =
       in
       raw_auth "raw Auth #1";
       raw_auth "raw Auth #2 (same channel)";
-      Finam_grpc.Channel.shutdown ch;
+      Grpc_client.Channel.shutdown ch;
 
       (* --- real client unary RPCs --- *)
       let cfg = Finam_grpc.Config.make ~secret () in

@@ -25,6 +25,7 @@
 
 open Core
 module Sd = Acl_common.Stream_dedup
+module Stream_runner = Grpc_client.Stream_runner
 
 module SubKey = struct
   type t = Instrument.t * Timeframe.t

@@ -2,6 +2,6 @@
 ; (and, for the read-only probe, FINAM_SECRET). Not wired into @runtest.
 (executables
  (names finam_grpc_auth_probe finam_grpc_readonly_probe finam_grpc_place_cancel_probe)
- (libraries finam_grpc finam_grpc_proto grpc ocaml-protoc-plugin
+ (libraries finam_grpc finam_grpc_proto grpc_client grpc ocaml-protoc-plugin
             core broker_domain decimal
             eio eio_main mirage-crypto-rng.unix unix))

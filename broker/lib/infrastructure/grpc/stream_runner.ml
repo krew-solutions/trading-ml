@@ -7,11 +7,11 @@
     far simpler because gRPC owns the multiplexed transport and there is no
     REST-poll fallback to interleave.
 
-    [run] is the blocking subscribe call (e.g. {!Client.subscribe_bars}); it is
-    re-invoked after [backoff] seconds whenever it returns or raises, until
-    {!stop}. Dedup of any replayed prefix on re-subscribe is the caller's
-    concern (it wires a {!Acl_common.Stream_dedup} / high-water into [run]'s
-    per-message callback), exactly as the supervised REST/WS paths do. *)
+    [run] is the blocking subscribe call (e.g. a [subscribe_bars] that streams
+    until the server half-closes); it is re-invoked after [backoff] seconds
+    whenever it returns or raises, until {!stop}. Dedup of any replayed prefix on
+    re-subscribe is the caller's concern (it wires a [Stream_dedup] / high-water
+    into [run]'s per-message callback). *)
 
 open Eio.Std
 
@@ -33,7 +33,7 @@ let start ~sw ~env ~label ?(backoff = 3.0) ~run () : t =
              (* Race the stream against the stop signal: stopping cancels the
                 in-flight [run]. *)
              Fiber.first (fun () -> Promise.await t.stop_p) (fun () -> run ())
-           with e -> Log.warn "[finam-grpc stream] %s: %s" label (Printexc.to_string e));
+           with e -> Log.warn "[grpc stream] %s: %s" label (Printexc.to_string e));
           if not t.stopped then begin
             Eio.Time.sleep clock backoff;
             loop ()

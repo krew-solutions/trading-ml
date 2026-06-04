@@ -1,0 +1,14 @@
+; Reusable gRPC-over-HTTP/2 client transport, Eio-native — broker-agnostic
+; and venue-agnostic (no Finam / protobuf-schema coupling). A gRPC sibling of
+; the [websocket] and [http_transport] transport libraries.
+;
+; Named [grpc_client] rather than [grpc] to avoid clashing with the [grpc]
+; opam package (whose core framing/status this builds on). Modules:
+;   Eio_gluten     — HTTP/2 runtime loop over an Eio.Flow.two_way (incl. TLS)
+;   Channel        — gRPC channel: connect, unary + server-streaming, framing
+;   Stream_runner  — reconnecting fiber for one server-stream
+(library
+ (name grpc_client)
+ (public_name trading.grpc_client)
+ (libraries grpc h2 gluten eio eio.unix unix tls tls-eio x509 domain-name ptime
+            faraday cstruct uri log))

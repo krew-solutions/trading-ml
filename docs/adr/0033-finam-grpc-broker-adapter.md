@@ -30,16 +30,23 @@ is the Finam gRPC endpoint (`api.finam.ru:443`, TLS, ALPN `h2`). Module layout:
 - `proto/` — vendored `.proto` subset + a dune rule that runs `protoc` with the
   `ocaml-protoc-plugin` driver at build time, producing the `finam_grpc_proto`
   library.
-- `eio_gluten` — the HTTP/2 runtime driver (see workaround below).
-- `channel` — gRPC-over-HTTP/2-over-TLS transport: connect, unary call,
-  server-streaming call, status/trailers handling, message framing.
 - `conv`, `order_dto` — wire ⇄ domain translation over the generated types.
 - `config`, `client` — endpoint config; the single seam exposing the Finam RPCs
   (unary: bars, orders, venues, account trades; streaming: bars, public tape,
   own fills) with a JWT cache.
-- `stream_runner` — reconnecting fiber for one server-stream.
 - `placement_handle_store`, `finam_grpc_broker` — venue-identity store and the
   `Broker.S` implementation.
+
+The gRPC {b transport} itself is broker- and venue-agnostic, so it lives in a
+separate library, `broker/lib/infrastructure/grpc/` (`grpc_client`), a gRPC
+sibling of the `websocket` / `http_transport` transports — reusable by any
+future gRPC adapter. It stays under `broker/` (rather than `shared/`) until a
+second bounded context needs gRPC, mirroring where `websocket` lives today:
+
+- `eio_gluten` — the HTTP/2 runtime driver (see workaround below).
+- `channel` — gRPC-over-HTTP/2-over-TLS transport: connect, unary call,
+  server-streaming call, status/trailers handling, message framing.
+- `stream_runner` — reconnecting fiber for one server-stream.
 
 Five points are deliberate departures worth recording.
 

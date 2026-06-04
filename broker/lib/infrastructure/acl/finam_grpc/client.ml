@@ -19,6 +19,7 @@ module Md = Conv.Md
 module Ord = Conv.Ord
 module Assets = Finam_grpc_proto.Assets_service.Grpc.Tradeapi.V1.Assets
 module Accounts = Finam_grpc_proto.Accounts_service.Grpc.Tradeapi.V1.Accounts
+module Channel = Grpc_client.Channel
 
 type t = {
   cfg : Config.t;

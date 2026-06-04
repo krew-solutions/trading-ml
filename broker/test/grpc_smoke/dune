@@ -1,6 +1,7 @@
-; Live gRPC connectivity smoke. Opt-in: requires network reach to
-; api.finam.ru:443. Not wired into @runtest.
-(executable
- (name finam_grpc_auth_probe)
+; Live gRPC smoke probes. Opt-in: require network reach to api.finam.ru:443
+; (and, for the read-only probe, FINAM_SECRET). Not wired into @runtest.
+(executables
+ (names finam_grpc_auth_probe finam_grpc_readonly_probe)
  (libraries finam_grpc finam_grpc_proto grpc ocaml-protoc-plugin
+            core broker_domain decimal
             eio eio_main mirage-crypto-rng.unix))

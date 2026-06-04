@@ -45,6 +45,7 @@ numbered, markdown, structured. Each ADR is immutable once merged
 | [0030](0030-alor-broker-adapter.md) | Alor broker ACL adapter | Accepted | 2026-05-25 |
 | [0031](0031-layered-runtime-configuration.md) | Layered runtime configuration precedence | Accepted | 2026-05-25 |
 | [0032](0032-order-flow-bounded-context.md) | Order_flow bounded context: footprint analysis on the public tape | Accepted | 2026-05-27 |
+| [0033](0033-finam-grpc-broker-adapter.md) | Finam gRPC broker ACL adapter | Accepted | 2026-06-04 |
 
 ## Template
 

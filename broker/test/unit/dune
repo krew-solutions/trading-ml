@@ -10,6 +10,9 @@
   http_transport
   websocket
   finam
+  finam_grpc
+  finam_grpc_proto
+  ocaml-protoc-plugin
   bcs
   alor
   broker_persistence

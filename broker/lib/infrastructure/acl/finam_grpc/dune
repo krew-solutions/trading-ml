@@ -1,0 +1,9 @@
+(library
+ (name finam_grpc)
+ (public_name trading.finam_grpc)
+ (libraries core broker_domain decimal broker broker_view_models
+            broker_integration_events log acl_common datetime
+            grpc h2 gluten eio eio.unix unix tls tls-eio x509 domain-name ptime
+            faraday cstruct finam_grpc_proto ocaml-protoc-plugin
+            uri uuidm base64 yojson)
+ (flags (:standard -open Broker_domain -open Broker_view_models)))
